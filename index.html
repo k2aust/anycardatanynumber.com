@@ -1,1 +1,1115 @@
-<html><body><h1>anycardatanynumber.com</h1></body></html></h1></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0e0f13">
+<title>Stack Oracle</title>
+<style>
+  :root {
+    --bg: #0e0f13;
+    --panel: #181a21;
+    --panel2: #1f222c;
+    --line: #2b2f3b;
+    --text: #e8e6e0;
+    --dim: #8b8fa0;
+    --gold: #e3b341;
+    --red: #e05d5d;
+    --green: #57c98a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
+  header h1 { font-size: 14px; letter-spacing: 4px; color: var(--dim); font-weight: 600; margin: 0; text-transform: uppercase; }
+  #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
+
+  /* step chips */
+  #chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 4px; text-align: center; cursor: pointer; }
+  .chip .lbl { font-size: 10px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+  .chip .val { font-size: 20px; font-weight: 700; min-height: 26px; margin-top: 2px; }
+  .chip.active { border-color: var(--gold); }
+  .chip .val.red { color: var(--red); }
+
+  /* pickers */
+  .picker { background: var(--panel); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+  .picker h2 { margin: 0 0 10px; font-size: 12px; color: var(--dim); letter-spacing: 2px; text-transform: uppercase; }
+  .grid { display: grid; gap: 6px; }
+  .grid.values { grid-template-columns: repeat(7, 1fr); }
+  .grid.suits { grid-template-columns: repeat(4, 1fr); margin-top: 8px; }
+  .grid.pad { grid-template-columns: repeat(3, 1fr); max-width: 280px; margin: 0 auto; }
+  .grid.pad button { font-size: 22px; padding: 14px 0; }
+  .grid.pad button.ok { background: var(--gold); color: #000; }
+  #numEntry { text-align: center; font-size: 34px; font-weight: 800; min-height: 46px;
+    padding: 2px 0 10px; letter-spacing: 2px; }
+  .grid button { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; font-size: 17px; font-weight: 600; padding: 11px 0; cursor: pointer; }
+  .grid button:active { background: var(--gold); color: #000; }
+  .grid.suits button { font-size: 24px; padding: 8px 0; }
+  .grid button.suit-h, .grid button.suit-d { color: var(--red); }
+
+  /* results */
+  #results { display: none; }
+  .banner { background: linear-gradient(135deg, #3a2d0c, #241c08); border: 1px solid var(--gold);
+    border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .banner .tag { color: var(--gold); font-size: 11px; letter-spacing: 3px; font-weight: 700; }
+  .banner p { margin: 6px 0 0; font-size: 15px; line-height: 1.45; }
+
+  .hero { background: var(--panel); border: 1px solid var(--gold); border-radius: var(--radius);
+    padding: 18px 16px; margin-bottom: 14px; }
+  .hero .score { float: right; color: var(--gold); font-weight: 800; font-size: 14px; }
+  .hero .method { color: var(--gold); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; }
+  .hero .big { font-size: 21px; font-weight: 700; line-height: 1.35; margin: 10px 0 6px; }
+  .hero .ctx { color: var(--dim); font-size: 13px; line-height: 1.4; }
+  .steps { margin: 10px 0 8px; padding: 0; list-style: none; counter-reset: st; }
+  .steps li { counter-increment: st; display: flex; gap: 12px; font-size: 18px; font-weight: 600;
+    line-height: 1.35; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before { content: counter(st); color: var(--gold); font-weight: 800; min-width: 18px; }
+
+  .alt { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 8px; }
+  .alt .score { float: right; color: var(--dim); font-size: 12px; font-weight: 700; }
+  .alt .method { color: var(--dim); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; }
+  .alt .big { font-size: 14px; line-height: 1.4; margin-top: 4px; }
+  .alt .ctx { color: var(--dim); font-size: 12px; margin-top: 3px; }
+
+  .nores { background: var(--panel); border: 1px solid var(--red); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 14px; font-size: 15px; line-height: 1.5; }
+
+  #cheat { background: var(--panel); border-radius: 12px; padding: 12px 14px; margin-top: 16px;
+    font-size: 13px; color: var(--dim); line-height: 1.7; }
+  #cheat b { color: var(--text); }
+
+  .btnrow { display: flex; gap: 8px; margin-bottom: 14px; }
+  .btnrow button { flex: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+  /* settings */
+  #settings { display: none; }
+  .set-group { background: var(--panel); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .set-group h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; }
+  .set-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 14px; }
+  .set-row input[type=number] { width: 64px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 6px; font-size: 14px; text-align: center; }
+  .set-row select { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 6px; font-size: 14px; }
+  .set-row .rank { color: var(--gold); font-weight: 800; min-width: 18px; }
+  .set-row .mv { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 6px; padding: 5px 9px; font-size: 12px; cursor: pointer; }
+  .set-row .mv:disabled { opacity: 0.3; cursor: default; }
+  .stackgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 4px; }
+  .stackgrid .sc { display: flex; align-items: baseline; gap: 6px; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font-size: 15px; }
+  .stackgrid .sc .pn { color: var(--dim); font-size: 11px; min-width: 17px; text-align: right; }
+  .stackgrid .sc .cd { font-weight: 700; }
+  .stackgrid .sc .cd.red { color: var(--red); }
+  .stackgrid .sc.istop { border-color: var(--gold); }
+  .switch { position: relative; width: 44px; height: 25px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 25px; cursor: pointer; transition: .15s; }
+  .slider:before { content: ""; position: absolute; height: 17px; width: 17px; left: 3px; top: 3px;
+    background: var(--dim); border-radius: 50%; transition: .15s; }
+  .switch input:checked + .slider { background: var(--gold); border-color: var(--gold); }
+  .switch input:checked + .slider:before { transform: translateX(19px); background: #000; }
+  .hint { font-size: 11px; color: var(--dim); margin: 2px 0 0; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Stack Oracle</h1>
+  <button id="gearBtn" aria-label="Settings">&#9881;</button>
+</header>
+
+<main id="app">
+  <div id="chips">
+    <div class="chip" data-step="0"><div class="lbl">Card</div><div class="val" id="chip-c1">—</div></div>
+    <div class="chip" data-step="1"><div class="lbl">Number</div><div class="val" id="chip-n1">—</div></div>
+  </div>
+
+  <div class="picker" id="cardPicker">
+    <h2 id="cardPickerTitle">Spectator 1 — card</h2>
+    <div class="grid values" id="valueGrid"></div>
+    <div class="grid suits" id="suitGrid"></div>
+  </div>
+
+  <div class="picker" id="numberPicker" style="display:none">
+    <h2 id="numberPickerTitle">Spectator 1 — number</h2>
+    <div class="banner" id="partialOut" style="display:none"></div>
+    <div id="numEntry">&ndash;</div>
+    <div class="grid pad" id="numberPad"></div>
+  </div>
+
+  <section id="results">
+    <div class="btnrow">
+      <button id="editBtn">&#9998; Edit inputs</button>
+      <button id="resetBtn">&#10227; New trick</button>
+    </div>
+    <div id="resultList"></div>
+    <div id="cheat"></div>
+  </section>
+</main>
+
+<section id="settings">
+  <div class="btnrow"><button id="closeSettings">&#10094; Back</button><button id="resetSettings">Reset defaults</button></div>
+  <div id="settingsBody"></div>
+</section>
+
+<script>
+/*ENGINE-START*/
+const STACKS = {
+  aronson:   ["JS","KC","5C","2H","9S","AS","3H","6C","8D","AC","10S","5H","2D","KD","7D","8C","3S","AD","7S","5S","QD","AH","8S","3D","7H","QH","5D","7C","4H","KH","4D","10D","JC","JH","10C","JD","4S","10H","6H","3C","2S","9H","KS","6S","4C","8H","9C","QS","6D","QC","2C","9D"],
+  mnemonica: ["4C","2H","7D","3C","4H","6D","AS","5H","9S","2S","QH","3D","QC","8H","6S","5S","9H","KC","2D","JH","3S","8S","6H","10C","5D","KD","2C","3H","8D","5C","KS","JD","8C","10S","KH","JC","7S","10H","AD","4S","7H","4D","AC","9C","JS","QD","7C","QS","10D","6C","AH","9D"],
+  // computer-optimized for this app (see optimize.js): 4 dead pairs in split
+  // mode (all at number 52) vs Aronson's 66; 10x fewer pairs needing the less
+  // clean variants (THE/no-"of" spellings, double lifts).
+  oracle: ["5S","7D","4H","QD","3D","7H","9C","6S","AD","JH","KH","8C","QS","8H","10H","8S","QC","AC","6D","10C","2H","3C","9D","3H","4D","7C","4S","5H","JD","3S","8D","7S","5C","2C","AS","6H","10S","JC","10D","KD","9H","QH","JS","KC","6C","AH","2S","KS","2D","9S","5D","4C"],
+};
+const STACK_LABELS = { aronson: "Aronson", mnemonica: "Mnemonica", oracle: "Oracle (optimized)" };
+const ARONSON = STACKS.aronson; // default stack for standalone helpers
+const stackArr = S => STACKS[(S && S.stack)] || ARONSON;
+
+const VAL_NAMES = { A:"ACE", "2":"TWO", "3":"THREE", "4":"FOUR", "5":"FIVE", "6":"SIX", "7":"SEVEN",
+  "8":"EIGHT", "9":"NINE", "10":"TEN", J:"JACK", Q:"QUEEN", K:"KING" };
+const SUIT_NAMES = { C:"CLUBS", H:"HEARTS", S:"SPADES", D:"DIAMONDS" };
+const SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
+
+const ONES = ["","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE"];
+const TEENS = ["TEN","ELEVEN","TWELVE","THIRTEEN","FOURTEEN","FIFTEEN","SIXTEEN","SEVENTEEN","EIGHTEEN","NINETEEN"];
+const TENS = { 2:"TWENTY", 3:"THIRTY", 4:"FORTY", 5:"FIFTY" };
+
+function numberWord(n) {
+  if (n < 10) return ONES[n];
+  if (n < 20) return TEENS[n - 10];
+  const t = Math.floor(n / 10), o = n % 10;
+  return TENS[t] + (o ? " " + ONES[o] : "");
+}
+function letterCount(s) { return (s.match(/[A-Z]/g) || []).length; }
+
+function splitCard(card) { // "10H" -> {v:"10", s:"H"}
+  return { v: card.slice(0, -1), s: card.slice(-1) };
+}
+function prettyCard(card) {
+  const { v, s } = splitCard(card);
+  return v + SUIT_SYM[s];
+}
+function cardWords(card) {
+  const { v, s } = splitCard(card);
+  return VAL_NAMES[v] + " OF " + SUIT_NAMES[s];
+}
+// Phrasing variants for spelling a card
+function cardPhrases(card) {
+  const { v, s } = splitCard(card);
+  const vn = VAL_NAMES[v], sn = SUIT_NAMES[s];
+  return [
+    { label: vn + " OF " + sn,           letters: letterCount(vn + sn) + 2, mod: 0,            modKey: null },
+    { label: "THE " + vn + " OF " + sn,  letters: letterCount(vn + sn) + 5, mod: "phraseThe",  modKey: "phraseThe" },
+    { label: vn + " " + sn,              letters: letterCount(vn + sn),     mod: "phraseNoOf", modKey: "phraseNoOf" },
+  ];
+}
+
+// 1-based position from the top of the face-down deck, allowing for a cut deck
+// (topCard = whichever stack card is currently on top).
+function stackPos(card, topCard, stack) {
+  const A = stack || ARONSON;
+  const i = A.indexOf(card), t = A.indexOf(topCard || A[0]);
+  if (i < 0 || t < 0) return -1;
+  return ((i - t + 52) % 52) + 1;
+}
+
+const DEFAULT_SETTINGS = {
+  stack: "aronson",
+  topCard: "JS",
+  mode: "full",     // "full" | "half" (split into two 26-packets) | "cut" (spectator cuts, you glimpse)
+  noteEnd: "top",   // in cut mode: did you glimpse the "top" or "bottom" card?
+  base: { deal: 100, directReveal: 90, indicator: 75, indicatorBack: 72, dealSpellCard: 70, spellCount: 68,
+          countCut: 65, dealSpellBack: 65, dealCountBack: 60, spellNumber: 60, dealSpellNumBack: 55, spellCard: 40 },
+  mod: { face: -10, offNext: -8, offBefore: -12, cross: -4, phraseThe: -3, phraseNoOf: -5,
+         cutCard: -15, jokers: -10, digitSum: -6 },
+  enabled: { deal: true, directReveal: true, indicator: true, indicatorBack: true, dealSpellCard: true,
+             spellCount: true, countCut: true, dealSpellBack: true,
+             dealCountBack: true, spellNumber: true, dealSpellNumBack: true, spellCard: true,
+             face: true, offNext: true, offBefore: true, phraseThe: true, phraseNoOf: true,
+             cutCard: true, jokers: true, digitSum: true },
+};
+
+// input: { c1, n1, c2, n2 }  (cards like "7H", numbers 1-52; any subset)
+// Returns candidates sorted best-first, each with a `steps` array.
+// opts.inner suppresses the move recursion (cuts / jokers);
+// opts.jokers ("top"|"face") counts two jokers added to that end of the deck.
+function findOuts(input, settings, opts) {
+  const S = settings || DEFAULT_SETTINGS;
+  const O = opts || {};
+  if (!O.inner && !O.packet && !O.fullDeck) {
+    if (S.mode === "half") return findOutsHalfMode(input, S);
+    if (S.mode === "cut") return findOutsCutMode(input, S);
+  }
+  const out = [];
+  const STACK = stackArr(S);
+  const P = O.packet; // {start, size}: search within one packet of the split deck
+  const deckSize = P ? P.size : (O.jokers ? 54 : 52);
+  const noun = P ? "packet" : "deck";
+  const rawPos = c => stackPos(c, S.topCard, STACK);
+  const pos = c => rawPos(c) - (P ? P.start - 1 : 0);
+  const inZone = card => !P || (rawPos(card) >= P.start && rawPos(card) <= P.start + P.size - 1);
+  const eff = (p, orient) => P
+    ? (orient === "top" ? p : P.size + 1 - p)
+    : (orient === "top" ? p : 53 - p) + (O.jokers === orient ? 2 : 0);
+  // Reverse lookup: which card sits at effective position q? (null = off the
+  // deck, or a joker sits there)
+  const cardAtEff = (q, orient) => {
+    let e = q;
+    if (!P && O.jokers === orient) { e -= 2; if (e < 1) return null; }
+    const zoneSize = P ? P.size : 52;
+    if (e < 1 || e > zoneSize) return null;
+    const zonePos = orient === "top" ? e : zoneSize + 1 - e;
+    const raw = zonePos + (P ? P.start - 1 : 0);
+    return STACK[(STACK.indexOf(S.topCard || STACK[0]) + raw - 1) % 52];
+  };
+
+  const orients = S.enabled.face ? ["top", "face"] : ["top"];
+  const offsets = [{ d: 0, key: null }];
+  if (S.enabled.offNext) offsets.push({ d: 1, key: "offNext" });
+  if (S.enabled.offBefore) offsets.push({ d: -1, key: "offBefore" });
+
+  // Spectator 2 (or any field) may be absent — search whatever was given.
+  // In packet mode only cards inside this packet are reachable.
+  const cards = [];
+  if (input.c1 && inZone(input.c1)) cards.push({ card: input.c1, who: 1 });
+  if (input.c2 && inZone(input.c2)) cards.push({ card: input.c2, who: 2 });
+  const nums = [];
+  if (input.n1) nums.push({ num: input.n1, who: 1 });
+  if (input.n2) nums.push({ num: input.n2, who: 2 });
+  const pairings = [];
+  for (const c of cards) for (const n of nums)
+    pairings.push({ card: c.card, num: n.num, cardWho: c.who, numWho: n.who, own: c.who === n.who });
+
+  // Stack-preserving handlings: off the top deal FACE UP (flip the packet back
+  // to restore); off the face deal FACE DOWN. The reversing handlings are used
+  // only by the into-the-dealt-pile family.
+  const hold = o => o === "top" ? `Hold the ${noun} FACE DOWN` : `Hold the ${noun} FACE UP`;
+  const facing = o => o === "top" ? "face up" : "face down";      // stack-preserving deals
+  const revFacing = o => o === "top" ? "FACE DOWN" : "FACE UP";   // reversing deals
+  const pairCtx = p => p.own
+    ? `Spectator ${p.cardWho}'s card at their own number`
+    : `Spectator ${p.cardWho}'s card at Spectator ${p.numWho}'s number`;
+
+  function push(method, baseKey, orient, off, scoreExtra, steps, ctx, tags, card) {
+    let score = S.base[baseKey];
+    if (orient === "face") score += S.mod.face;
+    if (off.key) score += S.mod[off.key];
+    score += scoreExtra;
+    out.push({ score, method, orient, offset: off.d, steps, title: steps.join(" "),
+               ctx, tags: tags || [], card });
+  }
+
+  // 0. Instant reveal — the named card is already on top or is the face card.
+  if (S.enabled.directReveal) {
+    for (const c of cards) {
+      const cardTxt = prettyCard(c.card);
+      const mk = steps => out.push({ score: S.base.directReveal, method: "Instant reveal",
+        orient: steps.faceCard ? "face" : "top", offset: 0, steps: steps.list,
+        title: steps.list.join(" "), ctx: `Spectator ${c.who}'s card — no counting, no number needed`,
+        tags: [], card: c.card });
+      if (eff(pos(c.card), "top") === 1)
+        mk({ list: [`The ${cardTxt} (S${c.who}'s card) is already on TOP of the ${noun}`,
+                    `Reveal it — no moves needed`] });
+      if (eff(pos(c.card), "face") === 1)
+        mk({ faceCard: true, list: [`The ${cardTxt} (S${c.who}'s card) is the FACE (bottom) card`,
+                                    `Turn the ${noun} face up and show it — no moves needed`] });
+    }
+  }
+
+  for (const p of pairings) {
+    const ep = { top: eff(pos(p.card), "top"), face: eff(pos(p.card), "face") };
+    const crossExtra = p.own ? 0 : S.mod.cross;
+    const cardTxt = prettyCard(p.card);
+    const who = ` — S${p.cardWho}'s card`;
+
+    for (const orient of orients) {
+      for (const off of offsets) {
+        // One short needs the double lift, which needs unseen faces — dealing
+        // off the face shows every card, so it's top-orientation only.
+        if (orient === "face" && off.d === -1) continue;
+        // 1. Straight deal to the number
+        if (S.enabled.deal && ep[orient] === p.num + off.d) {
+          const steps = off.d === -1
+            ? [hold(orient),
+               `Have them deal ${p.num} cards face down into YOUR hands`,
+               `Double lift the top two — the face shown is the ${cardTxt}${who}`]
+            : [hold(orient),
+               `Deal ${p.num} cards ${facing(orient)} to the table`,
+               off.d === 0 ? `Card #${p.num} is the ${cardTxt}${who}`
+                           : `Turn over the NEXT card — the ${cardTxt}${who}`];
+          push("Deal to the number", "deal", orient, off, crossExtra, steps,
+            pairCtx(p), p.own && off.d === 0 && orient === "top" ? ["MIRACLE"] : [], p.card);
+        }
+        // 2. Spell the number instead of dealing it (one-short spells are unusable)
+        if (S.enabled.spellNumber && off.d !== -1) {
+          const w = numberWord(p.num), t = letterCount(w);
+          if (ep[orient] === t + off.d) {
+            push("Spell the number", "spellNumber", orient, off, crossExtra,
+              [hold(orient),
+               `Don't count ${p.num} — spell it: ${w.replace(/ /g, "-")} (${t} letters), one card ${facing(orient)} per letter`,
+               off.d === 0 ? `The card on the last letter is the ${cardTxt}${who}`
+                           : `Turn over the NEXT card — the ${cardTxt}${who}`],
+              pairCtx(p), [], p.card);
+          }
+        }
+        // 2b. Indicator card: deal to the number and arrive (directly or off by
+        // one) at a spot card 2-10 — its value bridges to the named card.
+        // Two conventions: REMOVE the indicator then deal v (target q+v), or
+        // RETURN it to the deck then deal v (it deals as #1, target q+v-1).
+        if (S.enabled.indicator && off.d !== -1) {
+          const q = p.num + off.d;
+          const ind = cardAtEff(q, orient);
+          const v = ind ? parseInt(splitCard(ind).v, 10) : NaN;
+          if (ind && ind !== p.card && v >= 2 && v <= 10) {
+            const indTxt = prettyCard(ind);
+            const intro = [hold(orient),
+              `Deal ${p.num} cards ${facing(orient)} to the table`,
+              off.d === 0 ? `Card #${p.num} is the ${indTxt} — an INDICATOR`
+                          : `Turn over the NEXT card — the ${indTxt}, an INDICATOR`];
+            if (ep[orient] === q + v) {
+              push("Deal to an indicator card", "indicator", orient, off, crossExtra,
+                [...intro,
+                 `REMOVE the ${indTxt}, then deal ${v} more cards`,
+                 `Card #${v} is the ${cardTxt}${who}`],
+                pairCtx(p) + ` via indicator ${indTxt} (removed)`, [], p.card);
+            }
+            if (ep[orient] === q + v - 1) {
+              push("Deal to an indicator card", "indicator", orient, off, crossExtra,
+                [...intro,
+                 `RETURN the ${indTxt} to the top of the ${noun}, then deal ${v} cards`,
+                 `Card #${v} is the ${cardTxt}${who}`],
+                pairCtx(p) + ` via indicator ${indTxt} (returned)`, [], p.card);
+            }
+          }
+        }
+        // 3. Deal the number, then spell the card (one-short spells are unusable)
+        if (S.enabled.dealSpellCard && off.d !== -1) {
+          for (const ph of cardPhrases(p.card)) {
+            if (ph.modKey && !S.enabled[ph.modKey]) continue;
+            const t = p.num + ph.letters;
+            if (t + off.d >= 1 && t + off.d <= deckSize && ep[orient] === t + off.d) {
+              push("Deal, then spell the card", "dealSpellCard", orient, off,
+                crossExtra + (ph.modKey ? S.mod[ph.modKey] : 0),
+                [hold(orient),
+                 `Deal ${p.num} cards ${facing(orient)} to the table`,
+                 `Spell "${ph.label}" (${ph.letters} letters), one card per letter`,
+                 off.d === 0 ? `The last letter lands on the ${cardTxt}${who}`
+                             : `Turn over the NEXT card — the ${cardTxt}${who}`],
+                pairCtx(p), [], p.card);
+            }
+          }
+        }
+        // 3b. Spell the card FIRST, then count to the number (same depth,
+        // reversed order — spell an indifferent-looking word, then count to
+        // their freely-named number and arrive on the card).
+        if (S.enabled.spellCount) {
+          for (const ph of cardPhrases(p.card)) {
+            if (ph.modKey && !S.enabled[ph.modKey]) continue;
+            const t = ph.letters + p.num;
+            if (t + off.d >= 1 && t + off.d <= deckSize && ep[orient] === t + off.d) {
+              const tail = off.d === -1
+                ? [`Then have them count ${p.num} cards ${facing(orient)} into YOUR hands`,
+                   `Double lift the top two — the face shown is the ${cardTxt}${who}`]
+                : [`Then count ${p.num} more cards`,
+                   off.d === 0 ? `Card #${p.num} is the ${cardTxt}${who}`
+                               : `Turn over the NEXT card — the ${cardTxt}${who}`];
+              push("Spell the card, then count to the number", "spellCount", orient, off,
+                crossExtra + (ph.modKey ? S.mod[ph.modKey] : 0),
+                [hold(orient),
+                 `Spell "${ph.label}" (${ph.letters} letters), one card ${facing(orient)} per letter`,
+                 ...tail],
+                pairCtx(p), [], p.card);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Count S1's number, cut, count S2's number (uses BOTH numbers; sum must fit)
+  if (S.enabled.countCut && input.n1 && input.n2) {
+    const sum = input.n1 + input.n2;
+    for (const c of cards) {
+      const cardTxt = prettyCard(c.card);
+      for (const orient of orients) {
+        for (const off of offsets) {
+          if (orient === "face" && off.d === -1) continue; // double lift needs unseen faces
+          if (sum + off.d >= 2 && sum + off.d <= deckSize && eff(pos(c.card), orient) === sum + off.d) {
+            const restore = orient === "top"
+              ? "Flip the counted cards face down and cut them to the bottom"
+              : `Turn the counted cards face up and tuck them behind the ${noun}`;
+            const ending = off.d === -1
+              ? [`Have them deal ${input.n2} cards (S2's number) face down into YOUR hands`,
+                 `Double lift the top two — the face shown is the ${cardTxt} — S${c.who}'s card`]
+              : [`Count ${input.n2} more (S2's number)`,
+                 off.d === 0 ? `Card #${input.n2} of this count is the ${cardTxt} — S${c.who}'s card`
+                             : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`];
+            push("Count, cut, count again", "countCut", orient, off, 0,
+              [hold(orient),
+               `Count ${input.n1} cards ${facing(orient)} (S1's number) — a miss`,
+               restore, ...ending],
+              `Spectator ${c.who}'s card via both numbers (${input.n1} + ${input.n2})`, [], c.card);
+          }
+        }
+      }
+    }
+  }
+
+  // 5. Into the dealt pile: dealing a number reverses those cards, so pile
+  // position j holds the card that was at effective position (firstCount − j + 1).
+  const dealtPileIntro = (a, orient) => [hold(orient),
+    `Deal ${a.num} cards ${revFacing(orient)} into a pile (S${a.who}'s number) — this reverses their order`];
+
+  // 5a. ...then count the other number into the dealt pile
+  if (S.enabled.dealCountBack) {
+    for (const a of nums) for (const b of nums) {
+      if (a === b) continue;
+      for (const c of cards) {
+        const cardTxt = prettyCard(c.card);
+        for (const orient of orients) {
+          const ep = eff(pos(c.card), orient);
+          for (const off of offsets) {
+            // a face-orientation dealt pile is face up — no double lift off it
+            if (orient === "face" && off.d === -1) continue;
+            const j = b.num + off.d; // position reached inside the pile
+            if (a.num <= deckSize && j >= 1 && j <= a.num && ep === a.num - j + 1) {
+              const ending = off.d === -1
+                ? [`Count ${b.num} cards (S${b.who}'s number) off the pile into YOUR hands`,
+                   `Double lift the top two — the face shown is the ${cardTxt} — S${c.who}'s card`]
+                : [`Count ${b.num} (S${b.who}'s number) into the dealt pile`,
+                   off.d === 0 ? `Card #${b.num} is the ${cardTxt} — S${c.who}'s card`
+                               : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`];
+              push("Deal, then count into the dealt pile", "dealCountBack", orient, off, 0,
+                [...dealtPileIntro(a, orient), ...ending],
+                `Spectator ${c.who}'s card via both numbers (${a.num} − ${b.num})`, [], c.card);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 5a2. ...or the top of the dealt pile IS the indicator: deal the number
+  // FACE DOWN, the pile's top card is a spot card 2-10 — count back into the
+  // pile. Top orientation only: a face-up deal would show the selection pass
+  // by before counting back. Three variants:
+  //   RETURN it to the pile, count v  -> position (number − value + 1)
+  //   REMOVE it, count v              -> position (number − value)
+  //   RETURN + count v into YOUR hands, double lift -> (number − value + 2)
+  if (S.enabled.indicatorBack) {
+    for (const a of nums) {
+      if (a.num > deckSize) continue;
+      const ind = cardAtEff(a.num, "top");
+      const v = ind ? parseInt(splitCard(ind).v, 10) : NaN;
+      if (!(v >= 2 && v <= 10)) continue;
+      const indTxt = prettyCard(ind);
+      const intro = [...dealtPileIntro(a, "top"),
+        `Turn over the TOP card of the pile — the ${indTxt}, an INDICATOR`];
+      for (const c of cards) {
+        if (c.card === ind) continue;
+        const ep = eff(pos(c.card), "top");
+        const cTxt = `${prettyCard(c.card)} — S${c.who}'s card`;
+        const ctx = `Spectator ${c.who}'s card via indicator ${indTxt} atop the dealt pile`;
+        if (v <= a.num && ep === a.num - v + 1) {
+          push("Deal, then indicator into the dealt pile", "indicatorBack", "top", { d: 0, key: null }, 0,
+            [...intro, `RETURN the ${indTxt} face down to the pile, then count ${v} cards off it`,
+             `Card #${v} is the ${cTxt}`], ctx + " (returned)", [], c.card);
+        }
+        if (v < a.num && ep === a.num - v) {
+          push("Deal, then indicator into the dealt pile", "indicatorBack", "top", { d: 0, key: null }, 0,
+            [...intro, `REMOVE the ${indTxt}, then count ${v} cards off the pile`,
+             `Card #${v} is the ${cTxt}`], ctx + " (removed)", [], c.card);
+        }
+        if (S.enabled.offBefore && v <= a.num && ep === a.num - v + 2) {
+          push("Deal, then indicator into the dealt pile", "indicatorBack", "top", { d: -1, key: "offBefore" }, 0,
+            [...intro, `RETURN the ${indTxt} face down, then have them count ${v} cards off the pile into YOUR hands`,
+             `Double lift the top two — the face shown is the ${cTxt}`], ctx + " (double lift)", [], c.card);
+        }
+      }
+    }
+  }
+
+  // 5b. ...then spell the card into the dealt pile
+  if (S.enabled.dealSpellBack) {
+    for (const p of pairings) {
+      const cardTxt = prettyCard(p.card);
+      const a = { num: p.num, who: p.numWho };
+      for (const ph of cardPhrases(p.card)) {
+        if (ph.modKey && !S.enabled[ph.modKey]) continue;
+        for (const orient of orients) {
+          const ep = eff(pos(p.card), orient);
+          for (const off of offsets) {
+            if (off.d === -1) continue; // one-short spell is unusable
+            const j = ph.letters + off.d;
+            if (p.num <= deckSize && j >= 1 && j <= p.num && ep === p.num - j + 1) {
+              push("Deal, then spell the card into the dealt pile", "dealSpellBack", orient, off,
+                (p.own ? 0 : S.mod.cross) + (ph.modKey ? S.mod[ph.modKey] : 0),
+                [...dealtPileIntro(a, orient),
+                 `Spell "${ph.label}" (${ph.letters} letters) into the dealt pile`,
+                 off.d === 0 ? `The last letter lands on the ${cardTxt} — S${p.cardWho}'s card`
+                             : `Turn over the NEXT card — the ${cardTxt} — S${p.cardWho}'s card`],
+                pairCtx(p), [], p.card);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 5c. ...then spell a number into the dealt pile (spelling the SAME number
+  // just dealt is allowed — "deal 30, now spell T-H-I-R-T-Y")
+  if (S.enabled.dealSpellNumBack) {
+    for (const a of nums) for (const b of nums) {
+      const w = numberWord(b.num), L = letterCount(w);
+      for (const c of cards) {
+        const cardTxt = prettyCard(c.card);
+        const cross = (a === b && c.who !== a.who) ? S.mod.cross : 0;
+        for (const orient of orients) {
+          const ep = eff(pos(c.card), orient);
+          for (const off of offsets) {
+            if (off.d === -1) continue; // one-short spell is unusable
+            const j = L + off.d;
+            if (a.num <= deckSize && j >= 1 && j <= a.num && ep === a.num - j + 1) {
+              push("Deal, then spell a number into the dealt pile", "dealSpellNumBack", orient, off, cross,
+                [...dealtPileIntro(a, orient),
+                 a === b ? `Spell that same number — ${w.replace(/ /g, "-")} (${L} letters) — into the dealt pile`
+                         : `Spell ${w.replace(/ /g, "-")} (${L} letters, S${b.who}'s number) into the dealt pile`,
+                 off.d === 0 ? `The last letter lands on the ${cardTxt} — S${c.who}'s card`
+                             : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`],
+                a === b ? `Spectator ${c.who}'s card; deal then spell the same number (${a.num})`
+                        : `Spectator ${c.who}'s card via both numbers (${a.num}, spell ${b.num})`, [], c.card);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 6. Pure card spell (ignores the numbers)
+  if (S.enabled.spellCard) {
+    for (const c of cards) {
+      const cardTxt = prettyCard(c.card);
+      for (const ph of cardPhrases(c.card)) {
+        if (ph.modKey && !S.enabled[ph.modKey]) continue;
+        for (const orient of orients) {
+          for (const off of offsets) {
+            if (off.d === -1) continue; // one-short spell is unusable
+            if (eff(pos(c.card), orient) === ph.letters + off.d) {
+              push("Spell the card", "spellCard", orient, off, ph.modKey ? S.mod[ph.modKey] : 0,
+                [hold(orient),
+                 `Spell "${ph.label}" (${ph.letters} letters), one card ${facing(orient)} per letter`,
+                 off.d === 0 ? `The last letter is the ${cardTxt} — S${c.who}'s card`
+                             : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`],
+                `Spectator ${c.who}'s card by spelling (numbers unused)`, [], c.card);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 7. Moves: adjust the deck first, then use any other method. Never combined
+  // with each other (one move max per out), and never inside a packet.
+  if (!O.inner && !P) {
+    // 7a. Cut a named card to the top or bottom. The stack is cyclic, so a cut
+    // is just a new rotation. A cut is only ever used to find the OTHER card —
+    // openly cutting to a card and then revealing it gives the method away.
+    if (S.enabled.cutCard) {
+      for (const c of cards) {
+        const idx = STACK.indexOf(c.card);
+        for (const place of ["top", "bottom"]) {
+          const newTop = place === "top" ? c.card : STACK[(idx + 1) % 52];
+          if (newTop === (S.topCard || "JS")) continue; // already there — plain results cover it
+          const placeTxt = place === "top" ? "TOP" : "BOTTOM (face)";
+          for (const r of findOuts(input, { ...S, topCard: newTop }, { inner: true })) {
+            if (r.card === c.card) continue;
+            const steps = [`Casually cut the ${prettyCard(c.card)} (S${c.who}'s card) to the ${placeTxt} of the deck`,
+                           ...r.steps];
+            out.push({ ...r, score: r.score + S.mod.cutCard, method: "Cut + " + r.method,
+              steps, title: steps.join(" "),
+              ctx: r.ctx + ` — after cutting S${c.who}'s ${prettyCard(c.card)} to the ${place}`,
+              tags: [] });
+          }
+        }
+      }
+    }
+    // 7b. Add both jokers to the top or the face: every count from that end
+    // shifts by 2. Only results on the joker side are new — the rest are
+    // duplicates of the plain search.
+    if (S.enabled.jokers) {
+      for (const place of ["top", "face"]) {
+        for (const r of findOuts(input, S, { inner: true, jokers: place })) {
+          if (r.orient !== place) continue;
+          const steps = [`Add BOTH Jokers to the ${place === "top" ? "TOP" : "FACE (bottom)"} of the deck`,
+                         ...r.steps];
+          out.push({ ...r, score: r.score + S.mod.jokers, method: "Jokers + " + r.method,
+            steps, title: steps.join(" "),
+            ctx: r.ctx + " — with both Jokers added", tags: [] });
+        }
+      }
+    }
+  }
+
+  // 8. Digit sum: replace a two-digit named number with the sum of its digits
+  // (47 -> 4+7 -> 11) and run the count-based methods at that smaller number.
+  // A clean, fair-sounding transformation that rescues most hard numbers.
+  if (S.enabled.digitSum && !O.inner && !O.viaSum && !P) {
+    const NUMBER_METHODS = new Set(["Deal to the number", "Deal, then spell the card",
+      "Spell the card, then count to the number", "Deal to an indicator card",
+      "Deal, then indicator into the dealt pile"]);
+    for (const slot of ["n1", "n2"]) {
+      const n = input[slot];
+      if (!n || n < 10) continue;
+      const ds = String(n).split("").reduce((a, b) => a + +b, 0);
+      if (ds === n) continue;
+      const framing = `Add the digits of ${n} (${String(n).split("").join(" + ")} = ${ds})`;
+      // fullDeck bypasses the half/cut re-dispatch; viaSum blocks nested digit-sum
+      for (const r of findOuts({ ...input, [slot]: ds }, S, { viaSum: true, fullDeck: true })) {
+        const base = r.method.replace(/^(Cut|Jokers) \+ /, "");
+        if (!NUMBER_METHODS.has(base)) continue; // only outs that actually use the number
+        const steps = [framing, ...r.steps];
+        out.push({ ...r, score: r.score + S.mod.digitSum, method: "Digit sum + " + r.method,
+          steps, title: steps.join(" "), ctx: r.ctx + ` — via the digit sum of ${n}` });
+      }
+    }
+  }
+
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
+// Half-deck mode: the deck starts split into two packets of 26. Every out
+// begins by reassembling the deck — REPLACE (original order) or CUT (bottom
+// half on top). Both are clean cyclic states of the stack, so this opening is
+// free, and the full-deck search (moves included) runs under each.
+function findOutsHalfMode(input, S) {
+  const out = [];
+  const STACK = stackArr(S);
+  const topIdx = STACK.indexOf(S.topCard || STACK[0]);
+  for (const ord of [{ top: S.topCard || STACK[0], label: "REPLACE — reassemble the halves in the original order" },
+                     { top: STACK[(topIdx + 26) % 52], label: "CUT — reassemble with the BOTTOM half on top" }]) {
+    for (const r of findOuts(input, { ...S, topCard: ord.top }, { fullDeck: true })) {
+      const steps = [ord.label, ...r.steps];
+      out.push({ ...r, steps, title: steps.join(" "),
+        ctx: r.ctx + (ord.top === (S.topCard || "JS") ? "" : " — after the cut reassembly") });
+    }
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
+// Spectator-cut mode: the spectator cuts and completes the cut; the magician
+// secretly glimpses the card now on top (or bottom). That glimpse fixes the
+// rotation, so the full-deck search runs at it. settings.topCard holds the
+// glimpsed card; if it was the bottom card, the real top is the next stack card.
+function findOutsCutMode(input, S) {
+  const STACK = stackArr(S);
+  const glimpsed = S.topCard || STACK[0];
+  let effTop = glimpsed, open;
+  if (S.noteEnd === "bottom") {
+    effTop = STACK[(STACK.indexOf(glimpsed) + 1) % 52];
+    open = `Spectator cuts & completes the cut — you've secretly glimpsed the ${prettyCard(glimpsed)} on the BOTTOM`;
+  } else {
+    open = `Spectator cuts & completes the cut — you've secretly glimpsed the ${prettyCard(glimpsed)} on TOP`;
+  }
+  const out = [];
+  for (const r of findOuts(input, { ...S, mode: "full", topCard: effTop }, { fullDeck: true })) {
+    const steps = [open, ...r.steps];
+    out.push({ ...r, steps, title: steps.join(" "), ctx: r.ctx + " — after the spectator's cut" });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
+// Compact run-length range string: [23,24,25,31,51,52] -> "23–25, 31, 51–52"
+function formatRanges(nums) {
+  const s = [...nums].sort((a, b) => a - b);
+  if (!s.length) return "";
+  const parts = [];
+  let a = s[0], prev = s[0];
+  for (let i = 1; i <= s.length; i++) {
+    if (i < s.length && s[i] === prev + 1) { prev = s[i]; continue; }
+    parts.push(a === prev ? `${a}` : `${a}–${prev}`);
+    a = prev = s[i];
+  }
+  return parts.join(", ");
+}
+
+// Scan all 52 numbers for a card: which are dead, which give the strongest
+// outs. One sweep powers the dead-zone ranges and "best numbers" hints.
+function scanCard(card, settings) {
+  const S = settings || DEFAULT_SETTINGS;
+  const dead = [], score = {};
+  let max = 0;
+  for (let n = 1; n <= 52; n++) {
+    const r = findOuts({ c1: card, n1: n }, S);
+    if (!r.length) { dead.push(n); continue; }
+    score[n] = r[0].score;
+    if (r[0].score > max) max = r[0].score;
+  }
+  const cut = Math.min(max, 90);
+  const best = Object.keys(score).filter(n => score[n] >= cut).map(Number);
+  return { dead, best, max, score };
+}
+
+// Numbers 1-52 with no out at all for this card.
+function deadNumbers(card, settings) { return scanCard(card, settings).dead; }
+
+// Detect the rare "double miracle": both cards land exactly at numbers, dealing
+// face down from the top, so one deal reveals both.
+function findDoubleMiracle(input, settings) {
+  const S = settings || DEFAULT_SETTINGS;
+  if (!input.c1 || !input.c2 || !input.n1 || !input.n2) return null;
+  if (input.c1 === input.c2) return null;
+  const ST = stackArr(S);
+  const combos = [
+    { a: { card: input.c1, num: input.n1 }, b: { card: input.c2, num: input.n2 }, cross: false },
+    { a: { card: input.c1, num: input.n2 }, b: { card: input.c2, num: input.n1 }, cross: true },
+  ];
+  for (const c of combos) {
+    const pa = stackPos(c.a.card, S.topCard, ST), pb = stackPos(c.b.card, S.topCard, ST);
+    if (pa === c.a.num && pb === c.b.num && c.a.num !== c.b.num) {
+      const first = c.a.num < c.b.num ? c.a : c.b;
+      const second = c.a.num < c.b.num ? c.b : c.a;
+      return {
+        text: `DOUBLE MIRACLE — deal FACE UP from the top: card #${first.num} is the ${prettyCard(first.card)}` +
+              ` and card #${second.num} is the ${prettyCard(second.card)}. One deal, both hits.` +
+              (c.cross ? " (Numbers are swapped between spectators.)" : ""),
+      };
+    }
+  }
+  return null;
+}
+
+// Raw data for improvising when nothing (or something weak) hits.
+function cheatSheet(input, settings) {
+  const S = settings || DEFAULT_SETTINGS;
+  const rows = [];
+  for (const [card, who] of [[input.c1, 1], [input.c2, 2]]) {
+    if (!card) continue;
+    const p = stackPos(card, S.topCard, stackArr(S));
+    const phr = cardPhrases(card).map(ph => `${ph.label}=${ph.letters}`).join(", ");
+    const half = S.mode === "half"
+      ? (p <= 26 ? ` TOP half #${p} (${27 - p} from its face).` : ` BOTTOM half #${p - 26} (${53 - p} from its face).`)
+      : "";
+    rows.push(`S${who} ${prettyCard(card)}: position ${p} from top, ${53 - p} from face.${half} Spells: ${phr}`);
+  }
+  for (const [num, who] of [[input.n1, 1], [input.n2, 2]]) {
+    if (!num) continue;
+    const w = numberWord(num);
+    rows.push(`S${who} number ${num}: "${w}" spells with ${letterCount(w)} letters`);
+  }
+  if (input.n1 && input.n2)
+    rows.push(`Numbers summed: ${input.n1} + ${input.n2} = ${input.n1 + input.n2}`);
+  return rows;
+}
+/*ENGINE-END*/
+
+/* ---------------- UI ---------------- */
+const $ = id => document.getElementById(id);
+const VALUES = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const SUITS = ["S","H","C","D"];
+
+let settings = loadSettings();
+let state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null };
+let numEntry = "", lastNumStep = -1;
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem("acaanSettings");
+    if (!raw) return structuredClone(DEFAULT_SETTINGS);
+    const s = JSON.parse(raw);
+    // merge so new keys added in future versions get defaults
+    return {
+      stack: STACKS[s.stack] ? s.stack : DEFAULT_SETTINGS.stack,
+      topCard: s.topCard || DEFAULT_SETTINGS.topCard,
+      mode: s.mode || DEFAULT_SETTINGS.mode,
+      noteEnd: s.noteEnd || DEFAULT_SETTINGS.noteEnd,
+      base: { ...DEFAULT_SETTINGS.base, ...s.base },
+      mod: { ...DEFAULT_SETTINGS.mod, ...s.mod },
+      enabled: { ...DEFAULT_SETTINGS.enabled, ...s.enabled },
+    };
+  } catch { return structuredClone(DEFAULT_SETTINGS); }
+}
+function saveSettings() { localStorage.setItem("acaanSettings", JSON.stringify(settings)); }
+
+/* pickers */
+function buildPickers() {
+  $("valueGrid").innerHTML = VALUES.map(v => `<button data-v="${v}">${v}</button>`).join("");
+  $("suitGrid").innerHTML = SUITS.map(s =>
+    `<button data-s="${s}" class="suit-${s.toLowerCase()}">${SUIT_SYM[s]}</button>`).join("");
+  $("numberPad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d =>
+    `<button data-k="${d}">${d}</button>`).join("") +
+    `<button data-k="back">&#9003;</button><button data-k="0">0</button>` +
+    `<button data-k="ok" class="ok">&#10003;</button>`;
+
+  $("valueGrid").addEventListener("click", e => {
+    const v = e.target.dataset?.v; if (!v) return;
+    state.pendingValue = v;
+    [...$("valueGrid").children].forEach(b => b.style.borderColor = b.dataset.v === v ? "var(--gold)" : "var(--line)");
+  });
+  $("suitGrid").addEventListener("click", e => {
+    const s = e.target.dataset?.s; if (!s || !state.pendingValue) return;
+    setStepValue(state.pendingValue + s);
+    state.pendingValue = null;
+    [...$("valueGrid").children].forEach(b => b.style.borderColor = "var(--line)");
+  });
+  $("numberPad").addEventListener("click", e => {
+    const k = e.target.dataset?.k; if (!k) return;
+    if (k === "back") numEntry = numEntry.slice(0, -1);
+    else if (k === "ok") {
+      const v = parseInt(numEntry, 10);
+      if (v >= 1 && v <= 52) { numEntry = ""; setStepValue(v); return; }
+    } else if (numEntry.length < 2) {
+      const next = numEntry + k, v = parseInt(next, 10);
+      if (v >= 1) {
+        numEntry = next;
+        // 6-9 can't start a valid two-digit number (max 52); two digits decide themselves
+        if (numEntry.length === 2 || v >= 6) {
+          if (v <= 52) { numEntry = ""; setStepValue(v); return; }
+          numEntry = numEntry.slice(0, 1); // 53-59: keep the first digit
+        }
+      }
+    }
+    $("numEntry").textContent = numEntry || "–";
+  });
+}
+
+const STEP_KEYS = ["c1", "n1"];
+function setStepValue(val) {
+  state[STEP_KEYS[state.step]] = val;
+  // card entered -> ask for the number; number entered -> results
+  state.step = state.step === 0 ? 1 : 2;
+  render();
+}
+
+function render() {
+  // chips
+  for (let i = 0; i < 2; i++) {
+    const key = STEP_KEYS[i], el = $("chip-" + key), v = state[key];
+    el.textContent = v == null ? "—" : (typeof v === "number" ? v : prettyCard(v));
+    el.className = "val" + (typeof v === "string" && /[HD]$/.test(v) ? " red" : "");
+    el.parentElement.classList.toggle("active", state.step === i);
+  }
+  const isCard = state.step === 0, isNum = state.step === 1;
+  $("cardPicker").style.display = isCard ? "" : "none";
+  $("numberPicker").style.display = isNum ? "" : "none";
+  $("results").style.display = state.step === 2 ? "block" : "none";
+  if (isCard) $("cardPickerTitle").textContent = "Their card";
+  if (isNum) {
+    $("numberPickerTitle").textContent = "Their number";
+    if (state.step !== lastNumStep) numEntry = "";
+    lastNumStep = state.step;
+    $("numEntry").textContent = numEntry || "–";
+    // One sweep over all 52 numbers for this card: strongest numbers to steer
+    // toward, a card-only out if one exists, and the dead zones (as ranges).
+    const scan = scanCard(state.c1, settings);
+    const partial = findOuts({ c1: state.c1 }, settings);
+    const po = $("partialOut");
+    po.style.display = "block";
+    po.style.marginBottom = "12px";
+    po.style.borderColor = scan.dead.length ? "var(--red)" : "var(--green)";
+    let html = "";
+    const miracleNums = scan.best.filter(n => scan.score[n] === 100);
+    const strongNums = scan.best.filter(n => scan.score[n] < 100);
+    if (miracleNums.length)
+      html += `<div class="tag" style="color:var(--gold)">&#9733; MIRACLE IF THEY NAME</div><p><b>${formatRanges(miracleNums)}</b></p>`;
+    if (strongNums.length) {
+      const slabel = scan.max >= 90 ? "90+" : scan.max + " pts";
+      html += `<div class="tag" style="color:var(--green)">&#9733; STRONGEST OTHER NUMBERS (${slabel})</div><p><b>${formatRanges(strongNums)}</b></p>`;
+    }
+    if (partial.length) {
+      html += `<div class="tag">&#10022; NO NUMBER NEEDED (${partial[0].score})</div>` +
+        partial[0].steps.map(s => `<p>${s.replace(/(^|\D)1 (cards|letters|more cards)\b/g, (m,p,w)=>`${p}1 ${w.replace(/s$/,"")}`)}</p>`).join("");
+    }
+    html += scan.dead.length
+      ? `<div class="tag" style="color:var(--red)">&#9888; NO HIT IF THEY NAME</div><p><b>${formatRanges(scan.dead)}</b></p>`
+      : `<div class="tag" style="color:var(--green)">&#10003; EVERY NUMBER 1–52 HAS AN OUT</div>`;
+    po.innerHTML = html;
+  }
+  if (state.step === 2) renderResults();
+}
+
+function renderResults() {
+  const input = { c1: state.c1, n1: state.n1, c2: state.c2, n2: state.n2 };
+  const outs = findOuts(input, settings);
+  const dbl = findDoubleMiracle(input, settings);
+  let html = "";
+
+  if (dbl) html += `<div class="banner"><div class="tag">&#9733;&#9733; DOUBLE MIRACLE</div><p>${dbl.text}</p></div>`;
+
+  if (!outs.length) {
+    html += `<div class="nores"><b>No clean out.</b> Improvise from the raw data below — or take the deck back, cut, and re-run with a new top card (&#9881; settings).</div>`;
+  } else {
+    // "Deal 1 cards" -> "Deal 1 card" (only a standalone 1, not 11/21/31…)
+    const sing = s => s.replace(/(^|\D)1 (cards|letters|more cards)\b/g,
+      (m, p, w) => `${p}1 ${w.replace(/s$/, "")}`);
+    const stackNote = r => (r.method.includes("dealt pile") || r.offset === -1)
+      ? " · dealt packet ends reversed" : " · stack order survives";
+    const badge = r => `${r.tags.includes("MIRACLE") ? "&#9733; MIRACLE — " : ""}${r.method}` +
+      `${r.orient === "face" ? " · from face" : ""}` +
+      `${r.offset === 1 ? " · off by one" : r.offset === -1 ? " · double lift" : ""}`;
+    const [top, ...rest] = outs;
+    html += `<div class="hero"><span class="score">${top.score}</span>` +
+      `<div class="method">${badge(top)}</div>` +
+      `<ol class="steps">${top.steps.map(s => `<li>${sing(s)}</li>`).join("")}</ol>` +
+      `<div class="ctx">${top.ctx}${stackNote(top)}</div></div>`;
+    for (const r of rest.slice(0, 12)) {
+      html += `<div class="alt"><span class="score">${r.score}</span>` +
+        `<div class="method">${badge(r)}</div>` +
+        `<div class="big">${r.steps.map(sing).join(" &rarr; ")}</div><div class="ctx">${r.ctx}${stackNote(r)}</div></div>`;
+    }
+  }
+  $("resultList").innerHTML = html;
+  $("cheat").innerHTML = "<b>Raw data</b><br>" + cheatSheet(input, settings).join("<br>");
+}
+
+/* settings UI */
+const METHOD_LABELS = {
+  deal: "Deal to the number", directReveal: "Instant reveal (already on top/bottom)",
+  indicator: "Indicator card (arrive at a 2-10, deal that many more)",
+  indicatorBack: "Indicator atop the dealt pile (count it as 1)",
+  spellCount: "Spell the card, then count to the number",
+  dealSpellCard: "Deal, then spell the card", countCut: "Count, cut, count again",
+  dealSpellBack: "Deal, then spell the card into the dealt pile",
+  dealCountBack: "Deal, then count into the dealt pile",
+  spellNumber: "Spell the number",
+  dealSpellNumBack: "Deal, then spell a number into the dealt pile",
+  spellCard: "Spell the card (numbers unused)",
+};
+const MOD_LABELS = {
+  face: "Dealing from the face penalty", offNext: "Off by one: next card",
+  offBefore: "Off by one: double lift (one short)",
+  cross: "Cross-spectator pairing penalty", phraseThe: '"THE five of clubs" penalty', phraseNoOf: '"FIVE CLUBS" (no "of") penalty',
+  cutCard: "Cut a named card first penalty", jokers: "Add both Jokers penalty",
+  digitSum: "Digit-sum the number penalty",
+};
+const TOGGLE_LABELS = {
+  face: "Allow dealing from the face (deck face up)", offNext: "Allow off-by-one (next card)",
+  offBefore: "Allow off-by-one (double lift)",
+  phraseThe: 'Allow "THE … OF …" spelling', phraseNoOf: 'Allow "VALUE SUIT" spelling (no "of")',
+  cutCard: "Allow cutting a named card to top/bottom",
+  jokers: "Allow adding the two Jokers (top or face)",
+  digitSum: "Allow digit-summing the number (47 → 11)",
+};
+
+// Methods sorted by base score (ties broken by the METHOD_LABELS order)
+function methodRankOrder() {
+  const order = Object.keys(METHOD_LABELS);
+  return [...order].sort((a, b) => settings.base[b] - settings.base[a] || order.indexOf(a) - order.indexOf(b));
+}
+
+// Move a method one rank up/down by swapping base scores with its neighbour
+// (on a tie, nudge past it by 1 so the move is visible).
+function moveMethod(k, dir) {
+  const keys = methodRankOrder();
+  const i = keys.indexOf(k), j = i + dir;
+  if (j < 0 || j >= keys.length) return;
+  const other = keys[j], a = settings.base[k], b = settings.base[other];
+  if (a === b) settings.base[k] = b - dir;
+  else { settings.base[k] = b; settings.base[other] = a; }
+  saveSettings(); renderSettings();
+}
+
+function renderSettings() {
+  const activeStack = stackArr(settings);
+  let h = `<div class="set-group"><h3>Deck</h3>
+    <div class="set-row"><span>Stack</span><select id="setStack">
+      ${Object.keys(STACKS).map(k => `<option value="${k}" ${(settings.stack||"aronson")===k?"selected":""}>${STACK_LABELS[k]}</option>`).join("")}
+    </select></div>
+    <div class="set-row"><span>Deck state</span><select id="setMode">
+      <option value="full" ${settings.mode === "full" ? "selected" : ""}>Full deck (52)</option>
+      <option value="half" ${settings.mode === "half" ? "selected" : ""}>Split: two halves (26 + 26)</option>
+      <option value="cut" ${settings.mode === "cut" ? "selected" : ""}>Spectator cut (glimpse a card)</option>
+    </select></div>
+    ${settings.mode === "cut" ? `<div class="set-row"><span>You glimpse the card on the…</span><select id="setNoteEnd">
+      <option value="top" ${settings.noteEnd !== "bottom" ? "selected" : ""}>Top</option>
+      <option value="bottom" ${settings.noteEnd === "bottom" ? "selected" : ""}>Bottom (face)</option>
+    </select></div>` : ""}
+    <div class="set-row"><span>${settings.mode === "cut" ? "Glimpsed card" : "Current top card (cut deck)"}</span>
+    <select id="setTopCard">${activeStack.map(c => `<option value="${c}" ${c === settings.topCard ? "selected" : ""}>${prettyCard(c)}</option>`).join("")}</select></div>
+    <p class="hint">Pick your stack. If the deck has been cut, set whichever stack card is now on top (the top of the dropdown = full order).
+    Split mode: deck pre-cut into two 26-card packets, reassembled (either order). Spectator-cut mode: they cut, you secretly read a card — set it here to get the outs for that rotation.</p></div>`;
+
+  // Stack order viewer — the full order of the active stack, position 1 (top) first.
+  const topPos = activeStack.indexOf(settings.topCard) + 1;
+  h += `<div class="set-group"><h3>${STACK_LABELS[settings.stack || "aronson"]} stack order — top to face</h3>
+    <div class="stackgrid">${activeStack.map((c, i) => {
+      const red = /[HD]$/.test(c);
+      return `<div class="sc${c === settings.topCard ? " istop" : ""}"><span class="pn">${i + 1}</span>` +
+        `<span class="cd${red ? " red" : ""}">${prettyCard(c)}</span></div>`;
+    }).join("")}</div>
+    <p class="hint">Position 1 is the top (face-down) card; 52 is the face card. ` +
+    `${settings.topCard && topPos !== 1 ? `Gold = your current top card (${prettyCard(settings.topCard)}, full-order #${topPos}).` : "Gold = top card."}</p></div>`;
+
+  h += `<div class="set-group"><h3>Methods — ranked, best first</h3>`;
+  const mkeys = methodRankOrder();
+  mkeys.forEach((k, i) => {
+    h += `<div class="set-row"><span class="rank">${i + 1}</span>
+      <span style="flex:1;padding:0 8px">${METHOD_LABELS[k]}</span>
+      <span style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+      <button class="mv" data-up="${k}" ${i === 0 ? "disabled" : ""}>&#9650;</button>
+      <button class="mv" data-down="${k}" ${i === mkeys.length - 1 ? "disabled" : ""}>&#9660;</button>
+      <input type="number" data-base="${k}" value="${settings.base[k]}">
+      <label class="switch"><input type="checkbox" data-en="${k}" ${settings.enabled[k] ? "checked" : ""}><span class="slider"></span></label></span></div>`;
+  });
+  h += `<p class="hint">&#9650;&#9660; re-rank a method (scores swap, so cut/joker/reassembly versions re-rank with it).
+    Fine-tune with the score boxes; moves and variations subtract their penalties from these.</p></div>`;
+
+  h += `<div class="set-group"><h3>Variations — on/off</h3>`;
+  for (const k of Object.keys(TOGGLE_LABELS)) {
+    h += `<div class="set-row"><span>${TOGGLE_LABELS[k]}</span>
+      <label class="switch"><input type="checkbox" data-en="${k}" ${settings.enabled[k] ? "checked" : ""}><span class="slider"></span></label></div>`;
+  }
+  h += `</div>`;
+
+  h += `<div class="set-group"><h3>Penalties (negative numbers)</h3>`;
+  for (const k of Object.keys(MOD_LABELS)) {
+    h += `<div class="set-row"><span>${MOD_LABELS[k]}</span><input type="number" data-mod="${k}" value="${settings.mod[k]}"></div>`;
+  }
+  h += `</div>`;
+  $("settingsBody").innerHTML = h;
+
+  $("setTopCard").addEventListener("change", e => { settings.topCard = e.target.value; saveSettings(); });
+  $("setMode").addEventListener("change", e => { settings.mode = e.target.value; saveSettings(); renderSettings(); });
+  if ($("setNoteEnd")) $("setNoteEnd").addEventListener("change", e => { settings.noteEnd = e.target.value; saveSettings(); });
+  $("setStack").addEventListener("change", e => {
+    settings.stack = e.target.value;
+    settings.topCard = STACKS[settings.stack][0]; // reset to the new stack's natural top
+    saveSettings(); renderSettings();
+  });
+  $("settingsBody").querySelectorAll("input[data-base]").forEach(el =>
+    el.addEventListener("change", () => { settings.base[el.dataset.base] = +el.value || 0; saveSettings(); }));
+  $("settingsBody").querySelectorAll("input[data-mod]").forEach(el =>
+    el.addEventListener("change", () => { settings.mod[el.dataset.mod] = +el.value || 0; saveSettings(); }));
+  $("settingsBody").querySelectorAll("input[data-en]").forEach(el =>
+    el.addEventListener("change", () => { settings.enabled[el.dataset.en] = el.checked; saveSettings(); }));
+  $("settingsBody").querySelectorAll("button[data-up]").forEach(el =>
+    el.addEventListener("click", () => moveMethod(el.dataset.up, -1)));
+  $("settingsBody").querySelectorAll("button[data-down]").forEach(el =>
+    el.addEventListener("click", () => moveMethod(el.dataset.down, 1)));
+}
+
+$("gearBtn").addEventListener("click", () => { renderSettings(); $("app").style.display = "none"; $("settings").style.display = "block"; });
+$("closeSettings").addEventListener("click", () => { $("settings").style.display = "none"; $("app").style.display = "block"; render(); });
+$("resetSettings").addEventListener("click", () => { settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); });
+$("editBtn").addEventListener("click", () => { state.step = 0; render(); });
+$("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null }; render(); });
+document.querySelectorAll(".chip").forEach(ch => ch.addEventListener("click", () => { state.step = +ch.dataset.step; render(); }));
+
+buildPickers();
+render();
+</script>
+</body>
+</html>
