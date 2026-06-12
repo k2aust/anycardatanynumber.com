@@ -224,15 +224,20 @@ function stackPos(card, topCard, stack) {
   return ((i - t + 52) % 52) + 1;
 }
 
+const SETTINGS_VERSION = 2; // bump when the default scoring model changes
 const DEFAULT_SETTINGS = {
+  version: SETTINGS_VERSION,
   stack: "aronson",
   topCard: "JS",
   mode: "full",     // "full" | "half" (split into two 26-packets) | "cut" (spectator cuts, you glimpse)
   noteEnd: "top",   // in cut mode: did you glimpse the "top" or "bottom" card?
   base: { deal: 100, directReveal: 90, indicator: 75, indicatorBack: 72, dealSpellCard: 70, spellCount: 68,
           countCut: 65, dealSpellBack: 65, dealCountBack: 60, spellNumber: 60, dealSpellNumBack: 55, spellCard: 40 },
-  mod: { face: -10, offNext: -8, offBefore: -12, cross: -4, phraseThe: -3, phraseNoOf: -5,
-         cutCard: -15, jokers: -10, digitSum: -6 },
+  // face-up dealing and a simple off-by-one (turn the next card) are barely
+  // penalized; the double lift (offBefore) stays a real cost since it's a
+  // sleight; digit sum is a heavy fallback so cleaner methods win when present.
+  mod: { face: -3, offNext: -3, offBefore: -12, cross: -4, phraseThe: -3, phraseNoOf: -5,
+         cutCard: -15, jokers: -10, digitSum: -25 },
   enabled: { deal: true, directReveal: true, indicator: true, indicatorBack: true, dealSpellCard: true,
              spellCount: true, countCut: true, dealSpellBack: true,
              dealCountBack: true, spellNumber: true, dealSpellNumBack: true, spellCard: true,
@@ -831,7 +836,8 @@ function loadSettings() {
     if (!raw) return structuredClone(DEFAULT_SETTINGS);
     const s = JSON.parse(raw);
     // merge so new keys added in future versions get defaults
-    return {
+    const merged = {
+      version: SETTINGS_VERSION,
       stack: STACKS[s.stack] ? s.stack : DEFAULT_SETTINGS.stack,
       topCard: s.topCard || DEFAULT_SETTINGS.topCard,
       mode: s.mode || DEFAULT_SETTINGS.mode,
@@ -840,6 +846,14 @@ function loadSettings() {
       mod: { ...DEFAULT_SETTINGS.mod, ...s.mod },
       enabled: { ...DEFAULT_SETTINGS.enabled, ...s.enabled },
     };
+    // Scoring-model migration: when the app's default scoring changes, adopt
+    // the new base + mod (deck choices and method on/off toggles are kept).
+    // The user can still re-tune any value afterward in settings.
+    if ((s.version || 1) < SETTINGS_VERSION) {
+      merged.base = structuredClone(DEFAULT_SETTINGS.base);
+      merged.mod = structuredClone(DEFAULT_SETTINGS.mod);
+    }
+    return merged;
   } catch { return structuredClone(DEFAULT_SETTINGS); }
 }
 function saveSettings() { localStorage.setItem("acaanSettings", JSON.stringify(settings)); }
