@@ -16,6 +16,7 @@
     --gold: #e3b341;
     --red: #e05d5d;
     --green: #57c98a;
+    --amber: #d98b3a;
     --radius: 14px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -757,17 +758,27 @@ function formatRanges(nums) {
 // outs. One sweep powers the dead-zone ranges and "best numbers" hints.
 function scanCard(card, settings) {
   const S = settings || DEFAULT_SETTINGS;
-  const dead = [], score = {};
+  const dead = [], score = {}, forced = [];
   let max = 0;
   for (let n = 1; n <= 52; n++) {
     const r = findOuts({ c1: card, n1: n }, S);
     if (!r.length) { dead.push(n); continue; }
     score[n] = r[0].score;
     if (r[0].score > max) max = r[0].score;
+    // "non-optimal": the best available procedure is a contrived one — a
+    // digit-sum transformation or a double lift (one-short).
+    if (r[0].method.includes("Digit sum") || r[0].offset === -1) forced.push(n);
   }
   const cut = Math.min(max, 90);
   const best = Object.keys(score).filter(n => score[n] >= cut).map(Number);
-  return { dead, best, max, score };
+  return { dead, best, forced, max, score };
+}
+
+// The best card-only reveal that needs no number AND no moves — i.e. the card
+// is sitting on top or on the face. Returns null otherwise (spelling to the
+// card is deliberately not surfaced here).
+function instantReveal(card, settings) {
+  return findOuts({ c1: card }, settings).find(o => o.method === "Instant reveal") || null;
 }
 
 // Numbers 1-52 with no out at all for this card.
@@ -929,13 +940,13 @@ function render() {
     lastNumStep = state.step;
     $("numEntry").textContent = numEntry || "–";
     // One sweep over all 52 numbers for this card: strongest numbers to steer
-    // toward, a card-only out if one exists, and the dead zones (as ranges).
+    // toward, the dead zones, and the numbers with only a forced procedure.
     const scan = scanCard(state.c1, settings);
-    const partial = findOuts({ c1: state.c1 }, settings);
+    const instant = instantReveal(state.c1, settings);
     const po = $("partialOut");
     po.style.display = "block";
     po.style.marginBottom = "12px";
-    po.style.borderColor = scan.dead.length ? "var(--red)" : "var(--green)";
+    po.style.borderColor = scan.dead.length ? "var(--red)" : scan.forced.length ? "var(--amber)" : "var(--green)";
     let html = "";
     const miracleNums = scan.best.filter(n => scan.score[n] === 100);
     const strongNums = scan.best.filter(n => scan.score[n] < 100);
@@ -945,13 +956,18 @@ function render() {
       const slabel = scan.max >= 90 ? "90+" : scan.max + " pts";
       html += `<div class="tag" style="color:var(--green)">&#9733; STRONGEST OTHER NUMBERS (${slabel})</div><p><b>${formatRanges(strongNums)}</b></p>`;
     }
-    if (partial.length) {
-      html += `<div class="tag">&#10022; NO NUMBER NEEDED (${partial[0].score})</div>` +
-        partial[0].steps.map(s => `<p>${s.replace(/(^|\D)1 (cards|letters|more cards)\b/g, (m,p,w)=>`${p}1 ${w.replace(/s$/,"")}`)}</p>`).join("");
+    // Only surface a no-number reveal when the card is on top/bottom — not a spell.
+    if (instant) {
+      const sing1 = s => s.replace(/(^|\D)1 (cards|letters|more cards)\b/g, (m,p,w)=>`${p}1 ${w.replace(/s$/,"")}`);
+      html += `<div class="tag">&#10022; NO NUMBER NEEDED &mdash; ON TOP/BOTTOM</div>` +
+        instant.steps.map(s => `<p>${sing1(s)}</p>`).join("");
     }
-    html += scan.dead.length
-      ? `<div class="tag" style="color:var(--red)">&#9888; NO HIT IF THEY NAME</div><p><b>${formatRanges(scan.dead)}</b></p>`
-      : `<div class="tag" style="color:var(--green)">&#10003; EVERY NUMBER 1–52 HAS AN OUT</div>`;
+    if (scan.dead.length)
+      html += `<div class="tag" style="color:var(--red)">&#9888; NO HIT IF THEY NAME</div><p><b>${formatRanges(scan.dead)}</b></p>`;
+    if (scan.forced.length)
+      html += `<div class="tag" style="color:var(--amber)">&#9651; NO CLEAN PROCEDURE (digit-sum / double lift)</div><p><b>${formatRanges(scan.forced)}</b></p>`;
+    if (!scan.dead.length && !scan.forced.length)
+      html += `<div class="tag" style="color:var(--green)">&#10003; EVERY NUMBER HAS A CLEAN OUT</div>`;
     po.innerHTML = html;
   }
   if (state.step === 2) renderResults();
