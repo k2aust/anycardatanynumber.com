@@ -224,14 +224,16 @@ function stackPos(card, topCard, stack) {
   return ((i - t + 52) % 52) + 1;
 }
 
-const SETTINGS_VERSION = 2; // bump when the default scoring model changes
+const SETTINGS_VERSION = 3; // bump when the default scoring model changes
 const DEFAULT_SETTINGS = {
   version: SETTINGS_VERSION,
   stack: "aronson",
   topCard: "JS",
   mode: "full",     // "full" | "half" (split into two 26-packets) | "cut" (spectator cuts, you glimpse)
   noteEnd: "top",   // in cut mode: did you glimpse the "top" or "bottom" card?
-  base: { deal: 100, directReveal: 90, indicator: 75, indicatorBack: 72, dealSpellCard: 70, spellCount: 68,
+  // spellCount (spell the card first, then count to the number) sits just above
+  // its sibling dealSpellCard so it's the preferred presentation when both hit.
+  base: { deal: 100, directReveal: 90, indicator: 75, indicatorBack: 72, spellCount: 71, dealSpellCard: 70,
           countCut: 65, dealSpellBack: 65, dealCountBack: 60, spellNumber: 60, dealSpellNumBack: 55, spellCard: 40 },
   // face-up dealing and a simple off-by-one (turn the next card) are barely
   // penalized; the double lift (offBefore) stays a real cost since it's a
