@@ -1014,12 +1014,11 @@ function fumbleTarget(v) {
   for (let n = 1; n <= 52; n++) if (!dead.has(n) && Math.abs(n - v) < bd) { bd = Math.abs(n - v); b = n; }
   return b;
 }
-// begin the "sticky pad" fumble: the completing tap is DROPPED (nothing shows);
-// a re-tap of the same key will double-enter it.
+// begin the "laggy pad" fumble: the completing tap is DROPPED (display freezes
+// on the tens); further taps buffer silently and dump as 3-digit garbage.
 function startFumble(v) {
-  const t = Math.floor(v / 10);
-  fumble = { phase: "armUnits", units: String(v % 10), tens: String(t || ""), target: fumbleTarget(v) };
-  numEntry = String(t || "");
+  fumble = { phase: "lag", buf: String(v), target: fumbleTarget(v) };
+  numEntry = String(Math.floor(v / 10) || "");   // show just the tens; the completing digit "lags"
   $("numEntry").textContent = numEntry || "–";
 }
 // route a completed number: hit/correctable → quiet path; uncorrectable → fumble
@@ -1034,7 +1033,7 @@ function buildPickers() {
     `<button data-s="${s}" class="suit-${s.toLowerCase()}">${SUIT_SYM[s]}</button>`).join("");
   $("numberPad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d =>
     `<button data-k="${d}">${d}</button>`).join("") +
-    `<button data-k="back">&#9003;</button><button data-k="0">0</button>` +
+    `<button data-k="clear">C</button><button data-k="0">0</button>` +
     `<button data-k="ok" class="ok">&#10003;</button>`;
 
   $("valueGrid").addEventListener("click", e => {
@@ -1055,27 +1054,23 @@ function buildPickers() {
     const k = e.target.dataset?.k; if (!k) return;
     // manual pad use supersedes a rolled number
     $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
-    // --- "sticky pad" recovery for a dead-end: the completing tap is dropped;
-    //     a re-tap double-enters (garbage); backspace clears all; then the first
-    //     re-typed digit is dropped and the re-tap double-fires into a hit. ---
+    // --- "laggy pad" recovery for a dead-end: the completing tap is dropped and
+    //     further taps buffer, dumping as 3-digit garbage (e.g. 249) that must be
+    //     CLEARED; then the first re-typed digit is dropped and the re-tap
+    //     double-fires into a guaranteed hit. ---
     if (fumble) {
-      if (fumble.phase === "armUnits") {
-        if (k === fumble.units) {                     // re-tap the dropped digit → double-enter
-          numEntry = fumble.tens + fumble.units + fumble.units;
-          $("numEntry").textContent = numEntry;
-          flashKey(fumble.units); setTimeout(() => flashKey(fumble.units), 160);
-          fumble.phase = "garbage";
-        } else if (k === "back") {
-          numEntry = fumble.tens.slice(0, -1); fumble = null; flashKey("back"); $("numEntry").textContent = numEntry || "–";
-        } else if (/^\d$/.test(k)) {                  // a different digit → re-evaluate as the units
-          const tens = fumble.tens, v = parseInt(tens + k, 10); fumble = null; numEntry = tens;
-          if (v >= 1 && v <= 52) { completeDigit(v, k); return; }
-          $("numEntry").textContent = numEntry || "–";
-        }
+      if (fumble.phase === "lag") {                   // hold taps, dump as garbage at 3 digits
+        if (/^\d$/.test(k)) {
+          fumble.buf += k;
+          if (fumble.buf.length >= 3) {
+            fumble.phase = "garbage"; const buf = fumble.buf;
+            setTimeout(() => { if (fumble && fumble.phase === "garbage") { numEntry = buf; $("numEntry").textContent = buf; } }, 180);
+          }
+        } else if (k === "clear") { numEntry = ""; fumble.phase = "retypeWait"; $("numEntry").textContent = "–"; flashKey("clear"); }
         return;
       }
-      if (fumble.phase === "garbage") {               // only backspace proceeds — it clears all
-        if (k === "back") { numEntry = ""; fumble.phase = "retypeWait"; $("numEntry").textContent = "–"; flashKey("back"); }
+      if (fumble.phase === "garbage") {               // only CLEAR proceeds — it clears all
+        if (k === "clear") { numEntry = ""; fumble.phase = "retypeWait"; $("numEntry").textContent = "–"; flashKey("clear"); }
         return;
       }
       if (fumble.phase === "retypeWait") {            // first re-typed digit is dropped (nothing)
@@ -1093,7 +1088,7 @@ function buildPickers() {
         return;
       }
     }
-    if (k === "back") { numEntry = numEntry.slice(0, -1); flashKey(k); }
+    if (k === "clear") { numEntry = ""; flashKey(k); }
     else if (k === "ok") {
       const v = parseInt(numEntry, 10);
       if (v >= 1 && v <= 52) { completeDigit(v, k); return; }
