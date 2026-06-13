@@ -915,6 +915,19 @@ function reverseScrub(s, face) {
     .replace(/^REPLACE the .+ FACE DOWN, then count \d+ cards off the pile into your hands\.$/,
              "Whatever that value is, deal that many cards into your hands — counting that card as the first.");
 }
+// The no-"of" card spell ("FOUR HEARTS") reads better split into a value step
+// and a suit step, each with its own free-choice framing. Same cards dealt.
+function spellSplitNoOf(s) {
+  const m = s.match(/^(.*?)[Ss]pell "([A-Z]+) ([A-Z]+)" one card per each letter\.$/);
+  if (!m) return null;
+  const prefix = m[1], VALUE = m[2], SUIT = m[3];
+  const vLine = `You could have chosen any value, and you chose ${VALUE.toLowerCase()} — spell "${VALUE}", dealing one card for each letter.`;
+  const sLine = `You could have chosen any suit, and you chose ${SUIT.toLowerCase()} — spell "${SUIT}", dealing one card for each letter.`;
+  if (!prefix) return [vLine, sLine];
+  // reversing form: pull the "pick up the pile" out into its own step first
+  const f = /face up/.test(prefix) ? "face up" : "face down";
+  return [`Pick up the pile and hold it ${f}.`, vLine, sLine];
+}
 function spectatorSteps(o) {
   const steps = o.steps;
   const revStep = steps.find(s => /into a pile — this reverses their order/.test(s));
@@ -942,7 +955,9 @@ function spectatorSteps(o) {
       out.push(s.replace(/^With a DOUBLE LIFT reveal the /, "Let the performer reveal the "));
       continue;
     }
-    out.push(reversing ? reverseScrub(s, pileFace) : indicatorScrub(keepFacing ? s : faceScrub(s)));
+    const t = reversing ? reverseScrub(s, pileFace) : indicatorScrub(keepFacing ? s : faceScrub(s));
+    const split = spellSplitNoOf(t);
+    if (split) out.push(...split); else out.push(t);
   }
   return out;
 }
