@@ -1310,7 +1310,7 @@ function render() {
   $("results").style.display = state.step === 2 ? "block" : "none";
   if (isCard) $("cardPickerTitle").textContent = magicianMode ? "Enter their card" : "Enter your card";
   if (isNum) {
-    $("numberPickerTitle").textContent = magicianMode ? "Enter their number" : "Enter your number";
+    $("numberPickerTitle").textContent = magicianMode ? "Enter their number" : "Enter any number between 1 and 52";
     if (state.step !== lastNumStep) { numEntry = ""; fumble = null; }
     lastNumStep = state.step;
     $("numEntry").textContent = numEntry || "–";
