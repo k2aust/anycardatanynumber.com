@@ -43,9 +43,12 @@
   .grid { display: grid; gap: 6px; }
   .grid.values { grid-template-columns: repeat(7, 1fr); }
   .grid.suits { grid-template-columns: repeat(4, 1fr); margin-top: 8px; }
-  .grid.pad { grid-template-columns: repeat(3, 1fr); max-width: 280px; margin: 0 auto; }
-  .grid.pad button { font-size: 22px; padding: 14px 0; }
+  .grid.pad { grid-template-columns: repeat(3, 1fr); max-width: 184px; margin: 0 auto; gap: 5px; }
+  .grid.pad button { font-size: 16px; padding: 9px 0; }
   .grid.pad button.ok { background: var(--gold); color: #000; }
+  .randombtn { display: block; width: 100%; margin-top: 12px; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 12px;
+    font-size: 15px; font-weight: 600; cursor: pointer; }
   #numEntry { text-align: center; font-size: 34px; font-weight: 800; min-height: 46px;
     padding: 2px 0 10px; letter-spacing: 2px; }
   .grid button { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
@@ -139,6 +142,7 @@
     <h2 id="cardPickerTitle">Spectator 1 — card</h2>
     <div class="grid values" id="valueGrid"></div>
     <div class="grid suits" id="suitGrid"></div>
+    <button class="randombtn" id="randomCard">&#127922; Pick a card for me</button>
   </div>
 
   <div class="picker" id="numberPicker" style="display:none">
@@ -146,6 +150,7 @@
     <div class="banner" id="partialOut" style="display:none"></div>
     <div id="numEntry">&ndash;</div>
     <div class="grid pad" id="numberPad"></div>
+    <button class="randombtn" id="randomNum">&#127922; Pick a number for me</button>
   </div>
 
   <section id="results">
@@ -254,7 +259,7 @@ const DEFAULT_SETTINGS = {
              spellCount: true, countCut: true, dealSpellBack: true,
              dealCountBack: true, spellNumber: true, dealSpellNumBack: true, spellCard: true,
              face: true, offNext: true, offBefore: false, phraseThe: true, phraseNoOf: true,
-             cutCard: true, jokers: true, digitSum: true },
+             cutCard: true, jokers: false, digitSum: true },
 };
 
 // input: { c1, n1, c2, n2 }  (cards like "7H", numbers 1-52; any subset)
@@ -900,6 +905,50 @@ function loadSettings() {
 function saveSettings() { localStorage.setItem("acaanSettings", JSON.stringify(settings)); }
 
 /* pickers */
+// ---- spectator input steering (jokers are off, so we nudge inputs to hits) ----
+// Number-pad grid positions, for "missed the key" corrections.
+const PAD_POS = { 1:[0,0],2:[0,1],3:[0,2],4:[1,0],5:[1,1],6:[1,2],7:[2,0],8:[2,1],9:[2,2],0:[3,1] };
+function padNeighbors(d) {
+  const [r, c] = PAD_POS[d], out = [];
+  for (const k in PAD_POS) { const [r2, c2] = PAD_POS[k]; if (Math.abs(r - r2) + Math.abs(c - c2) === 1) out.push(+k); }
+  return out;
+}
+// numbers that produce ANY out for this card (digit-sum counts as a hit)
+function deadSet(card) { return new Set(scanCard(card, settings).dead); }
+// the strongest, simplest numbers (what the random generator lands on) —
+// prefer the 90+ tier (direct deals / instants), then any clean, then any hit
+function bestPool(card) {
+  const sc = scanCard(card, settings);
+  if (sc.best && sc.best.length) return sc.best;
+  const dead = new Set(sc.dead), forced = new Set(sc.forced), clean = [];
+  for (let n = 1; n <= 52; n++) if (!dead.has(n) && !forced.has(n)) clean.push(n);
+  if (clean.length) return clean;
+  const nd = []; for (let n = 1; n <= 52; n++) if (!dead.has(n)) nd.push(n);
+  return nd.length ? nd : [1];
+}
+// If a typed number is a dead miss, swap its LAST digit for the nearest
+// keypad-neighbour that hits (e.g. 28 → 25). Reads as a mis-tap on the small pad.
+function steerNumber(card, v) {
+  const dead = deadSet(card);
+  if (!dead.has(v)) return v;
+  const units = v % 10, tens = Math.floor(v / 10);
+  let best = null, bestD = 99;
+  const consider = nd => { const cand = tens * 10 + nd;
+    if (cand >= 1 && cand <= 52 && !dead.has(cand) && Math.abs(cand - v) < bestD) { bestD = Math.abs(cand - v); best = cand; } };
+  for (const nd of padNeighbors(units)) consider(nd);   // keypad-adjacent first
+  if (best == null) for (let nd = 0; nd <= 9; nd++) consider(nd); // then any last-digit swap
+  return best != null ? best : v;
+}
+
+// commit a number, applying the spectator steering + a brief "mis-tap" flash
+function commitNumber(v) {
+  const final = (!magicianMode && state.c1) ? steerNumber(state.c1, v) : v;
+  numEntry = String(final);
+  $("numEntry").textContent = numEntry;
+  const advance = () => { numEntry = ""; setStepValue(final); };
+  if (final !== v) setTimeout(advance, 360); else advance();
+}
+
 function buildPickers() {
   $("valueGrid").innerHTML = VALUES.map(v => `<button data-v="${v}">${v}</button>`).join("");
   $("suitGrid").innerHTML = SUITS.map(s =>
@@ -925,19 +974,40 @@ function buildPickers() {
     if (k === "back") numEntry = numEntry.slice(0, -1);
     else if (k === "ok") {
       const v = parseInt(numEntry, 10);
-      if (v >= 1 && v <= 52) { numEntry = ""; setStepValue(v); return; }
+      if (v >= 1 && v <= 52) { commitNumber(v); return; }
     } else if (numEntry.length < 2) {
       const next = numEntry + k, v = parseInt(next, 10);
       if (v >= 1) {
         numEntry = next;
         // 6-9 can't start a valid two-digit number (max 52); two digits decide themselves
         if (numEntry.length === 2 || v >= 6) {
-          if (v <= 52) { numEntry = ""; setStepValue(v); return; }
+          if (v <= 52) { commitNumber(v); return; }
           numEntry = numEntry.slice(0, 1); // 53-59: keep the first digit
         }
       }
     }
     $("numEntry").textContent = numEntry || "–";
+  });
+
+  // Random card: any of the 52 (number steering will make it land).
+  $("randomCard").addEventListener("click", () => {
+    setStepValue(ARONSON[Math.floor(Math.random() * 52)]);
+  });
+  // Random number: a slot-machine cycle through the card's best numbers,
+  // slowing to a stop on one of them — always a strong hit.
+  $("randomNum").addEventListener("click", () => {
+    if (!state.c1) return;
+    const pool = bestPool(state.c1);
+    $("randomNum").disabled = true;
+    let ticks = 0; const total = 16;
+    const spin = () => {
+      // flash any number for the slot-machine look; the LANDING is a strong hit
+      numEntry = String(1 + Math.floor(Math.random() * 52));
+      $("numEntry").textContent = numEntry;
+      if (++ticks < total) setTimeout(spin, 45 + ticks * ticks);
+      else { $("randomNum").disabled = false; numEntry = ""; setStepValue(pool[Math.floor(Math.random() * pool.length)]); }
+    };
+    spin();
   });
 }
 
@@ -958,6 +1028,9 @@ function render() {
     el.parentElement.classList.toggle("active", state.step === i);
   }
   $("gearBtn").style.display = magicianMode ? "" : "none";
+  // random generators are a spectator aid; the magician types exact values
+  $("randomCard").style.display = magicianMode ? "none" : "";
+  $("randomNum").style.display = magicianMode ? "none" : "";
   const isCard = state.step === 0, isNum = state.step === 1;
   $("cardPicker").style.display = isCard ? "" : "none";
   $("numberPicker").style.display = isNum ? "" : "none";
