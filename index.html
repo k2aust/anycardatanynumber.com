@@ -899,7 +899,7 @@ function reverseScrub(s, face) {
   return s
     .replace(/^Hold the deck FACE (UP|DOWN)\.$/, (m, d) => `Hold the deck face ${d.toLowerCase()}.`)
     .replace(/^Deal (\d+) cards FACE (?:UP|DOWN) into a pile — this reverses their order\.$/,
-             `Deal $1 cards into a ${face.replace(" ", "-")} pile on the table — this reverses their order.`)
+             `Deal $1 cards into a ${face.replace(" ", "-")} pile on the table.`)
     .replace(/^Count (\d+) cards into the dealt pile\.$/,
              `Pick up the pile and, holding it ${face}, deal $1 cards.`)
     .replace(/^Count (\d+) cards off the pile into your hands\.$/,
