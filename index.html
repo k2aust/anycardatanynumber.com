@@ -863,6 +863,7 @@ let numEntry = "", lastNumStep = -1;
 // Spectator mode is the default on every load (re-locked each visit). The
 // magician unlocks the full view + settings by tapping the title 6 times.
 let magicianMode = false;
+let fumble = null;  // active "clumsy pad" recovery: { target } / { target, cleared:true }
 
 // Rewrite the magician's literal steps into the spectator-facing performance,
 // hiding the method:
@@ -990,6 +991,26 @@ function commitNumber(v) {
   if (final !== v) setTimeout(advance, 360); else advance();
 }
 
+// nearest number (by value) that produces an out for this card
+function nearestHit(card, v) {
+  const dead = deadSet(card);
+  let best = v, bd = 99;
+  for (let n = 1; n <= 52; n++) if (!dead.has(n) && Math.abs(n - v) < bd) { bd = Math.abs(n - v); best = n; }
+  return best;
+}
+// Complete a typed number. A hit (or adjacent-fixable miss) goes through the
+// quiet correction; a dead number with NO adjacent fix triggers the fumble.
+function completeNumber(v, k) {
+  if (!magicianMode && state.c1 && deadSet(state.c1).has(v) && steerNumber(state.c1, v) === v) {
+    fumble = { target: nearestHit(state.c1, v) };       // a guaranteed hit, reached after the fumble
+    numEntry = String(v) + String(v % 10);              // double the last digit → obvious mis-type
+    $("numEntry").textContent = numEntry;
+    flashKey(String(v % 10));
+    return;
+  }
+  flashCommit(v, k);
+}
+
 function buildPickers() {
   $("valueGrid").innerHTML = VALUES.map(v => `<button data-v="${v}">${v}</button>`).join("");
   $("suitGrid").innerHTML = SUITS.map(s =>
@@ -1017,10 +1038,26 @@ function buildPickers() {
     const k = e.target.dataset?.k; if (!k) return;
     // manual pad use supersedes a rolled number
     $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
+    // --- "clumsy pad" recovery: a dead-end double-typed, now backspace clears all,
+    //     and the next digit double-types into a guaranteed hit ---
+    if (fumble) {
+      if (!fumble.cleared) {                 // garbage showing — only backspace proceeds
+        if (k === "back") { numEntry = ""; fumble.cleared = true; $("numEntry").textContent = "–"; flashKey("back"); }
+        return;
+      }
+      if (/^\d$/.test(k)) {                  // first digit after the clear → land the hit
+        const t = fumble.target; fumble = null;
+        numEntry = String(t); $("numEntry").textContent = numEntry;
+        flashKey(String(t).charAt(0));
+        if (String(t).length > 1) setTimeout(() => flashKey(String(t).slice(-1)), 120);
+        setTimeout(() => { numEntry = ""; setStepValue(t); }, 520);
+      }
+      return;
+    }
     if (k === "back") { numEntry = numEntry.slice(0, -1); flashKey(k); }
     else if (k === "ok") {
       const v = parseInt(numEntry, 10);
-      if (v >= 1 && v <= 52) { flashCommit(v, k); return; }
+      if (v >= 1 && v <= 52) { completeNumber(v, k); return; }
       flashKey(k);
     } else if (numEntry.length < 2) {
       const next = numEntry + k, v = parseInt(next, 10);
@@ -1028,7 +1065,7 @@ function buildPickers() {
         numEntry = next;
         // 6-9 can't start a valid two-digit number (max 52); two digits decide themselves
         if (numEntry.length === 2 || v >= 6) {
-          if (v <= 52) { flashCommit(v, k); return; }
+          if (v <= 52) { completeNumber(v, k); return; }
           numEntry = numEntry.slice(0, 1); flashKey(k); // 53-59: keep the first digit
         } else flashKey(k);
       } else flashKey(k);
@@ -1051,6 +1088,7 @@ function buildPickers() {
   // press shows a fresh one; "Use this number" confirms.
   $("randomNum").addEventListener("click", () => {
     if (!state.c1) return;
+    fumble = null;
     const pool = topNumbers(state.c1, 8), cur = parseInt(numEntry, 10);
     const choices = pool.length > 1 ? pool.filter(n => n !== cur) : pool;  // change every press
     numEntry = String(choices[Math.floor(Math.random() * choices.length)]);
@@ -1100,7 +1138,7 @@ function render() {
   if (isCard) $("cardPickerTitle").textContent = magicianMode ? "Their card" : "Your card";
   if (isNum) {
     $("numberPickerTitle").textContent = magicianMode ? "Their number" : "Your number";
-    if (state.step !== lastNumStep) numEntry = "";
+    if (state.step !== lastNumStep) { numEntry = ""; fumble = null; }
     lastNumStep = state.step;
     $("numEntry").textContent = numEntry || "–";
     // The magician's number screen shows the intel banner (strongest numbers,
@@ -1325,7 +1363,7 @@ $("gearBtn").addEventListener("click", () => { renderSettings(); $("app").style.
 $("closeSettings").addEventListener("click", () => { $("settings").style.display = "none"; $("app").style.display = "block"; render(); });
 $("resetSettings").addEventListener("click", () => { settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); });
 $("editBtn").addEventListener("click", () => { state.step = 0; render(); });
-$("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null }; render(); });
+$("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null }; fumble = null; render(); });
 document.querySelectorAll(".chip").forEach(ch => ch.addEventListener("click", () => { state.step = +ch.dataset.step; render(); }));
 
 // Secret unlock: tap the title 6 times in a row (within 2.5s) to toggle the
