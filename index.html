@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0e0f13">
-<title>Stack Oracle</title>
+<title>Any Card At Any Number</title>
 <style>
   :root {
     --bg: #0e0f13;
@@ -25,7 +25,7 @@
   body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; }
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
-  header h1 { font-size: 14px; letter-spacing: 4px; color: var(--dim); font-weight: 600; margin: 0; text-transform: uppercase; }
+  header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dim); font-weight: 600; margin: 0; text-transform: uppercase; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
 
   /* step chips */
@@ -134,7 +134,7 @@
 <body>
 
 <header>
-  <h1 id="title">Stack Oracle</h1>
+  <h1 id="title">Any Card At Any Number</h1>
   <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
 </header>
 
@@ -362,11 +362,11 @@ function findOuts(input, settings, opts) {
         title: steps.list.join(" "), ctx: `Spectator ${c.who}'s card — no counting, no number needed`,
         tags: [], card: c.card });
       if (eff(pos(c.card), "top") === 1)
-        mk({ list: [`The ${cardFull(c.card)} is already on TOP of the ${noun}.`,
-                    `Reveal it — no moves needed.`] });
+        mk({ list: [`Hold the ${noun} face down.`, `Snap your fingers.`,
+                    `Turn over the top card — the ${cardFull(c.card)}!`] });
       if (eff(pos(c.card), "face") === 1)
-        mk({ faceCard: true, list: [`The ${cardFull(c.card)} is the FACE (bottom) card.`,
-                                    `Turn the ${noun} FACE UP and show it — no moves needed.`] });
+        mk({ faceCard: true, list: [`Hold the ${noun} face down.`, `Snap your fingers.`,
+                    `Turn the ${noun} face up — the ${cardFull(c.card)} is on the face!`] });
     }
   }
 
@@ -948,8 +948,8 @@ function steerNumber(card, v) {
   let best = null, bestD = 99;
   const consider = nd => { const cand = tens * 10 + nd;
     if (cand >= 1 && cand <= 52 && !dead.has(cand) && Math.abs(cand - v) < bestD) { bestD = Math.abs(cand - v); best = cand; } };
-  for (const nd of padNeighbors(units)) consider(nd);   // keypad-adjacent first
-  if (best == null) for (let nd = 0; nd <= 9; nd++) consider(nd); // then any last-digit swap
+  // only swap to a digit physically next to the one pressed (no far jumps)
+  for (const nd of padNeighbors(units)) consider(nd);
   return best != null ? best : v;
 }
 
