@@ -928,16 +928,12 @@ function padNeighbors(d) {
 }
 // numbers that produce ANY out for this card (digit-sum counts as a hit)
 function deadSet(card) { return new Set(scanCard(card, settings).dead); }
-// the strongest, simplest numbers (what the random generator lands on) —
-// prefer the 90+ tier (direct deals / instants), then any clean, then any hit
-function bestPool(card) {
+// the top N numbers for a card, ranked by best-out score — what the random
+// generator draws from (default the 8 strongest).
+function topNumbers(card, n = 8) {
   const sc = scanCard(card, settings);
-  if (sc.best && sc.best.length) return sc.best;
-  const dead = new Set(sc.dead), forced = new Set(sc.forced), clean = [];
-  for (let n = 1; n <= 52; n++) if (!dead.has(n) && !forced.has(n)) clean.push(n);
-  if (clean.length) return clean;
-  const nd = []; for (let n = 1; n <= 52; n++) if (!dead.has(n)) nd.push(n);
-  return nd.length ? nd : [1];
+  const ranked = Object.keys(sc.score).map(Number).sort((a, b) => sc.score[b] - sc.score[a]);
+  return ranked.length ? ranked.slice(0, n) : [1];
 }
 // If a typed number is a dead miss, swap its LAST digit for the nearest
 // keypad-neighbour that hits (e.g. 28 → 25). Reads as a mis-tap on the small pad.
@@ -960,20 +956,13 @@ function flashKey(k) {
   btn.classList.add("lit");
   setTimeout(() => btn.classList.remove("lit"), 220);
 }
-// Commit a typed number. On a steered mis-tap, play a "finger-slip": the key
-// they pressed lights, then the number visibly slides to the adjacent hit key
-// (tap 8 → 8 lights, then 5 lights and "25" appears) — reads as a slip on the
-// small pad, and the dead number is never shown.
+// Commit a typed number, lighting the key that's ACTUALLY entered. On a steered
+// mis-tap the pressed key does NOT light — the adjacent hit key does (tap 8, the
+// 5 lights up and "25" appears; the dead number is never shown).
 function flashCommit(v, pressedKey) {
   const final = (!magicianMode && state.c1) ? steerNumber(state.c1, v) : v;
-  if (final === v) { flashKey(pressedKey); commitNumber(v); return; }
-  flashKey(pressedKey);                                  // finger lands on the pressed key
-  setTimeout(() => {
-    flashKey(String(final % 10));                        // …then slides to the adjacent hit key
-    numEntry = String(final);
-    $("numEntry").textContent = numEntry;                // number settles on the corrected value
-  }, 150);
-  setTimeout(() => { numEntry = ""; setStepValue(final); }, 650);
+  flashKey(final !== v ? String(final % 10) : pressedKey);
+  commitNumber(v);
 }
 
 // commit a number, applying the spectator steering + a brief "mis-tap" flash
@@ -1042,29 +1031,15 @@ function buildPickers() {
   });
   $("useCard").addEventListener("click", () => { if (state.pendingCard) setStepValue(state.pendingCard); });
 
-  // Random number: cycle through 8 DIFFERENT numbers, slowing to a stop on the
-  // 8th — which is a strong hit (shown but NOT committed); "Use this number" confirms.
+  // Random number: pick one of the card's top 8 numbers (no animation). Each
+  // press shows a fresh one; "Use this number" confirms.
   $("randomNum").addEventListener("click", () => {
     if (!state.c1) return;
-    const pool = bestPool(state.c1);
-    const land = pool[Math.floor(Math.random() * pool.length)];
-    // 8 distinct numbers, the landing hit shown last
-    const seq = new Set([land]);
-    while (seq.size < 8) seq.add(1 + Math.floor(Math.random() * 52));
-    const rest = [...seq].filter(n => n !== land).sort(() => Math.random() - 0.5);
-    const order = [...rest, land];
-    $("randomNum").disabled = true; $("useNum").disabled = true;
-    let i = 0;
-    const spin = () => {
-      numEntry = String(order[i]);
-      $("numEntry").textContent = numEntry;
-      if (++i < order.length) setTimeout(spin, 70 + i * i * 6);  // slow toward the stop
-      else {
-        $("randomNum").disabled = false; $("useNum").disabled = false;
-        $("numRoll").style.display = "block";
-      }
-    };
-    spin();
+    const pool = topNumbers(state.c1, 8), cur = parseInt(numEntry, 10);
+    const choices = pool.length > 1 ? pool.filter(n => n !== cur) : pool;  // change every press
+    numEntry = String(choices[Math.floor(Math.random() * choices.length)]);
+    $("numEntry").textContent = numEntry;
+    $("numRoll").style.display = "block";
   });
   $("useNum").addEventListener("click", () => {
     const v = parseInt(numEntry, 10);
