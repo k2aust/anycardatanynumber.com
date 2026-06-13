@@ -892,10 +892,35 @@ function faceScrub(s) {
     .replace(/^Then count (\d+) cards FACE DOWN into your hands\.$/, "Then count $1 cards down into your hands.")
     .replace(/^Spell "(.+)" one card FACE (?:UP|DOWN) per each letter\.$/, 'Spell "$1" one card per each letter.');
 }
+// Pile-reversal handlings, in plain physical language: deal the cards into a
+// FACE-UP pile (that's the reversal), then pick the pile up — held face up —
+// and deal/count/spell off it. The count math is identical to a face-down deal.
+function reverseScrub(s) {
+  return s
+    .replace(/^Hold the deck FACE (UP|DOWN)\.$/, (m, d) => `Hold the deck face ${d.toLowerCase()}.`)
+    .replace(/^Deal (\d+) cards FACE (?:UP|DOWN) into a pile — this reverses their order\.$/,
+             "Deal $1 cards into a face-up pile on the table — this reverses their order.")
+    .replace(/^Count (\d+) cards into the dealt pile\.$/,
+             "Pick up the pile and, holding it face up, deal $1 cards.")
+    .replace(/^Count (\d+) cards off the pile into your hands\.$/,
+             "Pick up the pile and, holding it face up, deal $1 cards into your hands.")
+    .replace(/^Spell "(.+)" one card per each letter into the dealt pile\.$/,
+             'Pick up the pile and, holding it face up, spell "$1" one card per each letter.')
+    .replace(/^Turn over the TOP card of the pile — the .+, an INDICATOR\.$/,
+             "Pick up the pile and hold it face up — its top card is an indicator; note its value.")
+    .replace(/^REPLACE the .+ FACE DOWN on the pile, then count \d+ cards off it\.$/,
+             "Whatever that value is, deal that many cards — counting that card as the first.")
+    .replace(/^REMOVE the .+, then count \d+ cards off the pile\.$/,
+             "Set that card to the side, then deal that many more cards.")
+    .replace(/^REPLACE the .+ FACE DOWN, then count \d+ cards off the pile into your hands\.$/,
+             "Whatever that value is, deal that many cards into your hands — counting that card as the first.");
+}
 function spectatorSteps(o) {
   const steps = o.steps;
-  // Pile-reversal methods rely on the facing to reverse the order — keep theirs.
-  const keepFacing = steps.some(s => /reverses their order/.test(s)) || o.method === "Count, cut, count again";
+  const reversing = steps.some(s => /reverses their order/.test(s));
+  // Count-cut keeps its own facing (the restore depends on it); reversing piles
+  // get the dedicated reverseScrub below.
+  const keepFacing = o.method === "Count, cut, count again";
   const out = [];
   for (let i = 0; i < steps.length; i++) {
     let s = steps[i];
@@ -915,7 +940,7 @@ function spectatorSteps(o) {
       out.push(s.replace(/^With a DOUBLE LIFT reveal the /, "Let the performer reveal the "));
       continue;
     }
-    out.push(indicatorScrub(keepFacing ? s : faceScrub(s)));
+    out.push(reversing ? reverseScrub(s) : indicatorScrub(keepFacing ? s : faceScrub(s)));
   }
   return out;
 }
