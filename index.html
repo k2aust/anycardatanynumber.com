@@ -960,12 +960,20 @@ function flashKey(k) {
   btn.classList.add("lit");
   setTimeout(() => btn.classList.remove("lit"), 220);
 }
-// commit a typed number, lighting the key that's ACTUALLY entered — on a
-// steered mis-tap that's the corrected digit (e.g. tap 8, the 5 lights up).
+// Commit a typed number. On a steered mis-tap, play a "finger-slip": the key
+// they pressed lights, then the number visibly slides to the adjacent hit key
+// (tap 8 → 8 lights, then 5 lights and "25" appears) — reads as a slip on the
+// small pad, and the dead number is never shown.
 function flashCommit(v, pressedKey) {
   const final = (!magicianMode && state.c1) ? steerNumber(state.c1, v) : v;
-  flashKey(final !== v ? String(final % 10) : pressedKey);
-  commitNumber(v);
+  if (final === v) { flashKey(pressedKey); commitNumber(v); return; }
+  flashKey(pressedKey);                                  // finger lands on the pressed key
+  setTimeout(() => {
+    flashKey(String(final % 10));                        // …then slides to the adjacent hit key
+    numEntry = String(final);
+    $("numEntry").textContent = numEntry;                // number settles on the corrected value
+  }, 150);
+  setTimeout(() => { numEntry = ""; setStepValue(final); }, 650);
 }
 
 // commit a number, applying the spectator steering + a brief "mis-tap" flash
