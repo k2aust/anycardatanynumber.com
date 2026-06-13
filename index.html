@@ -46,6 +46,9 @@
   .grid.pad { grid-template-columns: repeat(3, 1fr); max-width: 184px; margin: 0 auto; gap: 5px; }
   .grid.pad button { font-size: 16px; padding: 9px 0; }
   .grid.pad button.ok { background: var(--gold); color: #000; }
+  /* the pad doesn't auto-highlight on press; JS lights the key that's ENTERED */
+  .grid.pad button:active { background: var(--panel2); color: var(--text); }
+  .grid.pad button.lit { background: var(--gold); color: #000; }
   .randombtn { display: block; width: 100%; margin-top: 12px; background: var(--panel2);
     border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 12px;
     font-size: 15px; font-weight: 600; cursor: pointer; }
@@ -145,7 +148,7 @@
     <h2 id="cardPickerTitle">Spectator 1 — card</h2>
     <div class="grid values" id="valueGrid"></div>
     <div class="grid suits" id="suitGrid"></div>
-    <button class="randombtn" id="randomCard">&#127922; Pick a card for me</button>
+    <button class="randombtn" id="randomCard">&#127922; Random card generator</button>
     <div id="cardRoll" style="display:none;text-align:center">
       <div id="cardRollPreview" class="rollcard"></div>
       <button class="randombtn confirmbtn" id="useCard">&#10003; Use this card</button>
@@ -157,7 +160,7 @@
     <div class="banner" id="partialOut" style="display:none"></div>
     <div id="numEntry">&ndash;</div>
     <div class="grid pad" id="numberPad"></div>
-    <button class="randombtn" id="randomNum">&#127922; Pick a number for me</button>
+    <button class="randombtn" id="randomNum">&#127922; Random number generator</button>
     <div id="numRoll" style="display:none">
       <button class="randombtn confirmbtn" id="useNum">&#10003; Use this number</button>
     </div>
@@ -950,6 +953,21 @@ function steerNumber(card, v) {
   return best != null ? best : v;
 }
 
+// briefly light a pad key (data-k value)
+function flashKey(k) {
+  const btn = document.querySelector(`#numberPad button[data-k="${k}"]`);
+  if (!btn) return;
+  btn.classList.add("lit");
+  setTimeout(() => btn.classList.remove("lit"), 220);
+}
+// commit a typed number, lighting the key that's ACTUALLY entered — on a
+// steered mis-tap that's the corrected digit (e.g. tap 8, the 5 lights up).
+function flashCommit(v, pressedKey) {
+  const final = (!magicianMode && state.c1) ? steerNumber(state.c1, v) : v;
+  flashKey(final !== v ? String(final % 10) : pressedKey);
+  commitNumber(v);
+}
+
 // commit a number, applying the spectator steering + a brief "mis-tap" flash
 function commitNumber(v) {
   const final = (!magicianMode && state.c1) ? steerNumber(state.c1, v) : v;
@@ -973,7 +991,7 @@ function buildPickers() {
     state.pendingValue = v;
     // a manual pick supersedes any rolled card
     state.pendingCard = null; $("cardRoll").style.display = "none";
-    $("randomCard").innerHTML = "&#127922; Pick a card for me";
+    $("randomCard").innerHTML = "&#127922; Random card generator";
     [...$("valueGrid").children].forEach(b => b.style.borderColor = b.dataset.v === v ? "var(--gold)" : "var(--line)");
   });
   $("suitGrid").addEventListener("click", e => {
@@ -985,22 +1003,23 @@ function buildPickers() {
   $("numberPad").addEventListener("click", e => {
     const k = e.target.dataset?.k; if (!k) return;
     // manual pad use supersedes a rolled number
-    $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Pick a number for me";
-    if (k === "back") numEntry = numEntry.slice(0, -1);
+    $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
+    if (k === "back") { numEntry = numEntry.slice(0, -1); flashKey(k); }
     else if (k === "ok") {
       const v = parseInt(numEntry, 10);
-      if (v >= 1 && v <= 52) { commitNumber(v); return; }
+      if (v >= 1 && v <= 52) { flashCommit(v, k); return; }
+      flashKey(k);
     } else if (numEntry.length < 2) {
       const next = numEntry + k, v = parseInt(next, 10);
       if (v >= 1) {
         numEntry = next;
         // 6-9 can't start a valid two-digit number (max 52); two digits decide themselves
         if (numEntry.length === 2 || v >= 6) {
-          if (v <= 52) { commitNumber(v); return; }
-          numEntry = numEntry.slice(0, 1); // 53-59: keep the first digit
-        }
-      }
-    }
+          if (v <= 52) { flashCommit(v, k); return; }
+          numEntry = numEntry.slice(0, 1); flashKey(k); // 53-59: keep the first digit
+        } else flashKey(k);
+      } else flashKey(k);
+    } else flashKey(k);
     $("numEntry").textContent = numEntry || "–";
   });
 
@@ -1012,7 +1031,6 @@ function buildPickers() {
     pv.textContent = prettyCard(state.pendingCard);
     pv.className = "rollcard" + (/[HD]$/.test(state.pendingCard) ? " red" : "");
     $("cardRoll").style.display = "block";
-    $("randomCard").innerHTML = "&#127922; Roll again";
   });
   $("useCard").addEventListener("click", () => { if (state.pendingCard) setStepValue(state.pendingCard); });
 
@@ -1032,7 +1050,6 @@ function buildPickers() {
         $("numEntry").textContent = numEntry;
         $("randomNum").disabled = false; $("useNum").disabled = false;
         $("numRoll").style.display = "block";
-        $("randomNum").innerHTML = "&#127922; Roll again";
       }
     };
     spin();
@@ -1047,7 +1064,12 @@ const STEP_KEYS = ["c1", "n1"];
 function setStepValue(val) {
   state[STEP_KEYS[state.step]] = val;
   // card entered -> ask for the number; number entered -> results
-  state.step = state.step === 0 ? 1 : 2;
+  if (state.step === 0) {
+    // a top/bottom card reveals with no number — skip straight to the result
+    state.step = (!magicianMode && instantReveal(val, settings)) ? 2 : 1;
+  } else {
+    state.step = 2;
+  }
   render();
 }
 
@@ -1066,8 +1088,8 @@ function render() {
   // reset the roll-and-confirm UI on every (re)render — rolling never re-renders
   $("cardRoll").style.display = "none";
   $("numRoll").style.display = "none";
-  $("randomCard").innerHTML = "&#127922; Pick a card for me";
-  $("randomNum").innerHTML = "&#127922; Pick a number for me";
+  $("randomCard").innerHTML = "&#127922; Random card generator";
+  $("randomNum").innerHTML = "&#127922; Random number generator";
   const isCard = state.step === 0, isNum = state.step === 1;
   $("cardPicker").style.display = isCard ? "" : "none";
   $("numberPicker").style.display = isNum ? "" : "none";
