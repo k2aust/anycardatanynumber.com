@@ -205,6 +205,12 @@ function cardWords(card) {
   const { v, s } = splitCard(card);
   return VAL_NAMES[v] + " OF " + SUIT_NAMES[s];
 }
+// full English name, e.g. "4D" -> "Four of Diamonds"
+function cardFull(card) {
+  const { v, s } = splitCard(card);
+  const tc = w => w.charAt(0) + w.slice(1).toLowerCase();
+  return tc(VAL_NAMES[v]) + " of " + tc(SUIT_NAMES[s]);
+}
 // Phrasing variants for spelling a card
 function cardPhrases(card) {
   const { v, s } = splitCard(card);
@@ -302,9 +308,17 @@ function findOuts(input, settings, opts) {
   // Stack-preserving handlings: off the top deal FACE UP (flip the packet back
   // to restore); off the face deal FACE DOWN. The reversing handlings are used
   // only by the into-the-dealt-pile family.
-  const hold = o => o === "top" ? `Hold the ${noun} FACE DOWN` : `Hold the ${noun} FACE UP`;
+  const hold = o => o === "top" ? `Hold the ${noun} FACE DOWN.` : `Hold the ${noun} FACE UP.`;
   const facing = o => o === "top" ? "face up" : "face down";      // stack-preserving deals
+  const facingU = o => o === "top" ? "FACE UP" : "FACE DOWN";     // uppercased, for step text
   const revFacing = o => o === "top" ? "FACE DOWN" : "FACE UP";   // reversing deals
+  const dealStep = (n, o) => `Deal ${n} cards ${facingU(o)} on the table.`;
+  const spellStep = (label, o) => `Spell "${label}" one card ${facingU(o)} per each letter.`;
+  // the final reveal of the selection, by arrival offset
+  const reveal = (card, off) => off === -1
+    ? `With a DOUBLE LIFT reveal the ${cardFull(card)}.`
+    : off === 1 ? `The ${cardFull(card)} will be the NEXT CARD.`
+    : `ARRIVE at the ${cardFull(card)}.`;
   const pairCtx = p => p.own
     ? `Spectator ${p.cardWho}'s card at their own number`
     : `Spectator ${p.cardWho}'s card at Spectator ${p.numWho}'s number`;
@@ -327,11 +341,11 @@ function findOuts(input, settings, opts) {
         title: steps.list.join(" "), ctx: `Spectator ${c.who}'s card — no counting, no number needed`,
         tags: [], card: c.card });
       if (eff(pos(c.card), "top") === 1)
-        mk({ list: [`The ${cardTxt} (S${c.who}'s card) is already on TOP of the ${noun}`,
-                    `Reveal it — no moves needed`] });
+        mk({ list: [`The ${cardFull(c.card)} is already on TOP of the ${noun}.`,
+                    `Reveal it — no moves needed.`] });
       if (eff(pos(c.card), "face") === 1)
-        mk({ faceCard: true, list: [`The ${cardTxt} (S${c.who}'s card) is the FACE (bottom) card`,
-                                    `Turn the ${noun} face up and show it — no moves needed`] });
+        mk({ faceCard: true, list: [`The ${cardFull(c.card)} is the FACE (bottom) card.`,
+                                    `Turn the ${noun} FACE UP and show it — no moves needed.`] });
     }
   }
 
@@ -349,13 +363,8 @@ function findOuts(input, settings, opts) {
         // 1. Straight deal to the number
         if (S.enabled.deal && ep[orient] === p.num + off.d) {
           const steps = off.d === -1
-            ? [hold(orient),
-               `Have them deal ${p.num} cards face down into YOUR hands`,
-               `Double lift the top two — the face shown is the ${cardTxt}${who}`]
-            : [hold(orient),
-               `Deal ${p.num} cards ${facing(orient)} to the table`,
-               off.d === 0 ? `Card #${p.num} is the ${cardTxt}${who}`
-                           : `Turn over the NEXT card — the ${cardTxt}${who}`];
+            ? [hold(orient), `Deal ${p.num} cards FACE DOWN into your hands.`, reveal(p.card, off.d)]
+            : [hold(orient), dealStep(p.num, orient), reveal(p.card, off.d)];
           push("Deal to the number", "deal", orient, off, crossExtra, steps,
             pairCtx(p), p.own && off.d === 0 && orient === "top" ? ["MIRACLE"] : [], p.card);
         }
@@ -365,9 +374,8 @@ function findOuts(input, settings, opts) {
           if (ep[orient] === t + off.d) {
             push("Spell the number", "spellNumber", orient, off, crossExtra,
               [hold(orient),
-               `Don't count ${p.num} — spell it: ${w.replace(/ /g, "-")} (${t} letters), one card ${facing(orient)} per letter`,
-               off.d === 0 ? `The card on the last letter is the ${cardTxt}${who}`
-                           : `Turn over the NEXT card — the ${cardTxt}${who}`],
+               spellStep(w.replace(/ /g, "-"), orient),
+               reveal(p.card, off.d)],
               pairCtx(p), [], p.card);
           }
         }
@@ -380,24 +388,23 @@ function findOuts(input, settings, opts) {
           const ind = cardAtEff(q, orient);
           const v = ind ? parseInt(splitCard(ind).v, 10) : NaN;
           if (ind && ind !== p.card && v >= 2 && v <= 10) {
-            const indTxt = prettyCard(ind);
-            const intro = [hold(orient),
-              `Deal ${p.num} cards ${facing(orient)} to the table`,
-              off.d === 0 ? `Card #${p.num} is the ${indTxt} — an INDICATOR`
-                          : `Turn over the NEXT card — the ${indTxt}, an INDICATOR`];
+            const indFull = cardFull(ind);
+            const intro = [hold(orient), dealStep(p.num, orient),
+              off.d === 0 ? `Card #${p.num} is the ${indFull} — an INDICATOR.`
+                          : `The NEXT card is the ${indFull} — an INDICATOR.`];
             if (ep[orient] === q + v) {
               push("Deal to an indicator card", "indicator", orient, off, crossExtra,
                 [...intro,
-                 `REMOVE the ${indTxt}, then deal ${v} more cards`,
-                 `Card #${v} is the ${cardTxt}${who}`],
-                pairCtx(p) + ` via indicator ${indTxt} (removed)`, [], p.card);
+                 `REMOVE the ${indFull}, then deal ${v} more cards.`,
+                 reveal(p.card, 0)],
+                pairCtx(p) + ` via indicator ${prettyCard(ind)} (removed)`, [], p.card);
             }
             if (ep[orient] === q + v - 1) {
               push("Deal to an indicator card", "indicator", orient, off, crossExtra,
                 [...intro,
-                 `RETURN the ${indTxt} to the top of the ${noun}, then deal ${v} cards`,
-                 `Card #${v} is the ${cardTxt}${who}`],
-                pairCtx(p) + ` via indicator ${indTxt} (returned)`, [], p.card);
+                 `REPLACE the ${indFull} on top, then deal ${v} cards.`,
+                 reveal(p.card, 0)],
+                pairCtx(p) + ` via indicator ${prettyCard(ind)} (returned)`, [], p.card);
             }
           }
         }
@@ -410,10 +417,9 @@ function findOuts(input, settings, opts) {
               push("Deal, then spell the card", "dealSpellCard", orient, off,
                 crossExtra + (ph.modKey ? S.mod[ph.modKey] : 0),
                 [hold(orient),
-                 `Deal ${p.num} cards ${facing(orient)} to the table`,
-                 `Spell "${ph.label}" (${ph.letters} letters), one card per letter`,
-                 off.d === 0 ? `The last letter lands on the ${cardTxt}${who}`
-                             : `Turn over the NEXT card — the ${cardTxt}${who}`],
+                 dealStep(p.num, orient),
+                 spellStep(ph.label, orient),
+                 reveal(p.card, off.d)],
                 pairCtx(p), [], p.card);
             }
           }
@@ -427,15 +433,12 @@ function findOuts(input, settings, opts) {
             const t = ph.letters + p.num;
             if (t + off.d >= 1 && t + off.d <= deckSize && ep[orient] === t + off.d) {
               const tail = off.d === -1
-                ? [`Then have them count ${p.num} cards ${facing(orient)} into YOUR hands`,
-                   `Double lift the top two — the face shown is the ${cardTxt}${who}`]
-                : [`Then count ${p.num} more cards`,
-                   off.d === 0 ? `Card #${p.num} is the ${cardTxt}${who}`
-                               : `Turn over the NEXT card — the ${cardTxt}${who}`];
+                ? [`Then count ${p.num} cards FACE DOWN into your hands.`, reveal(p.card, off.d)]
+                : [`Then count ${p.num} more cards.`, reveal(p.card, off.d)];
               push("Spell the card, then count to the number", "spellCount", orient, off,
                 crossExtra + (ph.modKey ? S.mod[ph.modKey] : 0),
                 [hold(orient),
-                 `Spell "${ph.label}" (${ph.letters} letters), one card ${facing(orient)} per letter`,
+                 spellStep(ph.label, orient),
                  ...tail],
                 pairCtx(p), [], p.card);
             }
@@ -455,17 +458,14 @@ function findOuts(input, settings, opts) {
           if (orient === "face" && off.d === -1) continue; // double lift needs unseen faces
           if (sum + off.d >= 2 && sum + off.d <= deckSize && eff(pos(c.card), orient) === sum + off.d) {
             const restore = orient === "top"
-              ? "Flip the counted cards face down and cut them to the bottom"
-              : `Turn the counted cards face up and tuck them behind the ${noun}`;
+              ? "Flip the counted cards FACE DOWN and cut them to the bottom."
+              : `Turn the counted cards FACE UP and tuck them behind the ${noun}.`;
             const ending = off.d === -1
-              ? [`Have them deal ${input.n2} cards (S2's number) face down into YOUR hands`,
-                 `Double lift the top two — the face shown is the ${cardTxt} — S${c.who}'s card`]
-              : [`Count ${input.n2} more (S2's number)`,
-                 off.d === 0 ? `Card #${input.n2} of this count is the ${cardTxt} — S${c.who}'s card`
-                             : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`];
+              ? [`Deal ${input.n2} cards FACE DOWN into your hands.`, reveal(c.card, off.d)]
+              : [`Count ${input.n2} more cards.`, reveal(c.card, off.d)];
             push("Count, cut, count again", "countCut", orient, off, 0,
               [hold(orient),
-               `Count ${input.n1} cards ${facing(orient)} (S1's number) — a miss`,
+               `Count ${input.n1} cards ${facingU(orient)} — a miss.`,
                restore, ...ending],
               `Spectator ${c.who}'s card via both numbers (${input.n1} + ${input.n2})`, [], c.card);
           }
@@ -477,7 +477,7 @@ function findOuts(input, settings, opts) {
   // 5. Into the dealt pile: dealing a number reverses those cards, so pile
   // position j holds the card that was at effective position (firstCount − j + 1).
   const dealtPileIntro = (a, orient) => [hold(orient),
-    `Deal ${a.num} cards ${revFacing(orient)} into a pile (S${a.who}'s number) — this reverses their order`];
+    `Deal ${a.num} cards ${revFacing(orient)} into a pile — this reverses their order.`];
 
   // 5a. ...then count the other number into the dealt pile
   if (S.enabled.dealCountBack) {
@@ -493,11 +493,8 @@ function findOuts(input, settings, opts) {
             const j = b.num + off.d; // position reached inside the pile
             if (a.num <= deckSize && j >= 1 && j <= a.num && ep === a.num - j + 1) {
               const ending = off.d === -1
-                ? [`Count ${b.num} cards (S${b.who}'s number) off the pile into YOUR hands`,
-                   `Double lift the top two — the face shown is the ${cardTxt} — S${c.who}'s card`]
-                : [`Count ${b.num} (S${b.who}'s number) into the dealt pile`,
-                   off.d === 0 ? `Card #${b.num} is the ${cardTxt} — S${c.who}'s card`
-                               : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`];
+                ? [`Count ${b.num} cards off the pile into your hands.`, reveal(c.card, off.d)]
+                : [`Count ${b.num} cards into the dealt pile.`, reveal(c.card, off.d)];
               push("Deal, then count into the dealt pile", "dealCountBack", orient, off, 0,
                 [...dealtPileIntro(a, orient), ...ending],
                 `Spectator ${c.who}'s card via both numbers (${a.num} − ${b.num})`, [], c.card);
@@ -522,27 +519,27 @@ function findOuts(input, settings, opts) {
       const v = ind ? parseInt(splitCard(ind).v, 10) : NaN;
       if (!(v >= 2 && v <= 10)) continue;
       const indTxt = prettyCard(ind);
+      const indFull = cardFull(ind);
       const intro = [...dealtPileIntro(a, "top"),
-        `Turn over the TOP card of the pile — the ${indTxt}, an INDICATOR`];
+        `Turn over the TOP card of the pile — the ${indFull}, an INDICATOR.`];
       for (const c of cards) {
         if (c.card === ind) continue;
         const ep = eff(pos(c.card), "top");
-        const cTxt = `${prettyCard(c.card)} — S${c.who}'s card`;
         const ctx = `Spectator ${c.who}'s card via indicator ${indTxt} atop the dealt pile`;
         if (v <= a.num && ep === a.num - v + 1) {
           push("Deal, then indicator into the dealt pile", "indicatorBack", "top", { d: 0, key: null }, 0,
-            [...intro, `RETURN the ${indTxt} face down to the pile, then count ${v} cards off it`,
-             `Card #${v} is the ${cTxt}`], ctx + " (returned)", [], c.card);
+            [...intro, `REPLACE the ${indFull} FACE DOWN on the pile, then count ${v} cards off it.`,
+             reveal(c.card, 0)], ctx + " (returned)", [], c.card);
         }
         if (v < a.num && ep === a.num - v) {
           push("Deal, then indicator into the dealt pile", "indicatorBack", "top", { d: 0, key: null }, 0,
-            [...intro, `REMOVE the ${indTxt}, then count ${v} cards off the pile`,
-             `Card #${v} is the ${cTxt}`], ctx + " (removed)", [], c.card);
+            [...intro, `REMOVE the ${indFull}, then count ${v} cards off the pile.`,
+             reveal(c.card, 0)], ctx + " (removed)", [], c.card);
         }
         if (S.enabled.offBefore && v <= a.num && ep === a.num - v + 2) {
           push("Deal, then indicator into the dealt pile", "indicatorBack", "top", { d: -1, key: "offBefore" }, 0,
-            [...intro, `RETURN the ${indTxt} face down, then have them count ${v} cards off the pile into YOUR hands`,
-             `Double lift the top two — the face shown is the ${cTxt}`], ctx + " (double lift)", [], c.card);
+            [...intro, `REPLACE the ${indFull} FACE DOWN, then count ${v} cards off the pile into your hands.`,
+             reveal(c.card, -1)], ctx + " (double lift)", [], c.card);
         }
       }
     }
@@ -564,9 +561,8 @@ function findOuts(input, settings, opts) {
               push("Deal, then spell the card into the dealt pile", "dealSpellBack", orient, off,
                 (p.own ? 0 : S.mod.cross) + (ph.modKey ? S.mod[ph.modKey] : 0),
                 [...dealtPileIntro(a, orient),
-                 `Spell "${ph.label}" (${ph.letters} letters) into the dealt pile`,
-                 off.d === 0 ? `The last letter lands on the ${cardTxt} — S${p.cardWho}'s card`
-                             : `Turn over the NEXT card — the ${cardTxt} — S${p.cardWho}'s card`],
+                 `Spell "${ph.label}" one card per each letter into the dealt pile.`,
+                 reveal(p.card, off.d)],
                 pairCtx(p), [], p.card);
             }
           }
@@ -591,10 +587,8 @@ function findOuts(input, settings, opts) {
             if (a.num <= deckSize && j >= 1 && j <= a.num && ep === a.num - j + 1) {
               push("Deal, then spell a number into the dealt pile", "dealSpellNumBack", orient, off, cross,
                 [...dealtPileIntro(a, orient),
-                 a === b ? `Spell that same number — ${w.replace(/ /g, "-")} (${L} letters) — into the dealt pile`
-                         : `Spell ${w.replace(/ /g, "-")} (${L} letters, S${b.who}'s number) into the dealt pile`,
-                 off.d === 0 ? `The last letter lands on the ${cardTxt} — S${c.who}'s card`
-                             : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`],
+                 `Spell "${w.replace(/ /g, "-")}" one card per each letter into the dealt pile.`,
+                 reveal(c.card, off.d)],
                 a === b ? `Spectator ${c.who}'s card; deal then spell the same number (${a.num})`
                         : `Spectator ${c.who}'s card via both numbers (${a.num}, spell ${b.num})`, [], c.card);
             }
@@ -616,9 +610,8 @@ function findOuts(input, settings, opts) {
             if (eff(pos(c.card), orient) === ph.letters + off.d) {
               push("Spell the card", "spellCard", orient, off, ph.modKey ? S.mod[ph.modKey] : 0,
                 [hold(orient),
-                 `Spell "${ph.label}" (${ph.letters} letters), one card ${facing(orient)} per letter`,
-                 off.d === 0 ? `The last letter is the ${cardTxt} — S${c.who}'s card`
-                             : `Turn over the NEXT card — the ${cardTxt} — S${c.who}'s card`],
+                 spellStep(ph.label, orient),
+                 reveal(c.card, off.d)],
                 `Spectator ${c.who}'s card by spelling (numbers unused)`, [], c.card);
             }
           }
@@ -642,7 +635,7 @@ function findOuts(input, settings, opts) {
           const placeTxt = place === "top" ? "TOP" : "BOTTOM (face)";
           for (const r of findOuts(input, { ...S, topCard: newTop }, { inner: true })) {
             if (r.card === c.card) continue;
-            const steps = [`Casually cut the ${prettyCard(c.card)} (S${c.who}'s card) to the ${placeTxt} of the deck`,
+            const steps = [`Casually cut the ${cardFull(c.card)} to the ${placeTxt} of the deck.`,
                            ...r.steps];
             out.push({ ...r, score: r.score + S.mod.cutCard, method: "Cut + " + r.method,
               steps, title: steps.join(" "),
@@ -659,7 +652,7 @@ function findOuts(input, settings, opts) {
       for (const place of ["top", "face"]) {
         for (const r of findOuts(input, S, { inner: true, jokers: place })) {
           if (r.orient !== place) continue;
-          const steps = [`Add BOTH Jokers to the ${place === "top" ? "TOP" : "FACE (bottom)"} of the deck`,
+          const steps = [`Add BOTH Jokers to the ${place === "top" ? "TOP" : "FACE (bottom)"} of the deck.`,
                          ...r.steps];
           out.push({ ...r, score: r.score + S.mod.jokers, method: "Jokers + " + r.method,
             steps, title: steps.join(" "),
@@ -681,7 +674,7 @@ function findOuts(input, settings, opts) {
       if (!n || n < 10) continue;
       const ds = String(n).split("").reduce((a, b) => a + +b, 0);
       if (ds === n) continue;
-      const framing = `Add the digits of ${n} (${String(n).split("").join(" + ")} = ${ds})`;
+      const framing = `Add the digits of ${n} (${String(n).split("").join(" + ")} = ${ds}).`;
       // fullDeck bypasses the half/cut re-dispatch; viaSum blocks nested digit-sum
       for (const r of findOuts({ ...input, [slot]: ds }, S, { viaSum: true, fullDeck: true })) {
         const base = r.method.replace(/^(Cut|Jokers) \+ /, "");
@@ -705,8 +698,8 @@ function findOutsHalfMode(input, S) {
   const out = [];
   const STACK = stackArr(S);
   const topIdx = STACK.indexOf(S.topCard || STACK[0]);
-  for (const ord of [{ top: S.topCard || STACK[0], label: "REPLACE — reassemble the halves in the original order" },
-                     { top: STACK[(topIdx + 26) % 52], label: "CUT — reassemble with the BOTTOM half on top" }]) {
+  for (const ord of [{ top: S.topCard || STACK[0], label: "REPLACE the top pile back to the top." },
+                     { top: STACK[(topIdx + 26) % 52], label: "CUT the bottom pile to the top." }]) {
     for (const r of findOuts(input, { ...S, topCard: ord.top }, { fullDeck: true })) {
       const steps = [ord.label, ...r.steps];
       out.push({ ...r, steps, title: steps.join(" "),
@@ -727,9 +720,9 @@ function findOutsCutMode(input, S) {
   let effTop = glimpsed, open;
   if (S.noteEnd === "bottom") {
     effTop = STACK[(STACK.indexOf(glimpsed) + 1) % 52];
-    open = `Spectator cuts & completes the cut — you've secretly glimpsed the ${prettyCard(glimpsed)} on the BOTTOM`;
+    open = `Spectator cuts & completes the cut — you've secretly glimpsed the ${cardFull(glimpsed)} on the BOTTOM.`;
   } else {
-    open = `Spectator cuts & completes the cut — you've secretly glimpsed the ${prettyCard(glimpsed)} on TOP`;
+    open = `Spectator cuts & completes the cut — you've secretly glimpsed the ${cardFull(glimpsed)} on TOP.`;
   }
   const out = [];
   for (const r of findOuts(input, { ...S, mode: "full", topCard: effTop }, { fullDeck: true })) {
