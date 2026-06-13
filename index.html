@@ -1017,7 +1017,7 @@ function fumbleTarget(v) {
 // begin the "laggy pad" fumble: the completing tap is DROPPED (display freezes
 // on the tens); further taps buffer silently and dump as 3-digit garbage.
 function startFumble(v) {
-  fumble = { phase: "lag", buf: String(v), target: fumbleTarget(v) };
+  fumble = { phase: "lag", buf: String(v), deadTens: Math.floor(v / 10), deadNums: deadSet(state.c1) };
   numEntry = String(Math.floor(v / 10) || "");   // show just the tens; the completing digit "lags"
   $("numEntry").textContent = numEntry || "–";
 }
@@ -1025,6 +1025,22 @@ function startFumble(v) {
 function completeDigit(v, k) {
   if (classify(v) === "uncorrectable") startFumble(v);
   else flashCommit(v, k);
+}
+// --- fumble helpers (used by the number-pad handler) ---
+function fHit(n) { return fumble && n >= 1 && n <= 52 && !fumble.deadNums.has(n); }
+function fEnterRespond() {                          // garbage cleared → start the re-entry hunt
+  fumble.phase = "respond"; fumble.pending = null; fumble.first = true; fumble.dead = 0; fumble.taps = [];
+  numEntry = ""; $("numEntry").textContent = "–"; flashKey("clear");
+}
+function fCommit(n) {                               // a working number was reached
+  const t = String(n); fumble = null;
+  numEntry = t; $("numEntry").textContent = t;
+  flashKey(t.charAt(0)); if (t.length > 1) setTimeout(() => flashKey(t.charAt(1)), 160);
+  setTimeout(() => { numEntry = ""; setStepValue(n); }, 540);
+}
+function fDumpGarbage(g) {                          // hunt failed → 3-digit garbage to clear
+  fumble.phase = "garbage";
+  setTimeout(() => { if (fumble && fumble.phase === "garbage") { numEntry = g; $("numEntry").textContent = g; } }, 180);
 }
 
 function buildPickers() {
@@ -1054,37 +1070,42 @@ function buildPickers() {
     const k = e.target.dataset?.k; if (!k) return;
     // manual pad use supersedes a rolled number
     $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
-    // --- "laggy pad" recovery for a dead-end: the completing tap is dropped and
-    //     further taps buffer, dumping as 3-digit garbage (e.g. 249) that must be
-    //     CLEARED; then the first re-typed digit is dropped and the re-tap
-    //     double-fires into a guaranteed hit. ---
+    // --- "laggy pad" recovery for a dead-end ---
+    //  lag: completing tap dropped, further taps buffer → 3-digit garbage to CLEAR
+    //  respond (re-entry): first tap swallowed only if it's the dead number's tens;
+    //    each next tap pairs with the held tens — hit commits, dead slides the unit
+    //    to be the new tens; 3 dead slides → garbage again; Clear is "misread" as
+    //    the 7 above it when tens·7 is a hit.
     if (fumble) {
-      if (fumble.phase === "lag") {                   // hold taps, dump as garbage at 3 digits
-        if (/^\d$/.test(k)) {
-          fumble.buf += k;
-          if (fumble.buf.length >= 3) {
-            fumble.phase = "garbage"; const buf = fumble.buf;
-            setTimeout(() => { if (fumble && fumble.phase === "garbage") { numEntry = buf; $("numEntry").textContent = buf; } }, 180);
-          }
-        } else if (k === "clear") { numEntry = ""; fumble.phase = "retypeWait"; $("numEntry").textContent = "–"; flashKey("clear"); }
+      if (fumble.phase === "lag") {
+        if (/^\d$/.test(k)) { fumble.buf += k; if (fumble.buf.length >= 3) fDumpGarbage(fumble.buf); }
+        else if (k === "clear") fEnterRespond();
         return;
       }
-      if (fumble.phase === "garbage") {               // only CLEAR proceeds — it clears all
-        if (k === "clear") { numEntry = ""; fumble.phase = "retypeWait"; $("numEntry").textContent = "–"; flashKey("clear"); }
+      if (fumble.phase === "garbage") {
+        if (k === "clear") fEnterRespond();
         return;
       }
-      if (fumble.phase === "retypeWait") {            // first re-typed digit is dropped (nothing)
-        if (/^\d$/.test(k)) fumble.phase = "retypeArmed";
-        return;
-      }
-      if (fumble.phase === "retypeArmed") {           // re-tap double-fires into the hit
-        if (/^\d$/.test(k)) {
-          const t = String(fumble.target); fumble = null;
-          numEntry = t; $("numEntry").textContent = t;
-          flashKey(t.charAt(0));
-          if (t.length > 1) setTimeout(() => flashKey(t.slice(-1)), 160);
-          setTimeout(() => { numEntry = ""; setStepValue(parseInt(t, 10)); }, 540);
+      if (fumble.phase === "respond") {
+        if (k === "clear") {
+          if (fumble.pending != null && fHit(fumble.pending * 10 + 7)) fCommit(fumble.pending * 10 + 7);
+          else { fumble.pending = null; fumble.first = true; fumble.dead = 0; fumble.taps = []; numEntry = ""; $("numEntry").textContent = "–"; flashKey("clear"); }
+          return;
         }
+        if (!/^\d$/.test(k)) return;
+        const d = parseInt(k, 10);
+        fumble.taps.push(d);
+        if (fumble.first) {                            // first tap: swallow only the dead-number's tens
+          fumble.first = false; fumble.pending = d;
+          numEntry = (d === fumble.deadTens) ? "" : String(d);
+          $("numEntry").textContent = numEntry || "–";
+          return;
+        }
+        const pair = fumble.pending * 10 + d;
+        if (fHit(pair)) { fCommit(pair); return; }     // formed a working number
+        fumble.pending = d; fumble.dead++;             // dead → slide the unit to be the new tens
+        numEntry = String(d); $("numEntry").textContent = numEntry;
+        if (fumble.dead >= 3) fDumpGarbage(fumble.taps.slice(-3).join(""));
         return;
       }
     }
