@@ -1032,10 +1032,10 @@ function fEnterRespond() {                          // garbage cleared → start
   fumble.phase = "respond"; fumble.pending = null; fumble.first = true; fumble.dead = 0; fumble.taps = [];
   numEntry = ""; $("numEntry").textContent = "–"; flashKey("clear");
 }
-function fCommit(n) {                               // a working number was reached
+function fCommit(n, litKey) {                       // a working number was reached
   const t = String(n); fumble = null;
   numEntry = t; $("numEntry").textContent = t;
-  flashKey(t.charAt(0)); if (t.length > 1) setTimeout(() => flashKey(t.charAt(1)), 160);
+  flashKey(String(litKey != null ? litKey : t.slice(-1)));  // light only the key just pressed/misread — tens is already showing
   setTimeout(() => { numEntry = ""; setStepValue(n); }, 540);
 }
 function fDumpGarbage(g) {                          // hunt failed → 3-digit garbage to clear
@@ -1088,7 +1088,7 @@ function buildPickers() {
       }
       if (fumble.phase === "respond") {
         if (k === "clear") {
-          if (fumble.pending != null && fHit(fumble.pending * 10 + 7)) fCommit(fumble.pending * 10 + 7);
+          if (fumble.pending != null && fHit(fumble.pending * 10 + 7)) fCommit(fumble.pending * 10 + 7, 7);
           else { fumble.pending = null; fumble.first = true; fumble.dead = 0; fumble.taps = []; numEntry = ""; $("numEntry").textContent = "–"; flashKey("clear"); }
           return;
         }
@@ -1102,7 +1102,7 @@ function buildPickers() {
           return;
         }
         const pair = fumble.pending * 10 + d;
-        if (fHit(pair)) { fCommit(pair); return; }     // formed a working number
+        if (fHit(pair)) { fCommit(pair, d); return; }  // formed a working number
         fumble.pending = d; fumble.dead++;             // dead → slide the unit to be the new tens
         numEntry = String(d); $("numEntry").textContent = numEntry;
         if (fumble.dead >= 3) fDumpGarbage(fumble.taps.slice(-3).join(""));
