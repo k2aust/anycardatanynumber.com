@@ -861,13 +861,25 @@ let numEntry = "", lastNumStep = -1;
 let magicianMode = false;
 
 // Rewrite the magician's literal steps into the spectator-facing performance,
-// hiding the two secret codes:
+// hiding the method:
 //  • reassembly  — encoded by the leading word: "Cards …" = CUT, "Reassemble …" = REPLACE
 //  • double lift — shown as a neutral hand-off to the performer
+//  • indicator   — never name the card or say "indicator"; just "whatever its value"
+function indicatorScrub(s) {
+  return s
+    .replace(/^Card #(\d+) is the .+ — an INDICATOR\.$/, "Look at card #$1 — note its value.")
+    .replace(/^The NEXT card is the .+ — an INDICATOR\.$/, "Turn over the next card — note its value.")
+    .replace(/^Turn over the TOP card of the pile — the .+, an INDICATOR\.$/, "Turn over the top card of the pile — note its value.")
+    .replace(/^REMOVE the .+, then deal \d+ more cards\.$/, "Whatever that value is, deal that many more cards.")
+    .replace(/^REPLACE the .+ on top, then deal \d+ cards\.$/, "Whatever that value is, deal that many cards — counting that card as the first.")
+    .replace(/^REMOVE the .+, then count \d+ cards off the pile\.$/, "Whatever that value is, count that many cards off the pile.")
+    .replace(/^REPLACE the .+ FACE DOWN on the pile, then count \d+ cards off it\.$/, "Whatever that value is, count that many cards off the pile — counting that card as the first.")
+    .replace(/^REPLACE the .+ FACE DOWN, then count \d+ cards off the pile into your hands\.$/, "Whatever that value is, count that many cards off the pile into your hands — counting that card as the first.");
+}
 function spectatorSteps(steps) {
   const out = [];
   for (let i = 0; i < steps.length; i++) {
-    const s = steps[i];
+    let s = steps[i];
     const reassemble = /^(CUT the bottom pile|REPLACE the top pile)/.exec(s);
     if (reassemble) {
       // the next step is the genuine "Hold the deck FACE UP/DOWN." instruction
@@ -884,7 +896,7 @@ function spectatorSteps(steps) {
       out.push(s.replace(/^With a DOUBLE LIFT reveal the /, "Let the performer reveal the "));
       continue;
     }
-    out.push(s);
+    out.push(indicatorScrub(s));
   }
   return out;
 }
