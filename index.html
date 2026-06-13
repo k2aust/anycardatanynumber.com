@@ -697,10 +697,14 @@ function findOuts(input, settings, opts) {
       if (ds === n) continue;
       const framing = `Add the digits of ${n} (${String(n).split("").join(" + ")} = ${ds}).`;
       // fullDeck bypasses the half/cut re-dispatch; viaSum blocks nested digit-sum
+      const useRe = new RegExp("(Deal|count) " + ds + "(?!\\d)");
       for (const r of findOuts({ ...input, [slot]: ds }, S, { viaSum: true, fullDeck: true })) {
         const base = r.method.replace(/^(Cut|Jokers) \+ /, "");
         if (!NUMBER_METHODS.has(base)) continue; // only outs that actually use the number
-        const steps = [framing, ...r.steps];
+        // place "Add the digits…" right before the step that uses the reduced count
+        let at = r.steps.findIndex(st => useRe.test(st));
+        if (at < 0) at = 0;
+        const steps = [...r.steps.slice(0, at), framing, ...r.steps.slice(at)];
         out.push({ ...r, score: r.score + S.mod.digitSum, method: "Digit sum + " + r.method,
           steps, title: steps.join(" "), ctx: r.ctx + ` — via the digit sum of ${n}` });
       }
