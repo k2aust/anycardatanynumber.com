@@ -966,6 +966,18 @@ function topNumbers(card, n = 8) {
   const ranked = Object.keys(sc.score).map(Number).sort((a, b) => sc.score[b] - sc.score[a]);
   return ranked.length ? ranked.slice(0, n) : [1];
 }
+// Dead numbers a spectator might realistically name (the high 50s are rarely
+// called, so they don't count against a card's quality).
+function deadNamedCount(card) { return scanCard(card, settings).dead.filter(n => n >= 1 && n <= 49).length; }
+// The cards with the fewest dead zones — what the random CARD generator draws
+// from, so a spectator is steered to a clean card. Returns the best tier, padded
+// to at least `minPool` for variety.
+function bestCards(minPool = 10) {
+  const ranked = ARONSON.map(c => ({ c, d: deadNamedCount(c) })).sort((a, b) => a.d - b.d);
+  let cut = Math.min(minPool, ranked.length) - 1;
+  while (cut + 1 < ranked.length && ranked[cut + 1].d === ranked[cut].d) cut++; // keep whole tiers
+  return ranked.slice(0, cut + 1).map(r => r.c);
+}
 // If a typed number is a dead miss, swap its LAST digit for the nearest
 // keypad-neighbour that hits (e.g. 28 → 25). Reads as a mis-tap on the small pad.
 function steerNumber(card, v) {
@@ -1144,7 +1156,9 @@ function buildPickers() {
   // Random card: each press rolls a new card into the preview; "Use this card"
   // confirms. The spectator can keep re-rolling until they like one.
   $("randomCard").addEventListener("click", () => {
-    state.pendingCard = ARONSON[Math.floor(Math.random() * 52)];
+    const pool = bestCards(), cur = state.pendingCard;
+    const choices = pool.length > 1 ? pool.filter(c => c !== cur) : pool;  // change every press
+    state.pendingCard = choices[Math.floor(Math.random() * choices.length)];
     const pv = $("cardRollPreview");
     pv.textContent = prettyCard(state.pendingCard);
     pv.className = "rollcard" + (/[HD]$/.test(state.pendingCard) ? " red" : "");
