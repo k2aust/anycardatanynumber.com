@@ -125,8 +125,8 @@
 <body>
 
 <header>
-  <h1>Stack Oracle</h1>
-  <button id="gearBtn" aria-label="Settings">&#9881;</button>
+  <h1 id="title">Stack Oracle</h1>
+  <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
 </header>
 
 <main id="app">
@@ -234,8 +234,11 @@ function stackPos(card, topCard, stack) {
 const SETTINGS_VERSION = 3; // bump when the default scoring model changes
 const DEFAULT_SETTINGS = {
   version: SETTINGS_VERSION,
-  stack: "aronson",
-  topCard: "JS",
+  // Spectator-facing default: a Mnemonica deck in full order, no sleights —
+  // self-working so anyone can perform it on themselves. The magician unlocks
+  // their own stack/mode via 6 title taps (those choices persist per device).
+  stack: "mnemonica",
+  topCard: "4C",
   mode: "full",     // "full" | "half" (split into two 26-packets) | "cut" (spectator cuts, you glimpse)
   noteEnd: "top",   // in cut mode: did you glimpse the "top" or "bottom" card?
   // spellCount (spell the card first, then count to the number) sits just above
@@ -250,7 +253,7 @@ const DEFAULT_SETTINGS = {
   enabled: { deal: true, directReveal: true, indicator: true, indicatorBack: true, dealSpellCard: true,
              spellCount: true, countCut: true, dealSpellBack: true,
              dealCountBack: true, spellNumber: true, dealSpellNumBack: true, spellCard: true,
-             face: true, offNext: true, offBefore: true, phraseThe: true, phraseNoOf: true,
+             face: true, offNext: true, offBefore: false, phraseThe: true, phraseNoOf: true,
              cutCard: true, jokers: true, digitSum: true },
 };
 
@@ -835,6 +838,38 @@ const SUITS = ["S","H","C","D"];
 let settings = loadSettings();
 let state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null };
 let numEntry = "", lastNumStep = -1;
+// Spectator mode is the default on every load (re-locked each visit). The
+// magician unlocks the full view + settings by tapping the title 6 times.
+let magicianMode = false;
+
+// Rewrite the magician's literal steps into the spectator-facing performance,
+// hiding the two secret codes:
+//  • reassembly  — encoded by the leading word: "Cards …" = CUT, "Reassemble …" = REPLACE
+//  • double lift — shown as a neutral hand-off to the performer
+function spectatorSteps(steps) {
+  const out = [];
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const reassemble = /^(CUT the bottom pile|REPLACE the top pile)/.exec(s);
+    if (reassemble) {
+      // the next step is the genuine "Hold the deck FACE UP/DOWN." instruction
+      const holdFace = /FACE (UP|DOWN)/.exec(steps[i + 1] || "");
+      const face = holdFace ? holdFace[0] : "FACE DOWN";
+      out.push("Cut the cards into two equal piles.");
+      out.push(s.startsWith("CUT")
+        ? `Cards are held ${face}.`                       // C → CUT
+        : `Reassemble the piles and hold them ${face}.`); // R → REPLACE
+      i++; // consume the hold step we folded in
+      continue;
+    }
+    if (/^With a DOUBLE LIFT reveal the /.test(s)) {
+      out.push(s.replace(/^With a DOUBLE LIFT reveal the /, "Let the performer reveal the "));
+      continue;
+    }
+    out.push(s);
+  }
+  return out;
+}
 
 function loadSettings() {
   try {
@@ -922,16 +957,21 @@ function render() {
     el.className = "val" + (typeof v === "string" && /[HD]$/.test(v) ? " red" : "");
     el.parentElement.classList.toggle("active", state.step === i);
   }
+  $("gearBtn").style.display = magicianMode ? "" : "none";
   const isCard = state.step === 0, isNum = state.step === 1;
   $("cardPicker").style.display = isCard ? "" : "none";
   $("numberPicker").style.display = isNum ? "" : "none";
   $("results").style.display = state.step === 2 ? "block" : "none";
-  if (isCard) $("cardPickerTitle").textContent = "Their card";
+  if (isCard) $("cardPickerTitle").textContent = magicianMode ? "Their card" : "Your card";
   if (isNum) {
-    $("numberPickerTitle").textContent = "Their number";
+    $("numberPickerTitle").textContent = magicianMode ? "Their number" : "Your number";
     if (state.step !== lastNumStep) numEntry = "";
     lastNumStep = state.step;
     $("numEntry").textContent = numEntry || "–";
+    // The magician's number screen shows the intel banner (strongest numbers,
+    // dead zones, forced ranges). Spectators never see it.
+    $("partialOut").style.display = magicianMode ? "block" : "none";
+    if (magicianMode) {
     // One sweep over all 52 numbers for this card: strongest numbers to steer
     // toward, the dead zones, and the numbers with only a forced procedure.
     const scan = scanCard(state.c1, settings);
@@ -962,8 +1002,9 @@ function render() {
     if (!scan.dead.length && !scan.forced.length)
       html += `<div class="tag" style="color:var(--green)">&#10003; EVERY NUMBER HAS A CLEAN OUT</div>`;
     po.innerHTML = html;
+    } // end magicianMode intel
   }
-  if (state.step === 2) renderResults();
+  if (state.step === 2) (magicianMode ? renderResults : renderSpectatorResults)();
 }
 
 function renderResults() {
@@ -997,7 +1038,26 @@ function renderResults() {
     }
   }
   $("resultList").innerHTML = html;
+  $("cheat").style.display = "";
   $("cheat").innerHTML = "<b>Raw data</b><br>" + cheatSheet(input, settings).join("<br>");
+}
+
+// Spectator-facing results: just the performance steps, no scores / methods /
+// alternatives / intel. The two secret codes are folded in by spectatorSteps.
+function renderSpectatorResults() {
+  const input = { c1: state.c1, n1: state.n1 };
+  const outs = findOuts(input, settings);
+  $("cheat").innerHTML = "";
+  $("cheat").style.display = "none";
+  if (!outs.length) {
+    $("resultList").innerHTML = `<div class="nores">Hmm — that combination doesn't have a clean revelation. Tap <b>New trick</b> and try another number.</div>`;
+    return;
+  }
+  const sing = s => s.replace(/(^|\D)1 (cards|letters|more cards)\b/g, (m, p, w) => `${p}1 ${w.replace(/s$/, "")}`);
+  const steps = spectatorSteps(outs[0].steps).map(sing);
+  $("resultList").innerHTML =
+    `<div class="hero"><div class="method" style="color:var(--gold)">Follow these steps</div>` +
+    `<ol class="steps">${steps.map(s => `<li>${s}</li>`).join("")}</ol></div>`;
 }
 
 /* settings UI */
@@ -1132,6 +1192,22 @@ $("resetSettings").addEventListener("click", () => { settings = structuredClone(
 $("editBtn").addEventListener("click", () => { state.step = 0; render(); });
 $("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null }; render(); });
 document.querySelectorAll(".chip").forEach(ch => ch.addEventListener("click", () => { state.step = +ch.dataset.step; render(); }));
+
+// Secret unlock: tap the title 6 times in a row (within 2.5s) to toggle the
+// magician view. Re-locks on every page load.
+let tapCount = 0, tapTimer = null;
+$("title").addEventListener("click", () => {
+  tapCount++;
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
+  if (tapCount >= 6) {
+    tapCount = 0;
+    magicianMode = !magicianMode;
+    // leaving the settings screen if we just locked
+    if (!magicianMode) { $("settings").style.display = "none"; $("app").style.display = "block"; }
+    render();
+  }
+});
 
 buildPickers();
 render();
