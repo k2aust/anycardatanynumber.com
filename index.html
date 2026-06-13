@@ -993,9 +993,10 @@ function padDir(d, dir) {
   for (const k in PAD_POS) { const [a, b] = PAD_POS[k]; if (a === tr && b === tc) return +k; }
   return null;
 }
-// which half of the last pad key the finger landed on ("left"/"right"), or null
-// (programmatic / keyboard). Lets a mis-tap correction lean the way it was hit.
-let lastTapX = null;
+// How the finger leaned on the last pad key: directions ("right"/"left"/"down"/
+// "up") ordered most-leaned-first, or null (programmatic / keyboard). Lets a
+// mis-tap correction prefer the neighbour it leaned toward — on either axis.
+let lastTapLean = null;
 // numbers that produce ANY out for this card (digit-sum counts as a hit)
 function deadSet(card) { return new Set(scanCard(card, settings).dead); }
 // the top N numbers for a card, ranked by best-out score — what the random
@@ -1024,9 +1025,9 @@ function steerNumber(card, v) {
   if (!dead.has(v)) return v;
   const units = v % 10, tens = Math.floor(v / 10);
   const ok = n => n >= 1 && n <= 52 && !dead.has(n);
-  // if the finger landed off-centre, prefer the neighbour on that side (tap 5 a
-  // touch right → 6; a touch left → 4) when it's a hit
-  if (lastTapX) { const nd = padDir(units, lastTapX); if (nd != null && ok(tens * 10 + nd)) return tens * 10 + nd; }
+  // if the finger landed off-centre, prefer the neighbour it leaned toward —
+  // left/right (5→4/6) or up/down (5→2/8) — taking the first that's a hit
+  if (lastTapLean) { for (const dir of lastTapLean) { const nd = padDir(units, dir); if (nd != null && ok(tens * 10 + nd)) return tens * 10 + nd; } }
   let best = null, bestD = 99;
   const consider = nd => { const cand = tens * 10 + nd;
     if (ok(cand) && Math.abs(cand - v) < bestD) { bestD = Math.abs(cand - v); best = cand; } };
@@ -1114,15 +1115,14 @@ function fCommitBoth(n) {                           // a misread double-tap: lig
   setTimeout(() => { numEntry = ""; setStepValue(n); }, 540);
 }
 // A double-tap (press the held tens again, e.g. 2→22) whose number is dead:
-// "misread" one digit to a working keypad neighbour, leaning the way the key was
-// hit. Tries the just-pressed UNITS digit first (21/23/25), then the TENS (12/32/52).
-function fDoubleMisread(tens, dirX) {
-  const opp = dirX === "left" ? "right" : "left";
-  const order = [["u", dirX], ["t", dirX], ["u", opp], ["t", opp], ["u", "down"], ["t", "down"], ["u", "up"], ["t", "up"]];
-  for (const [which, dir] of order) {
+// "misread" one digit to a working keypad neighbour, in the direction the key
+// was leaned (any of the four). Per direction, nudge the just-pressed UNITS
+// digit first (21/23/25/20), then the TENS (12/32/52/...).
+function fDoubleMisread(tens, lean) {
+  for (const dir of (lean || ["right", "left", "down", "up"])) {
     const nd = padDir(tens, dir); if (nd == null) continue;     // units === tens for a double
-    const n = which === "u" ? tens * 10 + nd : nd * 10 + tens;
-    if (fHit(n)) return n;
+    if (fHit(tens * 10 + nd)) return tens * 10 + nd;
+    if (fHit(nd * 10 + tens)) return nd * 10 + tens;
   }
   return null;
 }
@@ -1156,10 +1156,14 @@ function buildPickers() {
   });
   $("numberPad").addEventListener("click", e => {
     const k = e.target.dataset?.k; if (!k) return;
-    // which side of the key the finger landed on (for leaning a mis-tap correction)
+    // where in the key the finger landed → rank the four directions by lean,
+    // so a mis-tap correction can pick the neighbour it leaned toward (any axis)
     const r = e.target.getBoundingClientRect();
-    lastTapX = (r.width && e.clientX >= r.left && e.clientX <= r.right)
-      ? ((e.clientX - r.left) < r.width / 2 ? "left" : "right") : null;
+    if (r.width && e.clientX >= r.left && e.clientX <= r.right) {
+      const dx = (e.clientX - r.left) / r.width - 0.5, dy = (e.clientY - r.top) / r.height - 0.5;
+      const sc = { right: dx, left: -dx, down: dy, up: -dy };
+      lastTapLean = ["right", "left", "down", "up"].sort((a, b) => sc[b] - sc[a]);
+    } else lastTapLean = null;
     // manual pad use supersedes a rolled number
     $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
     // --- "laggy pad" recovery for a dead-end ---
@@ -1198,7 +1202,7 @@ function buildPickers() {
         // double-tap of the held tens (e.g. 2→22) but that number is dead →
         // "misread" a digit to a working neighbour, leaning the way it was hit
         if (d === fumble.pending) {
-          const n = fDoubleMisread(fumble.pending, lastTapX || (Math.random() < 0.5 ? "left" : "right"));
+          const n = fDoubleMisread(fumble.pending, lastTapLean);
           if (n != null) { fCommitBoth(n); return; }
         }
         fumble.pending = d; fumble.dead++;             // dead → slide the unit to be the new tens
