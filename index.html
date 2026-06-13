@@ -991,24 +991,41 @@ function commitNumber(v) {
   if (final !== v) setTimeout(advance, 360); else advance();
 }
 
-// nearest number (by value) that produces an out for this card
-function nearestHit(card, v) {
-  const dead = deadSet(card);
-  let best = v, bd = 99;
-  for (let n = 1; n <= 52; n++) if (!dead.has(n) && Math.abs(n - v) < bd) { bd = Math.abs(n - v); best = n; }
-  return best;
+// classify a completed number for this card (spectator)
+function classify(v) {
+  if (magicianMode || !state.c1) return "exact";
+  const dead = deadSet(state.c1);
+  if (!dead.has(v)) return "hit";
+  return steerNumber(state.c1, v) === v ? "uncorrectable" : "correctable";
 }
-// Complete a typed number. A hit (or adjacent-fixable miss) goes through the
-// quiet correction; a dead number with NO adjacent fix triggers the fumble.
-function completeNumber(v, k) {
-  if (!magicianMode && state.c1 && deadSet(state.c1).has(v) && steerNumber(state.c1, v) === v) {
-    fumble = { target: nearestHit(state.c1, v) };       // a guaranteed hit, reached after the fumble
-    numEntry = String(v) + String(v % 10);              // double the last digit → obvious mis-type
-    $("numEntry").textContent = numEntry;
-    flashKey(String(v % 10));
-    return;
+// where the fumble lands. Prefer the DOUBLED tens digit (so "press 2 twice"
+// reads as 22) when that's a hit; else nearest hit in the same decade; else
+// nearest hit overall.
+function fumbleTarget(v) {
+  const dead = deadSet(state.c1), t = Math.floor(v / 10);
+  if (t >= 1) {
+    const tt = t * 10 + t;
+    if (tt <= 52 && !dead.has(tt)) return tt;             // the clean "doubled digit" landing
+    let b = null, bd = 99;
+    for (let u = 0; u <= 9; u++) { const n = t * 10 + u; if (n >= 1 && n <= 52 && !dead.has(n) && Math.abs(n - v) < bd) { bd = Math.abs(n - v); b = n; } }
+    if (b != null) return b;
   }
-  flashCommit(v, k);
+  let b = v, bd = 99;
+  for (let n = 1; n <= 52; n++) if (!dead.has(n) && Math.abs(n - v) < bd) { bd = Math.abs(n - v); b = n; }
+  return b;
+}
+// begin the "sticky pad" fumble: the completing tap is DROPPED (nothing shows);
+// a re-tap of the same key will double-enter it.
+function startFumble(v) {
+  const t = Math.floor(v / 10);
+  fumble = { phase: "armUnits", units: String(v % 10), tens: String(t || ""), target: fumbleTarget(v) };
+  numEntry = String(t || "");
+  $("numEntry").textContent = numEntry || "–";
+}
+// route a completed number: hit/correctable → quiet path; uncorrectable → fumble
+function completeDigit(v, k) {
+  if (classify(v) === "uncorrectable") startFumble(v);
+  else flashCommit(v, k);
 }
 
 function buildPickers() {
@@ -1038,36 +1055,57 @@ function buildPickers() {
     const k = e.target.dataset?.k; if (!k) return;
     // manual pad use supersedes a rolled number
     $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
-    // --- "clumsy pad" recovery: a dead-end double-typed, now backspace clears all,
-    //     and the next digit double-types into a guaranteed hit ---
+    // --- "sticky pad" recovery for a dead-end: the completing tap is dropped;
+    //     a re-tap double-enters (garbage); backspace clears all; then the first
+    //     re-typed digit is dropped and the re-tap double-fires into a hit. ---
     if (fumble) {
-      if (!fumble.cleared) {                 // garbage showing — only backspace proceeds
-        if (k === "back") { numEntry = ""; fumble.cleared = true; $("numEntry").textContent = "–"; flashKey("back"); }
+      if (fumble.phase === "armUnits") {
+        if (k === fumble.units) {                     // re-tap the dropped digit → double-enter
+          numEntry = fumble.tens + fumble.units + fumble.units;
+          $("numEntry").textContent = numEntry;
+          flashKey(fumble.units); setTimeout(() => flashKey(fumble.units), 160);
+          fumble.phase = "garbage";
+        } else if (k === "back") {
+          numEntry = fumble.tens.slice(0, -1); fumble = null; flashKey("back"); $("numEntry").textContent = numEntry || "–";
+        } else if (/^\d$/.test(k)) {                  // a different digit → re-evaluate as the units
+          const tens = fumble.tens, v = parseInt(tens + k, 10); fumble = null; numEntry = tens;
+          if (v >= 1 && v <= 52) { completeDigit(v, k); return; }
+          $("numEntry").textContent = numEntry || "–";
+        }
         return;
       }
-      if (/^\d$/.test(k)) {                  // first digit after the clear → land the hit
-        const t = fumble.target; fumble = null;
-        numEntry = String(t); $("numEntry").textContent = numEntry;
-        flashKey(String(t).charAt(0));
-        if (String(t).length > 1) setTimeout(() => flashKey(String(t).slice(-1)), 120);
-        setTimeout(() => { numEntry = ""; setStepValue(t); }, 520);
+      if (fumble.phase === "garbage") {               // only backspace proceeds — it clears all
+        if (k === "back") { numEntry = ""; fumble.phase = "retypeWait"; $("numEntry").textContent = "–"; flashKey("back"); }
+        return;
       }
-      return;
+      if (fumble.phase === "retypeWait") {            // first re-typed digit is dropped (nothing)
+        if (/^\d$/.test(k)) fumble.phase = "retypeArmed";
+        return;
+      }
+      if (fumble.phase === "retypeArmed") {           // re-tap double-fires into the hit
+        if (/^\d$/.test(k)) {
+          const t = String(fumble.target); fumble = null;
+          numEntry = t; $("numEntry").textContent = t;
+          flashKey(t.charAt(0));
+          if (t.length > 1) setTimeout(() => flashKey(t.slice(-1)), 160);
+          setTimeout(() => { numEntry = ""; setStepValue(parseInt(t, 10)); }, 540);
+        }
+        return;
+      }
     }
     if (k === "back") { numEntry = numEntry.slice(0, -1); flashKey(k); }
     else if (k === "ok") {
       const v = parseInt(numEntry, 10);
-      if (v >= 1 && v <= 52) { completeNumber(v, k); return; }
+      if (v >= 1 && v <= 52) { completeDigit(v, k); return; }
       flashKey(k);
     } else if (numEntry.length < 2) {
       const next = numEntry + k, v = parseInt(next, 10);
       if (v >= 1) {
-        numEntry = next;
         // 6-9 can't start a valid two-digit number (max 52); two digits decide themselves
-        if (numEntry.length === 2 || v >= 6) {
-          if (v <= 52) { completeNumber(v, k); return; }
-          numEntry = numEntry.slice(0, 1); flashKey(k); // 53-59: keep the first digit
-        } else flashKey(k);
+        if (next.length === 2 || v >= 6) {
+          if (v <= 52) { completeDigit(v, k); return; }
+          flashKey(k); // 53-59: ignore this digit, keep the tens
+        } else { numEntry = next; flashKey(k); }
       } else flashKey(k);
     } else flashKey(k);
     $("numEntry").textContent = numEntry || "–";
