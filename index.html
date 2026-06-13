@@ -1034,20 +1034,24 @@ function buildPickers() {
   });
   $("useCard").addEventListener("click", () => { if (state.pendingCard) setStepValue(state.pendingCard); });
 
-  // Random number: each press does a quick slot-machine flourish landing on a
-  // fresh strong number (shown but NOT committed); "Use this number" confirms.
+  // Random number: cycle through 8 DIFFERENT numbers, slowing to a stop on the
+  // 8th — which is a strong hit (shown but NOT committed); "Use this number" confirms.
   $("randomNum").addEventListener("click", () => {
     if (!state.c1) return;
     const pool = bestPool(state.c1);
+    const land = pool[Math.floor(Math.random() * pool.length)];
+    // 8 distinct numbers, the landing hit shown last
+    const seq = new Set([land]);
+    while (seq.size < 8) seq.add(1 + Math.floor(Math.random() * 52));
+    const rest = [...seq].filter(n => n !== land).sort(() => Math.random() - 0.5);
+    const order = [...rest, land];
     $("randomNum").disabled = true; $("useNum").disabled = true;
-    let ticks = 0; const total = 8;
+    let i = 0;
     const spin = () => {
-      numEntry = String(1 + Math.floor(Math.random() * 52));  // visual noise
+      numEntry = String(order[i]);
       $("numEntry").textContent = numEntry;
-      if (++ticks < total) setTimeout(spin, 40 + ticks * 10);
+      if (++i < order.length) setTimeout(spin, 70 + i * i * 6);  // slow toward the stop
       else {
-        numEntry = String(pool[Math.floor(Math.random() * pool.length)]);  // land on a hit
-        $("numEntry").textContent = numEntry;
         $("randomNum").disabled = false; $("useNum").disabled = false;
         $("numRoll").style.display = "block";
       }
