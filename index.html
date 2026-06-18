@@ -871,42 +871,52 @@ function baseDeckNoAces(S) {                           // chosen stack rotated t
   for (let i = 0; i < 52; i++) out.push(STACK[(start + i) % 52]);
   return out.filter(c => !ACE_CODES.includes(c));
 }
-function shimDecks(S) {                                // aces & jokers each {none,top,face}; half mode adds the cut reassembly
-  const base = baseDeckNoAces(S), half = !!(S && S.mode === "half");
+// What you can add — always to the DEAL end (the top of the deck as held), so
+// the instruction is just "Add JOKERS/ACES". All-or-none groups: 0/2/4/6 cards.
+const SHIM_GROUPS = [
+  { add: [], label: null },
+  { add: JOKER_CODES, label: "JOKERS" },
+  { add: ACE_CODES, label: "ACES" },
+  { add: [...ACE_CODES, ...JOKER_CODES], label: "JOKERS and ACES" },
+];
+// rotations of the aces-removed base: full = 1; half adds the cut reassembly
+function shimRotations(S) {
+  const base = baseDeckNoAces(S);
+  if (!(S && S.mode === "half")) return [{ deck: base, cut: false }];
   const h = Math.floor(base.length / 2);
-  const bases = half ? [{ d: base, cut: false }, { d: [...base.slice(h), ...base.slice(0, h)], cut: true }]
-                     : [{ d: base, cut: false }];
-  const decks = [];
-  for (const b of bases)
-    for (const jokers of ["none", "top", "face"])
-      for (const aces of ["none", "top", "face"]) {
-        let d = b.d.slice();
-        if (aces === "top") d = [...ACE_CODES, ...d]; else if (aces === "face") d = [...d, ...ACE_CODES];
-        if (jokers === "top") d = [...JOKER_CODES, ...d]; else if (jokers === "face") d = [...d, ...JOKER_CODES];
-        decks.push({ deck: d, jokers, aces, cut: b.cut });
-      }
-  return decks;
+  return [{ deck: base, cut: false }, { deck: [...base.slice(h), ...base.slice(0, h)], cut: true }];
 }
-// Every single-card/number out available on a literal deck (top→bottom, "JK"=joker).
-function outsOnDeck(deck, C, n) {
+// all (rotation × shim-group) configs the search tries
+function shimConfigs(S) {
+  const out = [];
+  for (const r of shimRotations(S)) for (const group of SHIM_GROUPS) out.push({ ...r, group });
+  return out;
+}
+// All single-card/number outs on a base deck (aces removed, no shims). The shim
+// group is added to the DEAL end (top of the deck as held), so the lead steps
+// are just "Hold the deck face up/down." then, if anything, "Add JOKERS/ACES."
+function outsOnDeck(base, C, n, shim) {
+  shim = shim || SHIM_GROUPS[0];
   const out = [], B = DEFAULT_SETTINGS.base, M = DEFAULT_SETTINGS.mod;
   const reveal = off => off === 1 ? `The ${cardFull(C)} will be the NEXT CARD.` : `ARRIVE at the ${cardFull(C)}.`;
   for (const orient of ["top", "face"]) {
-    const dk = orient === "top" ? deck : [...deck].reverse();
+    const held = orient === "top" ? base : [...base].reverse();
+    const dk = [...shim.add, ...held];                 // shims on top of the held deck = the deal end
     const L = dk.length, p = dk.indexOf(C) + 1;
     if (p === 0) continue;                             // C absent in this config
-    const hold = orient === "top" ? "Hold the deck face down." : "Hold the deck face up.";
+    const lead = [orient === "top" ? "Hold the deck face down." : "Hold the deck face up."];
+    if (shim.label) lead.push(`Add ${shim.label}.`);
     // 1. deal to the number
     if (n >= 1 && n <= L && p === n)
-      out.push({ score: B.deal, method: "Deal to the number", steps: [hold, `Deal ${n} cards.`, reveal(0)] });
+      out.push({ score: B.deal, method: "Deal to the number", steps: [...lead, `Deal ${n} cards.`, reveal(0)] });
     if (n >= 1 && p === n + 1 && n + 1 <= L)
-      out.push({ score: B.deal + M.offNext, method: "Deal to the number", steps: [hold, `Deal ${n} cards.`, reveal(1)] });
+      out.push({ score: B.deal + M.offNext, method: "Deal to the number", steps: [...lead, `Deal ${n} cards.`, reveal(1)] });
     // 2. indicator (deal to a 2-10, its value bridges to C)
     for (const off of [0, 1]) {
       const q = n + off; if (q < 1 || q > L) continue;
       const ind = dk[q - 1], v = deckSpot(ind); if (v === null || ind === C) continue;
       const indFull = cardFull(ind), pen = off ? M.offNext : 0;
-      const intro = [hold, `Deal ${n} cards.`,
+      const intro = [...lead, `Deal ${n} cards.`,
         off === 0 ? `Card #${n} is the ${indFull} — an INDICATOR.` : `The NEXT card is the ${indFull} — an INDICATOR.`];
       if (p === q + v)
         out.push({ score: B.indicator + pen, method: "Deal to an indicator card",
@@ -918,52 +928,44 @@ function outsOnDeck(deck, C, n) {
     // 3. spell the card / spell-then-count / deal-then-spell (each card phrasing)
     for (const ph of cardPhrases(C)) {
       const Lc = ph.letters, mp = ph.modKey ? M[ph.modKey] : 0, spell = `Spell "${ph.label}" one card per each letter.`;
-      if (p === Lc) out.push({ score: B.spellCard + mp, method: "Spell the card", steps: [hold, spell, reveal(0)] });
-      if (p === Lc + 1) out.push({ score: B.spellCard + mp + M.offNext, method: "Spell the card", steps: [hold, spell, reveal(1)] });
+      if (p === Lc) out.push({ score: B.spellCard + mp, method: "Spell the card", steps: [...lead, spell, reveal(0)] });
+      if (p === Lc + 1) out.push({ score: B.spellCard + mp + M.offNext, method: "Spell the card", steps: [...lead, spell, reveal(1)] });
       let t = Lc + n;
-      if (t <= L && p === t) out.push({ score: B.spellCount + mp, method: "Spell the card, then count to the number", steps: [hold, spell, `Then count ${n} more cards.`, reveal(0)] });
-      if (t + 1 <= L && p === t + 1) out.push({ score: B.spellCount + mp + M.offNext, method: "Spell the card, then count to the number", steps: [hold, spell, `Then count ${n} more cards.`, reveal(1)] });
+      if (t <= L && p === t) out.push({ score: B.spellCount + mp, method: "Spell the card, then count to the number", steps: [...lead, spell, `Then count ${n} more cards.`, reveal(0)] });
+      if (t + 1 <= L && p === t + 1) out.push({ score: B.spellCount + mp + M.offNext, method: "Spell the card, then count to the number", steps: [...lead, spell, `Then count ${n} more cards.`, reveal(1)] });
       t = n + Lc;
-      if (t <= L && p === t) out.push({ score: B.dealSpellCard + mp, method: "Deal, then spell the card", steps: [hold, `Deal ${n} cards.`, spell, reveal(0)] });
-      if (t + 1 <= L && p === t + 1) out.push({ score: B.dealSpellCard + mp + M.offNext, method: "Deal, then spell the card", steps: [hold, `Deal ${n} cards.`, spell, reveal(1)] });
+      if (t <= L && p === t) out.push({ score: B.dealSpellCard + mp, method: "Deal, then spell the card", steps: [...lead, `Deal ${n} cards.`, spell, reveal(0)] });
+      if (t + 1 <= L && p === t + 1) out.push({ score: B.dealSpellCard + mp + M.offNext, method: "Deal, then spell the card", steps: [...lead, `Deal ${n} cards.`, spell, reveal(1)] });
     }
     // 4. spell the number
     const w = numberWord(n), Ln = letterCount(w), spellN = `Spell "${w.replace(/ /g, "-")}" one card per each letter.`;
-    if (Ln <= L && p === Ln) out.push({ score: B.spellNumber, method: "Spell the number", steps: [hold, spellN, reveal(0)] });
-    if (Ln + 1 <= L && p === Ln + 1) out.push({ score: B.spellNumber + M.offNext, method: "Spell the number", steps: [hold, spellN, reveal(1)] });
+    if (Ln <= L && p === Ln) out.push({ score: B.spellNumber, method: "Spell the number", steps: [...lead, spellN, reveal(0)] });
+    if (Ln + 1 <= L && p === Ln + 1) out.push({ score: B.spellNumber + M.offNext, method: "Spell the number", steps: [...lead, spellN, reveal(1)] });
   }
   return out;
 }
 function digitSumOf(n) { return n >= 10 ? Math.floor(n / 10) + (n % 10) : n; }
-function outsWithDigitSum(deck, C, n) {                // plain outs + digit-sum-transformed count outs
-  const outs = outsOnDeck(deck, C, n).slice(), ds = digitSumOf(n);
-  if (ds !== n) for (const o of outsOnDeck(deck, C, ds)) {
+function outsWithDigitSum(base, C, n, shim) {          // plain outs + digit-sum-transformed count outs
+  const outs = outsOnDeck(base, C, n, shim).slice(), ds = digitSumOf(n);
+  if (ds !== n) for (const o of outsOnDeck(base, C, ds, shim)) {
     if (o.method === "Spell the card") continue;       // number-independent; already covered
     outs.push({ score: o.score + DEFAULT_SETTINGS.mod.digitSum, method: "Digit sum + " + o.method,
       steps: [`Add the digits of ${n} (${Math.floor(n / 10)} + ${n % 10} = ${ds}).`, ...o.steps] });
   }
   return outs;
 }
-function shimSetupLine(cfg) {
-  const add = [];
-  if (cfg.aces !== "none") add.push(`the 4 aces to the ${cfg.aces}`);
-  if (cfg.jokers !== "none") add.push(`the 2 jokers to the ${cfg.jokers}`);
-  const reasm = cfg.cut ? " cut the bottom half to the top;" : "";
-  return `Set up: deck is your stack minus the 4 aces;${reasm} ` +
-    (add.length ? `add ${add.join(" and ")}.` : `add nothing.`);
-}
-// Search every shim configuration; outs ranked best-first (score, then fewer cards added),
-// each prefixed with its setup instruction.
+// Search every (rotation × shim-group) config. A cut reassembly leads with one
+// extra step; otherwise the out is just hold → maybe "Add JOKERS/ACES" → deal.
 function findShimOuts(input, S) {
   const C = input.c1, n = input.n1, all = [];
   if (!C || !n) return [];
   // honour the "Allow digit-summing" toggle — off = clean outs only (no digit-add)
   const finder = (S && S.enabled && S.enabled.digitSum) ? outsWithDigitSum : outsOnDeck;
-  for (const cfg of shimDecks(S)) {
-    const setup = shimSetupLine(cfg);
-    for (const o of finder(cfg.deck, C, n)) {
-      const steps = [setup, ...o.steps];
-      all.push({ ...o, added: cfg.deck.length - 48, steps, title: steps.join(" ") });
+  for (const cfg of shimConfigs(S)) {
+    const cutStep = cfg.cut ? ["Cut the bottom half to the top."] : [];
+    for (const o of finder(cfg.deck, C, n, cfg.group)) {
+      const steps = [...cutStep, ...o.steps];
+      all.push({ ...o, added: cfg.group.add.length, steps, title: steps.join(" ") });
     }
   }
   // digit-sum is a last resort: any clean out outranks every digit-sum out,
@@ -1529,6 +1531,12 @@ function renderResults() {
 // with its "Set up: …" instruction (which cards to add and where).
 function renderShimResults(input) {
   const sing = s => s.replace(/(^|\D)1 (cards|letters|more cards)\b/g, (m, p, w) => `${p}1 ${w.replace(/s$/, "")}`);
+  // the 4 aces are held out — they can't be placed at a number. Re-ask.
+  if (ACE_CODES.includes(input.c1)) {
+    $("resultList").innerHTML = `<div class="nores"><b>${prettyCard(input.c1)} is one of the aces you set aside.</b> Ask them to name a different card.</div>`;
+    $("cheat").style.display = "none"; $("cheat").innerHTML = "";
+    return;
+  }
   const outs = findShimOuts({ c1: input.c1, n1: input.n1 }, settings);
   let html = "";
   if (!outs.length) {
