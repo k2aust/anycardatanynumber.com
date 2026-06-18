@@ -949,9 +949,11 @@ function shimSetupLine(cfg) {
 function findShimOuts(input, S) {
   const C = input.c1, n = input.n1, all = [];
   if (!C || !n) return [];
+  // honour the "Allow digit-summing" toggle — off = clean outs only (no digit-add)
+  const finder = (S && S.enabled && S.enabled.digitSum) ? outsWithDigitSum : outsOnDeck;
   for (const cfg of shimDecks(S)) {
     const setup = shimSetupLine(cfg);
-    for (const o of outsWithDigitSum(cfg.deck, C, n)) {
+    for (const o of finder(cfg.deck, C, n)) {
       const steps = [setup, ...o.steps];
       all.push({ ...o, added: cfg.deck.length - 48, steps, title: steps.join(" ") });
     }
