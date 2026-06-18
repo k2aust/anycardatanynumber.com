@@ -273,6 +273,9 @@ const DEFAULT_SETTINGS = {
              dealCountBack: true, spellNumber: true, dealSpellNumBack: true, spellCard: true,
              face: true, offNext: true, offBefore: false, phraseThe: true, phraseNoOf: true,
              cutCard: true, jokers: false, digitSum: true, aceShim: false },
+  // spectator-facing defaults above; the magician preset (Aronson/half/jokers/aces)
+  // is applied on first unlock — see applyMagicianPreset(). Public visitors never unlock.
+  magicianReady: false,
 };
 
 // input: { c1, n1, c2, n2 }  (cards like "7H", numbers 1-52; any subset)
@@ -868,15 +871,20 @@ function baseDeckNoAces(S) {                           // chosen stack rotated t
   for (let i = 0; i < 52; i++) out.push(STACK[(start + i) % 52]);
   return out.filter(c => !ACE_CODES.includes(c));
 }
-function shimDecks(S) {                                // 9 configs: aces & jokers each {none, top, face}
-  const base = baseDeckNoAces(S), decks = [];
-  for (const jokers of ["none", "top", "face"])
-    for (const aces of ["none", "top", "face"]) {
-      let d = base.slice();
-      if (aces === "top") d = [...ACE_CODES, ...d]; else if (aces === "face") d = [...d, ...ACE_CODES];
-      if (jokers === "top") d = [...JOKER_CODES, ...d]; else if (jokers === "face") d = [...d, ...JOKER_CODES];
-      decks.push({ deck: d, jokers, aces });
-    }
+function shimDecks(S) {                                // aces & jokers each {none,top,face}; half mode adds the cut reassembly
+  const base = baseDeckNoAces(S), half = !!(S && S.mode === "half");
+  const h = Math.floor(base.length / 2);
+  const bases = half ? [{ d: base, cut: false }, { d: [...base.slice(h), ...base.slice(0, h)], cut: true }]
+                     : [{ d: base, cut: false }];
+  const decks = [];
+  for (const b of bases)
+    for (const jokers of ["none", "top", "face"])
+      for (const aces of ["none", "top", "face"]) {
+        let d = b.d.slice();
+        if (aces === "top") d = [...ACE_CODES, ...d]; else if (aces === "face") d = [...d, ...ACE_CODES];
+        if (jokers === "top") d = [...JOKER_CODES, ...d]; else if (jokers === "face") d = [...d, ...JOKER_CODES];
+        decks.push({ deck: d, jokers, aces, cut: b.cut });
+      }
   return decks;
 }
 // Every single-card/number out available on a literal deck (top→bottom, "JK"=joker).
@@ -940,9 +948,9 @@ function shimSetupLine(cfg) {
   const add = [];
   if (cfg.aces !== "none") add.push(`the 4 aces to the ${cfg.aces}`);
   if (cfg.jokers !== "none") add.push(`the 2 jokers to the ${cfg.jokers}`);
-  const added = cfg.deck.length - 48;
-  return `Set up: deck is your stack minus the 4 aces; ` +
-    (add.length ? `add ${add.join(" and ")} (${added} cards added).` : `add nothing (48-card base).`);
+  const reasm = cfg.cut ? " cut the bottom half to the top;" : "";
+  return `Set up: deck is your stack minus the 4 aces;${reasm} ` +
+    (add.length ? `add ${add.join(" and ")}.` : `add nothing.`);
 }
 // Search every shim configuration; outs ranked best-first (score, then fewer cards added),
 // each prefixed with its setup instruction.
@@ -958,7 +966,10 @@ function findShimOuts(input, S) {
       all.push({ ...o, added: cfg.deck.length - 48, steps, title: steps.join(" ") });
     }
   }
-  all.sort((a, b) => (b.score - a.score) || (a.added - b.added));
+  // digit-sum is a last resort: any clean out outranks every digit-sum out,
+  // regardless of base score. Within each group: higher score, then fewer cards.
+  const isDS = o => /^Digit sum/.test(o.method);
+  all.sort((a, b) => (isDS(a) - isDS(b)) || (b.score - a.score) || (a.added - b.added));
   return all;
 }
 /*ENGINE-END*/
@@ -1088,6 +1099,7 @@ function loadSettings() {
       base: { ...DEFAULT_SETTINGS.base, ...s.base },
       mod: { ...DEFAULT_SETTINGS.mod, ...s.mod },
       enabled: { ...DEFAULT_SETTINGS.enabled, ...s.enabled },
+      magicianReady: !!s.magicianReady,
     };
     // Scoring-model migration: when the app's default scoring changes, adopt
     // the new base + mod (deck choices and method on/off toggles are kept).
@@ -1100,6 +1112,19 @@ function loadSettings() {
   } catch { return structuredClone(DEFAULT_SETTINGS); }
 }
 function saveSettings() { localStorage.setItem("acaanSettings", JSON.stringify(settings)); }
+// The magician's working default: memorized Aronson, half-deck setup, jokers +
+// aces (ace-shim). digit-sum stays enabled but ranks last (used only when no
+// clean out exists). Applied once on first unlock; later tweaks persist.
+function applyMagicianPreset() {
+  settings.stack = "aronson";
+  settings.topCard = "JS";
+  settings.mode = "half";
+  settings.enabled.jokers = true;
+  settings.enabled.aceShim = true;
+  settings.enabled.digitSum = true;
+  settings.magicianReady = true;
+  saveSettings();
+}
 
 /* pickers */
 // ---- spectator input steering (jokers are off, so we nudge inputs to hits) ----
@@ -1683,6 +1708,10 @@ $("title").addEventListener("click", () => {
   if (tapCount >= 6) {
     tapCount = 0;
     magicianMode = !magicianMode;
+    // first time the magician unlocks on this device, switch to the magician
+    // preset (Aronson, half setup, jokers + aces; digit-sum stays on but ranks
+    // last, so it's only used when no clean out exists)
+    if (magicianMode && !settings.magicianReady) applyMagicianPreset();
     // leaving the settings screen if we just locked
     if (!magicianMode) { $("settings").style.display = "none"; $("app").style.display = "block"; }
     render();
