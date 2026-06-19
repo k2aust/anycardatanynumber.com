@@ -1070,7 +1070,7 @@ function spectatorSteps(o) {
       const face = holdFace ? holdFace[0] : "FACE DOWN";
       out.push(s.startsWith("CUT")
         ? `Cards are held ${face}.`                       // C → CUT
-        : `Reassemble the cards, held ${face}.`);         // R → REPLACE
+        : `Reassemble the cards and hold them ${face}.`);  // R → REPLACE
       i++; // consume the hold step we folded in
       continue;
     }
