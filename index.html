@@ -223,7 +223,7 @@
     <button data-m="gaff" class="sel">Duplicate gaff</button>
     <button data-m="regular">Regular deck (Aronson)</button>
   </div>
-  <label class="toggle" style="margin:0 2px 8px"><input type="checkbox" id="dl" checked> prefer double-lift (one-short) over indicator</label>
+  <label class="toggle" id="ddDlLabel" style="margin:0 2px 8px"><input type="checkbox" id="dl" checked> prefer double-lift (one-short) over indicator</label>
   <div class="padrow">
     <div class="grid3" id="vals"></div>
     <div class="card" id="cardShow">&mdash;</div>
@@ -234,7 +234,7 @@
     <div><div class="numdisp" id="numDisp">&ndash;</div><div class="hint" id="numGuide">any number 10&ndash;43 works</div></div>
   </div>
   <div class="panel gold" id="out" style="display:none"></div>
-  <details>
+  <details id="ddDetails">
     <summary>How to perform &middot; setup &middot; stack</summary>
     <div class="panel">
       <p class="hint" id="modeNote"></p>
@@ -1784,12 +1784,17 @@ $("title").addEventListener("click", () => {
     // last, so it's only used when no clean out exists)
     if (magicianMode && !settings.magicianReady) applyMagicianPreset();
     // leaving the settings screen if we just locked
-    if (!magicianMode) { $("settings").style.display = "none"; $("ddScreen").style.display = "none"; $("app").style.display = "block"; }
+    if ($("ddScreen").style.display === "block") {
+      if (ddRerender) ddRerender();              // tool stays open; flip explicit/coded
+    } else if (!magicianMode) {
+      $("settings").style.display = "none"; $("app").style.display = "block";
+    }
     render();
   }
 });
 
-$("ddBtn").addEventListener("click", () => { $("app").style.display = "none"; $("settings").style.display = "none"; $("ddScreen").style.display = "block"; });
+let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
+$("ddBtn").addEventListener("click", () => { $("app").style.display = "none"; $("settings").style.display = "none"; $("ddScreen").style.display = "block"; if (ddRerender) ddRerender(); });
 $("ddBack").addEventListener("click", () => { $("ddScreen").style.display = "none"; $("app").style.display = "block"; render(); });
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
@@ -1856,15 +1861,27 @@ function resolveOut(face, N, allowDL) {
     || ((a.cfg.orient==="face"?1:0)-(b.cfg.orient==="face"?1:0)) || ((b.faceUp?1:0)-(a.faceUp?1:0)));
   return c[0];
 }
-function stepsFor(out, face, N) {
+function stepsFor(out, face, N, coded) {
   if (!out) return null;
   const s = [], F = pretty(face), fromFace = out.cfg.orient === "face", up = out.faceUp, fd = up ? "face up" : "face down";
-  if (out.cfg.cut) s.push("Cut the bottom half to the top.");
-  const al = addLabel(out.cfg.added); if (al) s.push("Add " + al + (fromFace ? " to the face." : "."));
-  if (fromFace) s.push("Hold the deck face up and deal from the face.");
+  if (coded) {
+    // One coded sentence: cut/replace verb + aces (subject) + jokers + deal facing.
+    const FACE = "FACE " + (up ? "UP" : "DOWN");
+    const aces = out.cfg.added === 4 || out.cfg.added === 6;
+    const jk = (out.cfg.added === 2 || out.cfg.added === 6) ? " including the jokers" : "";
+    s.push(out.cfg.cut
+      ? (aces ? `All the cards${jk} are held ${FACE}.` : `Cards are held ${FACE}${jk}.`)
+      : (aces ? `Pick up the deck and hold all the cards${jk} ${FACE}.` : `Pick up the deck and hold the cards ${FACE}${jk}.`));
+  } else {
+    if (out.cfg.cut) s.push("Cut the bottom half to the top.");
+    const al = addLabel(out.cfg.added); if (al) s.push("Add " + al + (fromFace ? " to the face." : "."));
+    if (fromFace) s.push("Hold the deck face up and deal from the face.");
+  }
   if (out.method === "deal") s.push(`Deal ${N} cards ${fd} — the last card is the ${F}.`);
   else if (out.method === "next") s.push(`Deal ${N} cards ${fd} — the NEXT card is the ${F}.`);
-  else if (out.method === "dl") s.push(`Deal ${N} cards face down, double-lifting the final count — the ${F}.`);
+  else if (out.method === "dl") s.push(coded
+    ? `Deal ${N} cards into the magician's hands; the last one is the ${F}.`
+    : `Deal ${N} cards face down, double-lifting the final count — the ${F}.`);
   else {
     const ind = pretty(out.cfg.deck[out.q-1]);
     if (out.off === 0) s.push(up ? `Deal ${N} cards face up — card #${N} is the ${ind} (a ${out.v}).`
@@ -1923,7 +1940,8 @@ function refresh() {
   const f = curFace();
   $("cardShow").textContent = f ? pretty(f) : "—";
   $("cardShow").className = "card" + (f && isRed(f) ? " red" : "");
-  if (!f) $("numGuide").textContent = "tap value + " + (mode === "gaff" ? "colour" : "suit");
+  if (!magicianMode) { /* coded view hides the dud guidance entirely */ }
+  else if (!f) $("numGuide").textContent = "tap value + " + (mode === "gaff" ? "colour" : "suit");
   else { const duds = faceDuds($("dl").checked, 43)[f];
     $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`; }
   if (numEntry && f) resolve(); else $("out").style.display = "none";   // re-resolve if a number is already entered
@@ -1937,18 +1955,35 @@ function updateModeNote() {
 function resolve() {
   const f = curFace(); if (!f) { $("out").style.display = "none"; return; }
   const N = parseInt(numEntry, 10);
+  const coded = !magicianMode;
+  const out = (N >= 1 && N <= 52) ? resolveOut(f, N, $("dl").checked) : null;
+  if (coded) {
+    // spectator view: only the innocent steps, nothing else
+    if (!out) { $("out").style.display = "none"; return; }
+    $("out").style.display = "block";
+    $("out").innerHTML = `<ol class="steps">${stepsFor(out, f, N, true).map(s => `<li>${s}</li>`).join("")}</ol>`;
+    return;
+  }
+  // magician view
   $("out").style.display = "block";
   if (!(N >= 1 && N <= 52)) { $("out").innerHTML = `<span class="hint">Tap their number (10–43) on the pad.</span>`; return; }
-  const out = resolveOut(f, N, $("dl").checked);
   if (!out) { $("out").innerHTML = `<span class="bad">No clean out for ${pretty(f)} at ${N}.</span> <span class="hint">${N < 10 || N > 43 ? "Outside the forced range — redirect to a two-digit number under 44." : "Steer them off this number."}</span>`; return; }
   const tierName = out.tier === 0 ? "clean deal" : out.tier === 1 ? "double-lift" : "indicator";
   const oor = (N < 10 || N > 43) ? `<span class="warn"> · outside 10–43 — redirect if you can</span>` : "";
   const faceUp = out.faceUp
     ? `<div class="ok" style="margin-top:8px">✓ Safe to deal FACE UP${mode === "gaff" ? " (their duplicate stays buried)" : ""}.</div>`
     : `<div class="warn" style="margin-top:8px">Must deal FACE DOWN — their duplicate would show face up.</div>`;
-  $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div><ol class="steps">${stepsFor(out, f, N).map(s => `<li>${s}</li>`).join("")}</ol>${faceUp}`;
+  $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div><ol class="steps">${stepsFor(out, f, N, false).map(s => `<li>${s}</li>`).join("")}</ol>${faceUp}`;
 }
-renderSuitSel(); renderStack(); updateModeNote(); refresh();   // init (gaff mode)
+function setCodedVisibility(coded) {
+  const dn = coded ? "none" : "";
+  $("modeSel").style.display = dn;
+  $("ddDlLabel").style.display = dn;
+  $("numGuide").style.display = dn;
+  $("ddDetails").style.display = dn;
+}
+ddRerender = () => { setCodedVisibility(!magicianMode); refresh(); };
+renderSuitSel(); renderStack(); updateModeNote(); setCodedVisibility(!magicianMode); refresh();   // init (gaff mode)
 })();
 
 buildPickers();
