@@ -138,6 +138,7 @@
   #ddScreen button.sel { border-color:var(--gold); color:var(--gold); }
   #ddScreen button.red { color:var(--red); }
   #ddScreen button.redsel { border-color:var(--red); color:var(--red); background:#1a1014; }
+  #ddScreen #suitsel button:disabled { opacity:.22; cursor:default; }
   #ddScreen .val { min-width:42px; text-align:center; font-weight:600; }
   #ddScreen .card { font-size:30px; font-weight:600; }
   #ddScreen .card.red { color:var(--red); }
@@ -1902,17 +1903,21 @@ const VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace �
 let value = null, pick = null;   // pick = colour ("black"/"red") in gaff mode, or suit ("C/H/S/D") in regular mode
 $("vals").innerHTML = VALUES.map(v => `<button class="val" data-v="${v}">${v}</button>`).join("");
 $("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; value = v;
-  [...$("vals").children].forEach(b => b.classList.toggle("sel", b.dataset.v === v)); refresh(); });
+  [...$("vals").children].forEach(b => b.classList.toggle("sel", b.dataset.v === v));
+  if (pick && !suitAllowed(pick)) pick = null;   // gaff: changing value can invalidate the chosen suit
+  styleSuitSel(); refresh(); });
 
-const isRedBtn = b => b.dataset.p === "red" || "HD".includes(b.dataset.p);
+// gaff allows only the parity-correct suit per value (a valid face); regular allows all four
+function suitAllowed(s) { return mode !== "gaff" || !value || FACES.includes(value + s); }
 function styleSuitSel() { [...$("suitsel").children].forEach(b => {
-  b.className = b.dataset.p === pick ? (isRedBtn(b) ? "redsel" : "sel") : (isRedBtn(b) ? "red" : ""); }); }
+  const red = "HD".includes(b.dataset.p), sel = b.dataset.p === pick;
+  b.className = sel ? (red ? "redsel" : "sel") : (red ? "red" : "");
+  b.disabled = !suitAllowed(b.dataset.p); }); }
 function renderSuitSel() {
-  if (mode === "gaff") { $("suitsel").innerHTML = `<button data-p="black">Black ♣♠</button><button data-p="red">Red ♥♦</button>`; pick = "black"; }
-  else { $("suitsel").innerHTML = ["C","S","H","D"].map(s => `<button data-p="${s}">${SUIT_SYM[s]}</button>`).join(""); pick = null; }
-  styleSuitSel();
+  $("suitsel").innerHTML = ["C","S","H","D"].map(s => `<button data-p="${s}">${SUIT_SYM[s]}</button>`).join("");
+  pick = null; styleSuitSel();
 }
-$("suitsel").addEventListener("click", e => { const p = e.target.dataset?.p; if (!p) return; pick = p; styleSuitSel(); refresh(); });
+$("suitsel").addEventListener("click", e => { const p = e.target.dataset?.p; if (!p || !suitAllowed(p)) return; pick = p; styleSuitSel(); refresh(); });
 $("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if (!m || m === mode) return;
   setDeck(m);
   [...$("modeSel").children].forEach(b => b.classList.toggle("sel", b.dataset.m === m));
@@ -1935,13 +1940,13 @@ $("keypad").addEventListener("click", e => {
   if (numEntry.length === 2) resolve();   // auto-resolve once two digits are in
 });
 
-function curFace() { if (!value || !pick) return null; return mode === "gaff" ? faceFor(value, pick) : value + pick; }
+function curFace() { if (!value || !pick) return null; const f = value + pick; return FACES.includes(f) ? f : null; }
 function refresh() {
   const f = curFace();
   $("cardShow").textContent = f ? pretty(f) : "—";
   $("cardShow").className = "card" + (f && isRed(f) ? " red" : "");
   if (!magicianMode) { /* coded view hides the dud guidance entirely */ }
-  else if (!f) $("numGuide").textContent = "tap value + " + (mode === "gaff" ? "colour" : "suit");
+  else if (!f) $("numGuide").textContent = "tap value + suit";
   else { const duds = faceDuds($("dl").checked, 43)[f];
     $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`; }
   if (numEntry && f) resolve(); else $("out").style.display = "none";   // re-resolve if a number is already entered
@@ -1949,7 +1954,7 @@ function refresh() {
 function renderStack() { $("stackGrid").innerHTML = STACK.map(c => `<span class="${isRed(c) ? "r" : ""}">${pretty(c)}</span>`).join(""); }
 function updateModeNote() {
   $("modeNote").innerHTML = mode === "gaff"
-    ? `<b>Gaff:</b> 24 faces ×2. Free value <b>2–K</b> + "red or black" → suit is pinned. Force a number <b>10–43</b> — every card is a clean hit. Hold out 2 jokers + 4 aces; if they name an Ace, ask for another.`
+    ? `<b>Gaff:</b> 24 faces ×2. Free value <b>2–K</b> + "red or black" → suit is pinned; tap the named card (only its two valid suits enable). Force a number <b>10–43</b> — every card is a clean hit. Hold out 2 jokers + 4 aces; if they name an Ace, ask for another.`
     : `<b>Regular (Aronson):</b> name any value <b>2–K</b> + suit. Aces held out (with 2 jokers) as shims, so if they name an Ace ask for another. Single-copy deck, so coverage is lower — some cards have a few <b>excluded numbers</b> (shown), handled with "don't think of my number". Dealing face up is always safe.`;
 }
 function resolve() {
