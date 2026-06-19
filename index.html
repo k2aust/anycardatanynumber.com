@@ -1068,10 +1068,9 @@ function spectatorSteps(o) {
       // the next step is the genuine "Hold the deck FACE UP/DOWN." instruction
       const holdFace = /FACE (UP|DOWN)/.exec(steps[i + 1] || "");
       const face = holdFace ? holdFace[0] : "FACE DOWN";
-      out.push("Cut the cards into two equal piles.");
       out.push(s.startsWith("CUT")
         ? `Cards are held ${face}.`                       // C → CUT
-        : `Reassemble the piles and hold them ${face}.`); // R → REPLACE
+        : `Reassemble the cards, held ${face}.`);         // R → REPLACE
       i++; // consume the hold step we folded in
       continue;
     }
