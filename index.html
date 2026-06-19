@@ -130,33 +130,17 @@
   .switch input:checked + .slider:before { transform: translateX(19px); background: #000; }
   .hint { font-size: 11px; color: var(--dim); margin: 2px 0 0; line-height: 1.4; }
 
-  /* ---- duplicate-deck / constrained-choice magician tool (#ddScreen) ---- */
-  #ddScreen { max-width: 560px; }
-  #ddScreen > h1 { font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin:10px 0 4px; }
+  /* ---- constrained-choice magician tool (#ddScreen) — reuses the app's shared .picker/.grid/.chip/.steps styles ---- */
+  #ddScreen > h1 { font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin:8px 0; }
   #ddScreen .row { display:flex; flex-wrap:wrap; gap:6px; }
-  #ddScreen button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:15px; cursor:pointer; }
-  #ddScreen button.sel { border-color:var(--gold); color:var(--gold); }
-  #ddScreen button.red { color:var(--red); }
-  #ddScreen button.redsel { border-color:var(--red); color:var(--red); background:#1a1014; }
+  #ddScreen #modeSel button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:15px; cursor:pointer; }
+  #ddScreen #modeSel button.sel { border-color:var(--gold); color:var(--gold); }
+  #ddScreen #ddChips { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:12px; }
+  #ddScreen #ddNumEntry { text-align:center; font-size:34px; font-weight:800; min-height:46px; padding:2px 0 10px; letter-spacing:2px; }
   #ddScreen #suitsel button:disabled { opacity:.22; cursor:default; }
-  #ddScreen .val { min-width:42px; text-align:center; font-weight:600; }
-  #ddScreen .card { font-size:30px; font-weight:600; }
-  #ddScreen .card.red { color:var(--red); }
-  #ddScreen .numdisp { font-size:36px; font-weight:700; min-width:70px; text-align:center; color:var(--gold); }
-  #ddScreen .keypad { display:grid; grid-template-columns:repeat(3,54px); gap:6px; }
-  #ddScreen .keypad button { font-size:18px; padding:12px 0; }
-  #ddScreen .keypad button.ctrl { color:var(--dim); }
-  #ddScreen .keypad button.ok { color:var(--green); border-color:var(--green); }
-  #ddScreen .grid3 { display:grid; grid-template-columns:repeat(3,54px); gap:6px; }
-  #ddScreen .grid3 button { font-size:16px; font-weight:600; padding:12px 0; }
-  #ddScreen .padrow { display:flex; align-items:center; gap:22px; margin:8px 2px; }
-  #ddScreen .padrow .card { font-size:54px; line-height:1.1; }
-  #ddScreen .padrow .numdisp { font-size:54px; text-align:left; min-width:0; }
   #ddScreen .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px; }
   #ddScreen .panel.gold { border-color:var(--gold); }
   #ddScreen .ok { color:var(--green); } #ddScreen .warn { color:var(--gold); } #ddScreen .bad { color:var(--red); }
-  #ddScreen ol.steps { margin:6px 0 0; padding-left:22px; } #ddScreen ol.steps li { margin:5px 0; }
-  #ddScreen .hint { color:var(--dim); font-size:12px; margin:0; }
   #ddScreen .toggle { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--dim); }
   #ddScreen details { margin-top:10px; } #ddScreen summary { color:var(--dim); font-size:12px; cursor:pointer; }
   #ddScreen .stackgrid { display:grid; grid-template-columns:repeat(13,1fr); gap:3px; font-size:11px; margin-top:6px; }
@@ -219,22 +203,45 @@
 
 <section id="ddScreen" style="display:none">
   <div class="btnrow"><button id="ddBack">&#10094; Back</button></div>
-  <h1>Constrained-choice tool</h1>
+  <h1 id="ddTitle">Constrained-choice tool</h1>
   <div class="row" id="modeSel" style="margin-bottom:8px">
     <button data-m="gaff" class="sel">Duplicate gaff</button>
     <button data-m="regular">Regular deck (Aronson)</button>
   </div>
-  <label class="toggle" id="ddDlLabel" style="margin:0 2px 8px"><input type="checkbox" id="dl" checked> prefer double-lift (one-short) over indicator</label>
-  <div class="padrow">
-    <div class="grid3" id="vals"></div>
-    <div class="card" id="cardShow">&mdash;</div>
+  <label class="toggle" id="ddDlLabel" style="margin:0 2px 12px"><input type="checkbox" id="dl" checked> prefer double-lift (one-short) over indicator</label>
+
+  <div id="ddChips">
+    <div class="chip" data-step="0"><div class="lbl">Card</div><div class="val" id="ddChipCard">&mdash;</div></div>
+    <div class="chip" data-step="1"><div class="lbl">Number</div><div class="val" id="ddChipNum">&mdash;</div></div>
   </div>
-  <div class="row" id="suitsel" style="margin:6px 2px"></div>
-  <div class="padrow">
-    <div class="keypad" id="keypad"></div>
-    <div><div class="numdisp" id="numDisp">&ndash;</div><div class="hint" id="numGuide">any number 10&ndash;43 works</div></div>
+
+  <div class="picker" id="ddCardPicker">
+    <h2 id="ddCardTitle">Enter their card</h2>
+    <div class="grid values" id="vals"></div>
+    <div class="grid suits" id="suitsel"></div>
+    <button class="randombtn" id="ddRandomCard">&#127922; Random card generator</button>
+    <div id="ddCardRoll" style="display:none;text-align:center">
+      <div id="ddCardRollPreview" class="rollcard"></div>
+      <button class="randombtn confirmbtn" id="ddUseCard">&#10003; Use this card</button>
+    </div>
   </div>
-  <div class="panel gold" id="out" style="display:none"></div>
+
+  <div class="picker" id="ddNumberPicker" style="display:none">
+    <h2 id="ddNumTitle">Enter their number</h2>
+    <div id="ddNumEntry">&ndash;</div>
+    <div class="grid pad" id="keypad"></div>
+    <div class="hint" id="numGuide" style="text-align:center; margin-top:8px"></div>
+    <button class="randombtn" id="ddRandomNum">&#127922; Random number generator</button>
+    <div id="ddNumRoll" style="display:none">
+      <button class="randombtn confirmbtn" id="ddUseNum">&#10003; Use this number</button>
+    </div>
+  </div>
+
+  <section id="ddResults" style="display:none">
+    <div class="btnrow"><button id="ddEdit">&#9998; Edit inputs</button><button id="ddReset">&#10227; New trick</button></div>
+    <div class="panel gold" id="out"></div>
+  </section>
+
   <details id="ddDetails">
     <summary>How to perform &middot; setup &middot; stack</summary>
     <div class="panel">
@@ -1897,81 +1904,92 @@ function stepsFor(out, face, N, coded) {
 function faceDuds(allowDL, hi) { hi = hi || 44; const m = {}; for (const F of FACES) { const d = []; for (let N = 10; N <= hi; N++) if (!resolveOut(F, N, allowDL)) d.push(N); m[F] = d; } return m; }
 /*CC-DUP-ENGINE-END*/
 
-/* ---- UI (scoped to #ddScreen) ---- */
+/* ---- UI (scoped to #ddScreen) — stepped flow mirroring the main app ---- */
 const $ = id => document.getElementById(id);
-const VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace — aces are held out as shims
-let value = null, pick = null;   // pick = colour ("black"/"red") in gaff mode, or suit ("C/H/S/D") in regular mode
-$("vals").innerHTML = VALUES.map(v => `<button class="val" data-v="${v}">${v}</button>`).join("");
-$("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; value = v;
-  [...$("vals").children].forEach(b => b.classList.toggle("sel", b.dataset.v === v));
-  if (pick && !suitAllowed(pick)) pick = null;   // gaff: changing value can invalidate the chosen suit
-  styleSuitSel(); refresh(); });
+const DD_VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace — aces are held out as shims
+const DD_SUITS = ["S","H","C","D"];
+let pendingValue = null, pendingCard = null, numEntry = "";
+const ddState = { step: 0, card: null, num: null };
+
+$("vals").innerHTML = DD_VALUES.map(v => `<button data-v="${v}">${v}</button>`).join("");
+$("suitsel").innerHTML = DD_SUITS.map(s => `<button data-s="${s}" class="suit-${s.toLowerCase()}">${SUIT_SYM[s]}</button>`).join("");
+$("keypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button data-k="${d}">${d}</button>`).join("")
+  + `<button data-k="clear">C</button><button data-k="0">0</button><button data-k="ok" class="ok">&#10003;</button>`;
 
 // gaff allows only the parity-correct suit per value (a valid face); regular allows all four
-function suitAllowed(s) { return mode !== "gaff" || !value || FACES.includes(value + s); }
-function styleSuitSel() { [...$("suitsel").children].forEach(b => {
-  const red = "HD".includes(b.dataset.p), sel = b.dataset.p === pick;
-  b.className = sel ? (red ? "redsel" : "sel") : (red ? "red" : "");
-  b.disabled = !suitAllowed(b.dataset.p); }); }
-function renderSuitSel() {
-  $("suitsel").innerHTML = ["C","S","H","D"].map(s => `<button data-p="${s}">${SUIT_SYM[s]}</button>`).join("");
-  pick = null; styleSuitSel();
-}
-$("suitsel").addEventListener("click", e => { const p = e.target.dataset?.p; if (!p || !suitAllowed(p)) return; pick = p; styleSuitSel(); refresh(); });
-$("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if (!m || m === mode) return;
-  setDeck(m);
-  [...$("modeSel").children].forEach(b => b.classList.toggle("sel", b.dataset.m === m));
-  value = null; numEntry = ""; $("numDisp").textContent = "–";
-  [...$("vals").children].forEach(b => b.classList.remove("sel"));
-  renderSuitSel(); renderStack(); updateModeNote(); refresh();
-});
-$("dl").addEventListener("change", () => { refresh(); });
+function suitAllowed(s) { return mode !== "gaff" || !pendingValue || FACES.includes(pendingValue + s); }
+function styleValues() { [...$("vals").children].forEach(b => b.style.borderColor = b.dataset.v === pendingValue ? "var(--gold)" : "var(--line)"); }
+function styleSuits() { [...$("suitsel").children].forEach(b => b.disabled = !suitAllowed(b.dataset.s)); }
 
-// number keypad
-let numEntry = "";
-const KEYS = ["1","2","3","4","5","6","7","8","9","C","0","✓"];
-$("keypad").innerHTML = KEYS.map(k => `<button data-k="${k}" class="${k === "C" ? "ctrl" : k === "✓" ? "ok" : ""}">${k}</button>`).join("");
+$("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; pendingValue = v;
+  pendingCard = null; $("ddCardRoll").style.display = "none";   // a manual pick supersedes a rolled card
+  styleValues(); styleSuits(); });
+$("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if (!s || !pendingValue || !suitAllowed(s)) return;
+  const f = pendingValue + s; if (!FACES.includes(f)) return;
+  ddState.card = f; pendingValue = null; styleValues(); goStep(1);
+});
+// random card generator (spectator view) — rolls only VALID faces; press again for a fresh one
+$("ddRandomCard").addEventListener("click", () => {
+  const choices = FACES.length > 1 ? FACES.filter(c => c !== pendingCard) : FACES;
+  pendingCard = choices[Math.floor(Math.random() * choices.length)];
+  const pv = $("ddCardRollPreview");
+  pv.textContent = pretty(pendingCard);
+  pv.className = "rollcard" + (isRed(pendingCard) ? " red" : "");
+  $("ddCardRoll").style.display = "block";
+});
+$("ddUseCard").addEventListener("click", () => { if (!pendingCard) return; ddState.card = pendingCard; pendingCard = null; pendingValue = null; styleValues(); goStep(1); });
+// random number generator (spectator view) — rolls only WORKING numbers (10–43, clean out)
+$("ddRandomNum").addEventListener("click", () => {
+  if (!ddState.card) return;
+  let pool = []; for (let N = 10; N <= 43; N++) if (resolveOut(ddState.card, N, $("dl").checked)) pool.push(N);
+  if (!pool.length) for (let N = 10; N <= 43; N++) pool.push(N);
+  const cur = parseInt(numEntry, 10), choices = pool.length > 1 ? pool.filter(n => n !== cur) : pool;
+  numEntry = String(choices[Math.floor(Math.random() * choices.length)]);
+  $("ddNumEntry").textContent = numEntry;
+  $("ddNumRoll").style.display = "block";
+});
+$("ddUseNum").addEventListener("click", () => { const v = parseInt(numEntry, 10); if (v >= 1 && v <= 52) commitNum(v); });
 $("keypad").addEventListener("click", e => {
   const k = e.target.dataset?.k; if (!k) return;
-  if (k === "C") numEntry = "";
-  else if (k === "✓") { resolve(); return; }
+  $("ddNumRoll").style.display = "none";   // manual pad use supersedes a rolled number
+  if (k === "clear") numEntry = "";
+  else if (k === "ok") { const v = parseInt(numEntry, 10); if (v >= 1 && v <= 52) return commitNum(v); }
   else if (numEntry.length < 2) numEntry += k;
-  $("numDisp").textContent = numEntry || "–";
-  if (numEntry.length === 2) resolve();   // auto-resolve once two digits are in
+  $("ddNumEntry").textContent = numEntry || "–";
+  if (numEntry.length === 2) { const v = parseInt(numEntry, 10); if (v >= 1 && v <= 52) commitNum(v); }
 });
+function commitNum(v) { ddState.num = v; numEntry = ""; goStep(2); }
 
-function curFace() { if (!value || !pick) return null; const f = value + pick; return FACES.includes(f) ? f : null; }
-function refresh() {
-  const f = curFace();
-  $("cardShow").textContent = f ? pretty(f) : "—";
-  $("cardShow").className = "card" + (f && isRed(f) ? " red" : "");
-  if (!magicianMode) { /* coded view hides the dud guidance entirely */ }
-  else if (!f) $("numGuide").textContent = "tap value + suit";
-  else { const duds = faceDuds($("dl").checked, 43)[f];
-    $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`; }
-  if (numEntry && f) resolve(); else $("out").style.display = "none";   // re-resolve if a number is already entered
-}
+$("ddChips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
+  const st = +c.dataset.step; if (st === 1 && !ddState.card) return; goStep(st); });
+$("ddEdit").addEventListener("click", () => goStep(0));
+$("ddReset").addEventListener("click", ddReset);
+$("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if (!m || m === mode) return;
+  setDeck(m); [...$("modeSel").children].forEach(b => b.classList.toggle("sel", b.dataset.m === m));
+  renderStack(); updateModeNote(); ddReset();
+});
+$("dl").addEventListener("change", () => { if (ddState.step === 2) ddRender(); });
+
+function goStep(s) { ddState.step = s; if (s === 1) numEntry = ""; ddRender(); }
+function ddReset() { ddState.step = 0; ddState.card = null; ddState.num = null; pendingValue = null; numEntry = ""; styleValues(); styleSuits(); ddRender(); }
+
 function renderStack() { $("stackGrid").innerHTML = STACK.map(c => `<span class="${isRed(c) ? "r" : ""}">${pretty(c)}</span>`).join(""); }
 function updateModeNote() {
   $("modeNote").innerHTML = mode === "gaff"
     ? `<b>Gaff:</b> 24 faces ×2. Free value <b>2–K</b> + "red or black" → suit is pinned; tap the named card (only its two valid suits enable). Force a number <b>10–43</b> — every card is a clean hit. Hold out 2 jokers + 4 aces; if they name an Ace, ask for another.`
     : `<b>Regular (Aronson):</b> name any value <b>2–K</b> + suit. Aces held out (with 2 jokers) as shims, so if they name an Ace ask for another. Single-copy deck, so coverage is lower — some cards have a few <b>excluded numbers</b> (shown), handled with "don't think of my number". Dealing face up is always safe.`;
 }
-function resolve() {
-  const f = curFace(); if (!f) { $("out").style.display = "none"; return; }
-  const N = parseInt(numEntry, 10);
-  const coded = !magicianMode;
-  const out = (N >= 1 && N <= 52) ? resolveOut(f, N, $("dl").checked) : null;
-  if (coded) {
-    // spectator view: only the innocent steps, nothing else
-    if (!out) { $("out").style.display = "none"; return; }
-    $("out").style.display = "block";
-    $("out").innerHTML = `<ol class="steps">${stepsFor(out, f, N, true).map(s => `<li>${s}</li>`).join("")}</ol>`;
-    return;
-  }
-  // magician view
-  $("out").style.display = "block";
-  if (!(N >= 1 && N <= 52)) { $("out").innerHTML = `<span class="hint">Tap their number (10–43) on the pad.</span>`; return; }
+function setCodedVisibility(coded) {
+  const dn = coded ? "none" : "";
+  $("ddTitle").style.display = dn;
+  $("modeSel").style.display = dn;
+  $("ddDlLabel").style.display = dn;
+  $("ddDetails").style.display = dn;
+}
+function renderOut(coded) {
+  const f = ddState.card, N = ddState.num;
+  const out = (f && N >= 1 && N <= 52) ? resolveOut(f, N, $("dl").checked) : null;
+  if (coded) { $("out").innerHTML = out ? `<ol class="steps">${stepsFor(out, f, N, true).map(s => `<li>${s}</li>`).join("")}</ol>` : `<span class="hint">—</span>`; return; }
   if (!out) { $("out").innerHTML = `<span class="bad">No clean out for ${pretty(f)} at ${N}.</span> <span class="hint">${N < 10 || N > 43 ? "Outside the forced range — redirect to a two-digit number under 44." : "Steer them off this number."}</span>`; return; }
   const tierName = out.tier === 0 ? "clean deal" : out.tier === 1 ? "double-lift" : "indicator";
   const oor = (N < 10 || N > 43) ? `<span class="warn"> · outside 10–43 — redirect if you can</span>` : "";
@@ -1980,15 +1998,37 @@ function resolve() {
     : `<div class="warn" style="margin-top:8px">Must deal FACE DOWN — their duplicate would show face up.</div>`;
   $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div><ol class="steps">${stepsFor(out, f, N, false).map(s => `<li>${s}</li>`).join("")}</ol>${faceUp}`;
 }
-function setCodedVisibility(coded) {
-  const dn = coded ? "none" : "";
-  $("modeSel").style.display = dn;
-  $("ddDlLabel").style.display = dn;
-  $("numGuide").style.display = dn;
-  $("ddDetails").style.display = dn;
+function ddRender() {
+  const coded = !magicianMode;
+  // chips
+  $("ddChipCard").innerHTML = ddState.card ? pretty(ddState.card) : "—";
+  $("ddChipCard").className = "val" + (ddState.card && isRed(ddState.card) ? " red" : "");
+  $("ddChipNum").textContent = ddState.num != null ? ddState.num : "—";
+  $("ddChips").children[0].classList.toggle("active", ddState.step === 0);
+  $("ddChips").children[1].classList.toggle("active", ddState.step === 1);
+  // titles match the main app (spectator-facing when coded)
+  $("ddCardTitle").textContent = coded ? "Enter your card" : "Enter their card";
+  $("ddNumTitle").textContent = coded ? "Enter any number between 1 and 52" : "Enter their number";
+  // panels by step
+  $("ddCardPicker").style.display = ddState.step === 0 ? "" : "none";
+  $("ddNumberPicker").style.display = ddState.step === 1 ? "" : "none";
+  $("ddResults").style.display = ddState.step === 2 ? "" : "none";
+  setCodedVisibility(coded);
+  // random generators are a spectator-facing fairness prop: shown only in the coded view
+  $("ddRandomCard").style.display = coded ? "" : "none";
+  $("ddRandomNum").style.display = coded ? "" : "none";
+  $("ddCardRoll").style.display = "none";
+  $("ddNumRoll").style.display = "none";
+  if (ddState.step === 1) {
+    $("ddNumEntry").textContent = numEntry || "–";
+    if (coded) $("numGuide").innerHTML = "";
+    else { const f = ddState.card, duds = f ? faceDuds($("dl").checked, 43)[f] : [];
+      $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`; }
+  }
+  if (ddState.step === 2) renderOut(coded);
 }
-ddRerender = () => { setCodedVisibility(!magicianMode); refresh(); };
-renderSuitSel(); renderStack(); updateModeNote(); setCodedVisibility(!magicianMode); refresh();   // init (gaff mode)
+ddRerender = ddRender;
+renderStack(); updateModeNote(); ddReset();   // init (gaff mode, step 0)
 })();
 
 buildPickers();
