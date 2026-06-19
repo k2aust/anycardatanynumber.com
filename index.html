@@ -26,7 +26,7 @@
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
   header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dim); font-weight: 600; margin: 0; text-transform: uppercase; }
-  #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
+  #gearBtn, #ddBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
 
   /* step chips */
   #chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
@@ -129,13 +129,48 @@
   .switch input:checked + .slider { background: var(--gold); border-color: var(--gold); }
   .switch input:checked + .slider:before { transform: translateX(19px); background: #000; }
   .hint { font-size: 11px; color: var(--dim); margin: 2px 0 0; line-height: 1.4; }
+
+  /* ---- duplicate-deck / constrained-choice magician tool (#ddScreen) ---- */
+  #ddScreen { max-width: 560px; }
+  #ddScreen > h1 { font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin:10px 0 4px; }
+  #ddScreen .row { display:flex; flex-wrap:wrap; gap:6px; }
+  #ddScreen button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:15px; cursor:pointer; }
+  #ddScreen button.sel { border-color:var(--gold); color:var(--gold); }
+  #ddScreen button.red { color:var(--red); }
+  #ddScreen button.redsel { border-color:var(--red); color:var(--red); background:#1a1014; }
+  #ddScreen .val { min-width:42px; text-align:center; font-weight:600; }
+  #ddScreen .card { font-size:30px; font-weight:600; }
+  #ddScreen .card.red { color:var(--red); }
+  #ddScreen .numdisp { font-size:36px; font-weight:700; min-width:70px; text-align:center; color:var(--gold); }
+  #ddScreen .keypad { display:grid; grid-template-columns:repeat(3,54px); gap:6px; }
+  #ddScreen .keypad button { font-size:18px; padding:12px 0; }
+  #ddScreen .keypad button.ctrl { color:var(--dim); }
+  #ddScreen .keypad button.ok { color:var(--green); border-color:var(--green); }
+  #ddScreen .grid3 { display:grid; grid-template-columns:repeat(3,54px); gap:6px; }
+  #ddScreen .grid3 button { font-size:16px; font-weight:600; padding:12px 0; }
+  #ddScreen .padrow { display:flex; align-items:center; gap:22px; margin:8px 2px; }
+  #ddScreen .padrow .card { font-size:54px; line-height:1.1; }
+  #ddScreen .padrow .numdisp { font-size:54px; text-align:left; min-width:0; }
+  #ddScreen .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px; }
+  #ddScreen .panel.gold { border-color:var(--gold); }
+  #ddScreen .ok { color:var(--green); } #ddScreen .warn { color:var(--gold); } #ddScreen .bad { color:var(--red); }
+  #ddScreen ol.steps { margin:6px 0 0; padding-left:22px; } #ddScreen ol.steps li { margin:5px 0; }
+  #ddScreen .hint { color:var(--dim); font-size:12px; margin:0; }
+  #ddScreen .toggle { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--dim); }
+  #ddScreen details { margin-top:10px; } #ddScreen summary { color:var(--dim); font-size:12px; cursor:pointer; }
+  #ddScreen .stackgrid { display:grid; grid-template-columns:repeat(13,1fr); gap:3px; font-size:11px; margin-top:6px; }
+  #ddScreen .stackgrid span { text-align:center; padding:2px 0; border:1px solid var(--line); border-radius:4px; }
+  #ddScreen .stackgrid span.r { color:var(--red); }
 </style>
 </head>
 <body>
 
 <header>
   <h1 id="title">Any Card At Any Number</h1>
-  <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
+  <span>
+    <button id="ddBtn" aria-label="Duplicate-deck tool" style="display:none">&#127183;</button>
+    <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
+  </span>
 </header>
 
 <main id="app">
@@ -179,6 +214,34 @@
 <section id="settings">
   <div class="btnrow"><button id="closeSettings">&#10094; Back</button><button id="resetSettings">Reset defaults</button></div>
   <div id="settingsBody"></div>
+</section>
+
+<section id="ddScreen" style="display:none">
+  <div class="btnrow"><button id="ddBack">&#10094; Back</button></div>
+  <h1>Constrained-choice tool</h1>
+  <div class="row" id="modeSel" style="margin-bottom:8px">
+    <button data-m="gaff" class="sel">Duplicate gaff</button>
+    <button data-m="regular">Regular deck (Aronson)</button>
+  </div>
+  <label class="toggle" style="margin:0 2px 8px"><input type="checkbox" id="dl" checked> prefer double-lift (one-short) over indicator</label>
+  <div class="padrow">
+    <div class="grid3" id="vals"></div>
+    <div class="card" id="cardShow">&mdash;</div>
+  </div>
+  <div class="row" id="suitsel" style="margin:6px 2px"></div>
+  <div class="padrow">
+    <div class="keypad" id="keypad"></div>
+    <div><div class="numdisp" id="numDisp">&ndash;</div><div class="hint" id="numGuide">any number 10&ndash;43 works</div></div>
+  </div>
+  <div class="panel gold" id="out" style="display:none"></div>
+  <details>
+    <summary>How to perform &middot; setup &middot; stack</summary>
+    <div class="panel">
+      <p class="hint" id="modeNote"></p>
+      <div class="hint" style="margin-top:10px">Hold out 2 jokers + 4 aces. Deck (top &rarr; bottom):</div>
+      <div class="stackgrid" id="stackGrid"></div>
+    </div>
+  </details>
 </section>
 
 <script>
@@ -1433,6 +1496,7 @@ function render() {
     el.parentElement.classList.toggle("active", state.step === i);
   }
   $("gearBtn").style.display = magicianMode ? "" : "none";
+  $("ddBtn").style.display = magicianMode ? "" : "none";
   // random generators are a spectator aid; the magician types exact values
   $("randomCard").style.display = magicianMode ? "none" : "";
   $("randomNum").style.display = magicianMode ? "none" : "";
@@ -1720,10 +1784,172 @@ $("title").addEventListener("click", () => {
     // last, so it's only used when no clean out exists)
     if (magicianMode && !settings.magicianReady) applyMagicianPreset();
     // leaving the settings screen if we just locked
-    if (!magicianMode) { $("settings").style.display = "none"; $("app").style.display = "block"; }
+    if (!magicianMode) { $("settings").style.display = "none"; $("ddScreen").style.display = "none"; $("app").style.display = "block"; }
     render();
   }
 });
+
+$("ddBtn").addEventListener("click", () => { $("app").style.display = "none"; $("settings").style.display = "none"; $("ddScreen").style.display = "block"; });
+$("ddBack").addEventListener("click", () => { $("ddScreen").style.display = "none"; $("app").style.display = "block"; render(); });
+
+// ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
+(function () {
+/*CC-DUP-ENGINE-START*/
+const ARONSON = ["JS","KC","5C","2H","9S","AS","3H","6C","8D","AC","10S","5H","2D","KD","7D","8C","3S","AD","7S","5S","QD","AH","8S","3D","7H","QH","5D","7C","4H","KH","4D","10D","JC","JH","10C","JD","4S","10H","6H","3C","2S","9H","KS","6S","4C","8H","9C","QS","6D","QC","2C","9D"];
+const GAFF_STACK = ["2S","8H","4S","KC","3C","6S","QS","9C","JC","10H","10S","4H","5C","QH","3C","6S","7C","2H","9D","KC","8S","9C","3D","4H","7C","JD","9D","6H","5C","QH","2H","5D","8S","KD","7D","3D","2S","6H","QS","JD","8H","4S","5D","JC","10H","10S","7D","KD"];
+const ACES = ["AS","AH","AC","AD"];
+const REGULAR_STACK = ARONSON.filter(c => !ACES.includes(c));   // Aronson minus the held-out aces (48, single copies)
+const ODD = ["3","5","7","9","J","K"], EVEN = ["2","4","6","8","10","Q"];
+const SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
+const GAFF_FACES = []; for (const v of ODD) { GAFF_FACES.push(v+"C"); GAFF_FACES.push(v+"D"); } for (const v of EVEN) { GAFF_FACES.push(v+"H"); GAFF_FACES.push(v+"S"); }
+const REGULAR_FACES = REGULAR_STACK.slice();   // all 48 non-ace cards
+let mode = "gaff", STACK = GAFF_STACK, HALF = 24, FACES = GAFF_FACES, CONFIGS = [];
+function setDeck(m) { mode = m; STACK = m === "regular" ? REGULAR_STACK : GAFF_STACK; HALF = STACK.length / 2; FACES = m === "regular" ? REGULAR_FACES : GAFF_FACES; CONFIGS = dupConfigs(); }
+function pretty(c) { return c === "JK" ? "🃏" : c.slice(0,-1) + SUIT_SYM[c.slice(-1)]; }
+function isRed(c) { return "HD".includes(c.slice(-1)); }
+// gaff equivoque: free value + colour -> pinned suit (black+odd=♣, black+even=♠, red+odd=♦, red+even=♥)
+function faceFor(value, color) { const odd = ODD.includes(value); const suit = color === "black" ? (odd ? "C" : "S") : (odd ? "D" : "H"); return value + suit; }
+function deckSpot(c) { if (c === "JK") return null; const v = c.slice(0,-1); if (["A","J","Q","K"].includes(v)) return null; return parseInt(v,10); }
+function dupConfigs() {
+  const out = [], rots = [{ d: STACK, cut: false }, { d: [...STACK.slice(HALF), ...STACK.slice(0, HALF)], cut: true }];
+  // gaff deals face down only (a face deal would flash the duplicate); a single-copy
+  // regular deck can also be dealt from the face (always safe), which adds coverage.
+  const orients = mode === "regular" ? ["top", "face"] : ["top"];
+  for (const r of rots) for (const k of [0,2,4,6]) { const shim = Array(k).fill("JK");
+    for (const o of orients) out.push({ deck: o === "top" ? [...shim, ...r.d] : [...shim, ...[...r.d].reverse()], added: k, cut: r.cut, orient: o });
+  }
+  return out;
+}
+setDeck("gaff");   // initialise (gaff deck)
+const addLabel = k => k === 2 ? "the JOKERS" : k === 4 ? "the ACES" : k === 6 ? "the JOKERS and ACES" : null;
+// best out for (face, N). allowDL = include the one-short double-lift.
+const endpointOf = (o, N) => o.method === "deal" ? N : o.method === "next" ? N + 1 : o.method === "dl" ? N : o.method === "ind" ? o.q + o.v : o.q + o.v - 1;
+function resolveOut(face, N, allowDL) {
+  const c = [];
+  for (const cfg of CONFIGS) {
+    const d = cfg.deck, L = d.length;
+    // face-up safe = the named card's OTHER copy is buried deeper than where you stop
+    // (only one copy shown up to the endpoint). A face deal is inherently face up, so
+    // it's only valid when safe; a top deal is face down (always ok) and MAY go face up when safe.
+    const add = (tier, method, extra) => {
+      const o = { tier, method, cfg, ...extra };
+      const E = endpointOf(o, N); let copies = 0;
+      for (let i = 0; i < E && i < L; i++) if (d[i] === face) copies++;
+      const safe = copies === 1;
+      if (cfg.orient === "face" && !safe) return;          // a face deal would flash the duplicate
+      o.faceUp = cfg.orient === "face" ? true : (method !== "dl" && safe);
+      c.push(o);
+    };
+    if (N <= L && d[N-1] === face) add(0, "deal");
+    if (N+1 <= L && d[N] === face) add(0, "next");
+    if (allowDL && cfg.orient === "top" && N-1 >= 1 && d[N-2] === face) add(1, "dl");
+    for (const off of [0,1]) {
+      const q = N + off; if (q < 1 || q > L) continue;
+      const v = deckSpot(d[q-1]); if (v === null || d[q-1] === face) continue;
+      if (d[q+v-1] === face) add(2, "ind", { q, v, off });
+      else if (d[q+v-2] === face) add(2, "indR", { q, v, off });
+    }
+  }
+  if (!c.length) return null;
+  // prefer cleanest tier, then fewest added cards, then no-cut, then face deal, then face-up-safe
+  c.sort((a,b) => (a.tier-b.tier) || (a.cfg.added-b.cfg.added) || ((a.cfg.cut?1:0)-(b.cfg.cut?1:0))
+    || ((a.cfg.orient==="face"?1:0)-(b.cfg.orient==="face"?1:0)) || ((b.faceUp?1:0)-(a.faceUp?1:0)));
+  return c[0];
+}
+function stepsFor(out, face, N) {
+  if (!out) return null;
+  const s = [], F = pretty(face), fromFace = out.cfg.orient === "face", up = out.faceUp, fd = up ? "face up" : "face down";
+  if (out.cfg.cut) s.push("Cut the bottom half to the top.");
+  const al = addLabel(out.cfg.added); if (al) s.push("Add " + al + (fromFace ? " to the face." : "."));
+  if (fromFace) s.push("Hold the deck face up and deal from the face.");
+  if (out.method === "deal") s.push(`Deal ${N} cards ${fd} — the last card is the ${F}.`);
+  else if (out.method === "next") s.push(`Deal ${N} cards ${fd} — the NEXT card is the ${F}.`);
+  else if (out.method === "dl") s.push(`Deal ${N} cards face down, double-lifting the final count — the ${F}.`);
+  else {
+    const ind = pretty(out.cfg.deck[out.q-1]);
+    if (out.off === 0) s.push(up ? `Deal ${N} cards face up — card #${N} is the ${ind} (a ${out.v}).`
+                                 : `Deal ${N} cards face down; turn up card #${N} — the ${ind} (a ${out.v}).`);
+    else s.push(up ? `Deal ${N} cards face up — the NEXT card is the ${ind} (a ${out.v}).`
+                   : `Deal ${N} cards face down; turn up the NEXT card — the ${ind} (a ${out.v}).`);
+    s.push(out.method === "ind" ? `Set it aside and deal ${out.v} more ${fd} — the ${F}.`
+                                : `Replace it ${fd} and deal ${out.v} (counting it as one) — the ${F}.`);
+  }
+  return s;
+}
+function faceDuds(allowDL, hi) { hi = hi || 44; const m = {}; for (const F of FACES) { const d = []; for (let N = 10; N <= hi; N++) if (!resolveOut(F, N, allowDL)) d.push(N); m[F] = d; } return m; }
+/*CC-DUP-ENGINE-END*/
+
+/* ---- UI (scoped to #ddScreen) ---- */
+const $ = id => document.getElementById(id);
+const VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace — aces are held out as shims
+let value = null, pick = null;   // pick = colour ("black"/"red") in gaff mode, or suit ("C/H/S/D") in regular mode
+$("vals").innerHTML = VALUES.map(v => `<button class="val" data-v="${v}">${v}</button>`).join("");
+$("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; value = v;
+  [...$("vals").children].forEach(b => b.classList.toggle("sel", b.dataset.v === v)); refresh(); });
+
+const isRedBtn = b => b.dataset.p === "red" || "HD".includes(b.dataset.p);
+function styleSuitSel() { [...$("suitsel").children].forEach(b => {
+  b.className = b.dataset.p === pick ? (isRedBtn(b) ? "redsel" : "sel") : (isRedBtn(b) ? "red" : ""); }); }
+function renderSuitSel() {
+  if (mode === "gaff") { $("suitsel").innerHTML = `<button data-p="black">Black ♣♠</button><button data-p="red">Red ♥♦</button>`; pick = "black"; }
+  else { $("suitsel").innerHTML = ["C","S","H","D"].map(s => `<button data-p="${s}">${SUIT_SYM[s]}</button>`).join(""); pick = null; }
+  styleSuitSel();
+}
+$("suitsel").addEventListener("click", e => { const p = e.target.dataset?.p; if (!p) return; pick = p; styleSuitSel(); refresh(); });
+$("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if (!m || m === mode) return;
+  setDeck(m);
+  [...$("modeSel").children].forEach(b => b.classList.toggle("sel", b.dataset.m === m));
+  value = null; numEntry = ""; $("numDisp").textContent = "–";
+  [...$("vals").children].forEach(b => b.classList.remove("sel"));
+  renderSuitSel(); renderStack(); updateModeNote(); refresh();
+});
+$("dl").addEventListener("change", () => { refresh(); });
+
+// number keypad
+let numEntry = "";
+const KEYS = ["1","2","3","4","5","6","7","8","9","C","0","✓"];
+$("keypad").innerHTML = KEYS.map(k => `<button data-k="${k}" class="${k === "C" ? "ctrl" : k === "✓" ? "ok" : ""}">${k}</button>`).join("");
+$("keypad").addEventListener("click", e => {
+  const k = e.target.dataset?.k; if (!k) return;
+  if (k === "C") numEntry = "";
+  else if (k === "✓") { resolve(); return; }
+  else if (numEntry.length < 2) numEntry += k;
+  $("numDisp").textContent = numEntry || "–";
+  if (numEntry.length === 2) resolve();   // auto-resolve once two digits are in
+});
+
+function curFace() { if (!value || !pick) return null; return mode === "gaff" ? faceFor(value, pick) : value + pick; }
+function refresh() {
+  const f = curFace();
+  $("cardShow").textContent = f ? pretty(f) : "—";
+  $("cardShow").className = "card" + (f && isRed(f) ? " red" : "");
+  if (!f) $("numGuide").textContent = "tap value + " + (mode === "gaff" ? "colour" : "suit");
+  else { const duds = faceDuds($("dl").checked, 43)[f];
+    $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`; }
+  if (numEntry && f) resolve(); else $("out").style.display = "none";   // re-resolve if a number is already entered
+}
+function renderStack() { $("stackGrid").innerHTML = STACK.map(c => `<span class="${isRed(c) ? "r" : ""}">${pretty(c)}</span>`).join(""); }
+function updateModeNote() {
+  $("modeNote").innerHTML = mode === "gaff"
+    ? `<b>Gaff:</b> 24 faces ×2. Free value <b>2–K</b> + "red or black" → suit is pinned. Force a number <b>10–43</b> — every card is a clean hit. Hold out 2 jokers + 4 aces; if they name an Ace, ask for another.`
+    : `<b>Regular (Aronson):</b> name any value <b>2–K</b> + suit. Aces held out (with 2 jokers) as shims, so if they name an Ace ask for another. Single-copy deck, so coverage is lower — some cards have a few <b>excluded numbers</b> (shown), handled with "don't think of my number". Dealing face up is always safe.`;
+}
+function resolve() {
+  const f = curFace(); if (!f) { $("out").style.display = "none"; return; }
+  const N = parseInt(numEntry, 10);
+  $("out").style.display = "block";
+  if (!(N >= 1 && N <= 52)) { $("out").innerHTML = `<span class="hint">Tap their number (10–43) on the pad.</span>`; return; }
+  const out = resolveOut(f, N, $("dl").checked);
+  if (!out) { $("out").innerHTML = `<span class="bad">No clean out for ${pretty(f)} at ${N}.</span> <span class="hint">${N < 10 || N > 43 ? "Outside the forced range — redirect to a two-digit number under 44." : "Steer them off this number."}</span>`; return; }
+  const tierName = out.tier === 0 ? "clean deal" : out.tier === 1 ? "double-lift" : "indicator";
+  const oor = (N < 10 || N > 43) ? `<span class="warn"> · outside 10–43 — redirect if you can</span>` : "";
+  const faceUp = out.faceUp
+    ? `<div class="ok" style="margin-top:8px">✓ Safe to deal FACE UP${mode === "gaff" ? " (their duplicate stays buried)" : ""}.</div>`
+    : `<div class="warn" style="margin-top:8px">Must deal FACE DOWN — their duplicate would show face up.</div>`;
+  $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div><ol class="steps">${stepsFor(out, f, N).map(s => `<li>${s}</li>`).join("")}</ol>${faceUp}`;
+}
+renderSuitSel(); renderStack(); updateModeNote(); refresh();   // init (gaff mode)
+})();
 
 buildPickers();
 render();
