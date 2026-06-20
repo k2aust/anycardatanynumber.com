@@ -147,6 +147,27 @@
   #ddScreen .stackgrid { display:grid; grid-template-columns:repeat(13,1fr); gap:3px; font-size:11px; margin-top:6px; }
   #ddScreen .stackgrid span { text-align:center; padding:2px 0; border:1px solid var(--line); border-radius:4px; }
   #ddScreen .stackgrid span.r { color:var(--red); }
+
+  /* ---- Lockscreen covert view (#lockScreen) — vertical clock + fingerprint sit OVER the hidden 8/5/2 keys ---- */
+  #lockScreen { position: fixed; inset: 0; background: linear-gradient(160deg,#0b1020,#05070d 60%,#000);
+    color: #fff; z-index: 50; font-family: -apple-system, system-ui, sans-serif; max-width: none; }
+  #lkTop { position: absolute; top: 9%; left: 0; right: 0; text-align: left; padding-left: 7vw; }
+  #lkDate { font-size: 5.2vw; color: rgba(255,255,255,.9); font-weight: 500; }
+  #lkWeather { margin-top: 1.5vh; font-size: 5vw; color: rgba(255,255,255,.8); letter-spacing: 1px; }
+  #lkWeather.u { text-decoration: underline; text-underline-offset: 3px; }
+  /* vertical clock + fingerprint ARE the tap targets for 8 / 5 / 2 (middle column only, so 7/9 etc. stay tappable) */
+  #lkHrs, #lkMins { position: absolute; left: 28%; width: 44%; text-align: center; font-size: 23vw; font-weight: 200; line-height: 1; letter-spacing: -0.6vw; z-index: 62; cursor: pointer; }
+  #lkHrs { top: 39%; }
+  #lkMins { top: 51%; }
+  #lkFinger { position: absolute; left: 33.33%; width: 33.34%; top: 67%; text-align: center; z-index: 62; cursor: pointer; color: rgba(255,255,255,.6); font-size: 8vw; }
+  #lkFinger .lkHint { font-size: 3.4vw; margin-top: .4vh; }
+  #lkZones { position: absolute; inset: 0; z-index: 60; pointer-events: none; }   /* only the zones capture taps */
+  #lkZones .z { position: absolute; pointer-events: auto; display: flex; align-items: center; justify-content: center; }
+  #lkZones .z .zl { display: none; font-size: 4.5vw; color: rgba(255,210,80,.9); }
+  #lkZones.debug .z { outline: 1px dashed rgba(255,200,0,.6); background: rgba(255,200,0,.06); }
+  #lkZones.debug .z .zl { display: block; }
+  #lkSetup { position: absolute; top: 0; right: 0; width: 22%; height: 10%; z-index: 61; }
+  #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
 </style>
 </head>
 <body>
@@ -249,6 +270,19 @@
       <div class="stackgrid" id="stackGrid"></div>
     </div>
   </details>
+</section>
+
+<section id="lockScreen" style="display:none">
+  <div id="lkTop">
+    <div id="lkDate">&mdash;</div>
+    <div id="lkWeather">--&deg;</div>
+  </div>
+  <div id="lkHrs">--</div>
+  <div id="lkMins">--</div>
+  <div id="lkFinger">&#128274;<div class="lkHint">Unlock to view</div></div>
+  <div id="lkZones"></div>
+  <div id="lkSetup"></div>
+  <div id="lkExit"></div>
 </section>
 
 <script>
@@ -1696,6 +1730,7 @@ function renderSettings() {
       ${Object.keys(STACKS).map(k => `<option value="${k}" ${(settings.stack||"aronson")===k?"selected":""}>${STACK_LABELS[k]}</option>`).join("")}
     </select></div>
     <button id="setOpenDup" class="randombtn" style="margin:8px 0 0">&#127183; Duplicate-gaff stack — constrained-choice tool</button>
+    <button id="setOpenLock" class="randombtn" style="margin:8px 0 0">&#128274; Lockscreen (gaff)</button>
     <div class="set-row"><span>Deck state</span><select id="setMode">
       <option value="full" ${settings.mode === "full" ? "selected" : ""}>Full deck (52)</option>
       <option value="half" ${settings.mode === "half" ? "selected" : ""}>Split: two halves (26 + 26)</option>
@@ -1758,6 +1793,7 @@ function renderSettings() {
     saveSettings(); renderSettings();
   });
   $("setOpenDup").addEventListener("click", () => { $("settings").style.display = "none"; $("ddScreen").style.display = "block"; if (ddRerender) ddRerender(); });
+  $("setOpenLock").addEventListener("click", () => { $("settings").style.display = "none"; if (lkOpen) lkOpen(); });
   $("settingsBody").querySelectorAll("input[data-base]").forEach(el =>
     el.addEventListener("change", () => { settings.base[el.dataset.base] = +el.value || 0; saveSettings(); }));
   $("settingsBody").querySelectorAll("input[data-mod]").forEach(el =>
@@ -1802,6 +1838,7 @@ $("title").addEventListener("click", () => {
 });
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
+let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
 $("ddBack").addEventListener("click", () => { $("ddScreen").style.display = "none"; $("app").style.display = "block"; render(); });
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
@@ -1903,6 +1940,18 @@ function stepsFor(out, face, N, coded) {
   return s;
 }
 function faceDuds(allowDL, hi) { hi = hi || 44; const m = {}; for (const F of FACES) { const d = []; for (let N = 10; N <= hi; N++) if (!resolveOut(F, N, allowDL)) d.push(N); m[F] = d; } return m; }
+// Lockscreen cipher: out -> { code, faceDown }. code = [C/R][packets][find].
+function encodeOut(out) {
+  if (!out) return { code: "", faceDown: false };
+  const cut = out.cfg.cut ? "C" : "R";
+  const pk = { 0: "", 2: "J", 4: "A", 6: "JA" }[out.cfg.added] || "";
+  let find = "";
+  if (out.method === "next") find = "N";
+  else if (out.method === "dl") find = "2";
+  else if (out.method === "ind") find = out.off === 0 ? "IN" : "NIN";   // set aside (not included)
+  else if (out.method === "indR") find = out.off === 0 ? "I" : "NI";    // count including
+  return { code: cut + pk + find, faceDown: !out.faceUp };
+}
 /*CC-DUP-ENGINE-END*/
 
 /* ---- UI (scoped to #ddScreen) — stepped flow mirroring the main app ---- */
@@ -2076,6 +2125,76 @@ function ddRender() {
   if (ddState.step === 2) renderOut(coded);
 }
 ddRerender = ddRender;
+
+/* ---- Lockscreen covert view (gaff): hidden-keypad input, disguised date/code ---- */
+let lkValue = null, lkColor = null, lkNum = "", lkPhase = "value", lkTimer = null, lkWeatherTxt = "--°";
+// invisible numpad — calculator layout so the middle column reads 8/5/2 top→bottom under the clock:
+//   J Q K / 7 8 9 / 4 5 6 / 1 2 3 / 10 0 C
+const LK_KEYS = [["J",0,0],["Q",1,0],["K",2,0],["7",0,1],["8",1,1],["9",2,1],
+                 ["4",0,2],["5",1,2],["6",2,2],["1",0,3],["2",1,3],["3",2,3],
+                 ["10",0,4],["0",1,4],["clr",2,4]];
+$("lkZones").innerHTML = LK_KEYS.map(([k,cx,ry]) =>
+  `<div class="z" data-k="${k}" style="left:${(cx*33.34).toFixed(2)}%;top:${(25+ry*13).toFixed(1)}%;width:33.34%;height:13%"><span class="zl">${k==="clr"?"C":k}</span></div>`).join("");
+$("lkZones").addEventListener("click", e => { const z = e.target.closest(".z"); if (z) lkTap(z.dataset.k); });
+$("lkExit").addEventListener("click", lkHide);                                         // tap top-left: exit
+$("lkSetup").addEventListener("click", () => $("lkZones").classList.toggle("debug"));   // tap top-right: reveal the hidden zones
+// the clock digits & fingerprint ARE the tap targets for the keys they cover (8 / 5 / 2)
+$("lkHrs").addEventListener("click", () => lkTap("8"));
+$("lkMins").addEventListener("click", () => lkTap("5"));
+$("lkFinger").addEventListener("click", () => lkTap("2"));
+
+function lkTap(k) {
+  if (k === "clr") { lkReset(); return; }
+  if (lkPhase === "value") {
+    let v = null;
+    if (k === "10") v = "10";
+    else if (k === "J" || k === "Q" || k === "K") v = k;
+    else if (k >= "2" && k <= "9") v = k;
+    else return;                                   // "1"=Ace (excluded) / "0" ignored here
+    lkValue = v; lkPhase = "color"; lkRenderDate();
+  } else if (lkPhase === "color") {
+    if (["J","7","4","1","10"].includes(k)) lkColor = "black";   // left column
+    else if (["K","9","6","3"].includes(k)) lkColor = "red";     // right column
+    else return;                                                 // middle column: ignore, wait for a side
+    lkPhase = "number"; lkRenderDate();
+  } else {                                          // number
+    if (lkNum.length >= 2 || !/^[0-9]$/.test(k)) return;         // J/Q/K/10 ignored; 2-digit max
+    lkNum += k; lkRenderDate();
+  }
+}
+function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkRenderDate(); }
+function lkStartClock() { lkTick(); lkTimer = setInterval(lkTick, 1000); }
+function lkStopClock() { if (lkTimer) clearInterval(lkTimer); lkTimer = null; }
+function lkTick() { const t = new Date();
+  $("lkHrs").textContent = String(t.getHours()).padStart(2,"0");
+  $("lkMins").textContent = String(t.getMinutes()).padStart(2,"0");
+  lkRenderDate(t); }
+function lkRenderDate(t) {
+  t = t || new Date();
+  const wd = t.toLocaleDateString(undefined,{weekday:"short"});
+  const mo = t.toLocaleDateString(undefined,{month:"short"});
+  const face = (lkValue && lkColor) ? faceFor(lkValue, lkColor) : null;
+  // feedback: show the value as soon as it's tapped (before colour), then the full card
+  const dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
+  const yearTxt = lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear());
+  $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
+  lkRenderCode(face);
+}
+function lkRenderCode(face) {
+  const w = $("lkWeather"), N = parseInt(lkNum,10);
+  if (face && N >= 1 && N <= 52) { const out = resolveOut(face, N, $("dl").checked);
+    if (out) { const e = encodeOut(out); w.textContent = e.code; w.classList.toggle("u", e.faceDown); return; } }
+  w.classList.remove("u"); w.textContent = lkWeatherTxt;
+}
+function lkFetchWeather() {
+  const put = (lat,lon) => fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m&temperature_unit=fahrenheit`)
+    .then(r=>r.json()).then(d=>{ lkWeatherTxt = Math.round(d.current.temperature_2m)+"°"; if(!$("lkWeather").classList.contains("u")) $("lkWeather").textContent = lkWeatherTxt; }).catch(()=>{});
+  fetch("https://ipapi.co/json/").then(r=>r.json()).then(l=>put(l.latitude,l.longitude)).catch(()=>{});
+}
+function lkShow() { setDeck("gaff"); $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="block"; lkReset(); lkStartClock(); lkFetchWeather(); }
+function lkHide() { $("lockScreen").style.display="none"; lkStopClock(); $("app").style.display="block"; }
+lkOpen = lkShow;
+
 renderStack(); updateModeNote(); ddReset();   // init (gaff mode, step 0)
 })();
 
