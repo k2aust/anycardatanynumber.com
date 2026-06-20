@@ -2169,14 +2169,14 @@ function setCodedVisibility(coded) {
   $("ddDlLabel").style.display = dn;
   $("ddDetails").style.display = dn;
 }
-// 3 example numbers offered to the spectator = the WORST (indicator-requiring) numbers for this card.
+// 5 example numbers offered to the spectator = the WORST (indicator-requiring) numbers for this card.
 // Suggesting them as examples steers people OFF them, shrinking the chance of an indicator out.
 function exampleNumbers(face, dl) {
   let bad = [];
   for (let N = 10; N <= 43; N++) { const o = resolveOut(face, N, dl); if (o && o.tier === 2) bad.push(N); }
   const shuf = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(p => p[1]);
-  let ex = shuf(bad).slice(0, 3);
-  if (ex.length < 3) for (const N of shuf([...Array(34)].map((_, i) => i + 10))) { if (ex.length >= 3) break; if (!ex.includes(N)) ex.push(N); }
+  let ex = shuf(bad).slice(0, 5);
+  if (ex.length < 5) for (const N of shuf([...Array(34)].map((_, i) => i + 10))) { if (ex.length >= 5) break; if (!ex.includes(N)) ex.push(N); }
   return ex.sort((a, b) => a - b);
 }
 function renderOut(coded) {
