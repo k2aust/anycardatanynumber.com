@@ -18,14 +18,42 @@
     --green: #57c98a;
     --amber: #d98b3a;
     --radius: 14px;
+    /* dup-tool / page theme — light is the default; body.theme-dark overrides below */
+    --dd-page: #d2b48c;
+    --dd-panel: #89cff0;
+    --dd-panel-label: #143642;
+    --dd-surface: #ffffff;
+    --dd-surface-text: #000000;
+    --dd-surface-border: #d0d7de;
+    --dd-reveal-border: #d0d7de;
+    --dd-btn: #ffffff;
+    --dd-btn-text: #000000;
+    --dd-btn-border: #d0d7de;
+    --dd-chip-label: #5a6b73;
+    --dd-title: #000000;
+  }
+  /* dark = the app's native palette (matches the live site) */
+  .theme-dark {
+    --dd-page: #0e0f13;
+    --dd-panel: #181a21;
+    --dd-panel-label: #8b8fa0;
+    --dd-surface: #181a21;
+    --dd-surface-text: #e8e6e0;
+    --dd-surface-border: #2b2f3b;
+    --dd-reveal-border: #e3b341;
+    --dd-btn: #1f222c;
+    --dd-btn-text: #e8e6e0;
+    --dd-btn-border: #2b2f3b;
+    --dd-chip-label: #8b8fa0;
+    --dd-title: #8b8fa0;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  html, body { margin: 0; padding: 0; background: var(--dd-page); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; }
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
-  header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dim); font-weight: 600; margin: 0; text-transform: uppercase; }
+  header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dd-title); font-weight: 600; margin: 0; text-transform: uppercase; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
 
   /* step chips */
@@ -141,6 +169,23 @@
   #ddScreen #suitsel button.lit, #ddScreen #ddGaffFlow button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
   #ddScreen #ddGaffFlow button { font-size: 20px; font-weight: 600; padding: 22px 0; }
   #ddScreen #ddGaffFlow button.off { pointer-events: none; }   /* wrong suit: looks the same, no tap/flash */
+  #ddScreen #ddGaffFlow .sy { font-size: 1.7em; vertical-align: -0.12em; }
+  #ddScreen #ddGaffFlow .syr { color: var(--red); }
+  /* colour step: white buttons, black/red content like real card colours */
+  #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); }
+  #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
+  #ddScreen .picker h2 { color: var(--dd-panel-label); }           /* labels with contrast on the panel */
+  #ddScreen #ddNumEntry, #ddScreen #ddNumExample { color: var(--dd-panel-label); }
+  #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); }
+  /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
+  #ddScreen #out { background: var(--dd-surface); color: var(--dd-surface-text); border-color: var(--dd-reveal-border); }
+  #ddScreen .chip { background: var(--dd-surface); border-color: var(--dd-surface-border); }
+  #ddScreen .chip .lbl { color: var(--dd-chip-label); }
+  #ddScreen .chip .val { color: var(--dd-surface-text); }
+  #ddScreen .chip .val .sy { font-size: 1.5em; vertical-align: -0.1em; }
+  #ddScreen .chip .val .syr { color: var(--red); }
+  #ddScreen #ddGaffFlow button[data-g="color"][data-v="black"] { color: var(--dd-btn-text); }
+  #ddScreen #ddGaffFlow button[data-g="color"][data-v="red"] { color: var(--red); }
   /* give the number keypad the same gold tap-flash as the other buttons (overrides the main app's no-flash pad rule) */
   #ddScreen #keypad { max-width: 340px; gap: 8px; }
   #ddScreen #keypad button { transition: background .15s, color .15s; font-size: 24px; padding: 22px 0; }
@@ -371,6 +416,7 @@ const DEFAULT_SETTINGS = {
   // their own stack/mode via 6 title taps (those choices persist per device).
   stack: "mnemonica",
   topCard: "4C",
+  theme: "light",   // "light" | "dark" — page + dup-tool palette (applyTheme)
   mode: "full",     // "full" | "half" (split into two 26-packets) | "cut" (spectator cuts, you glimpse)
   noteEnd: "top",   // in cut mode: did you glimpse the "top" or "bottom" card?
   // spellCount (spell the card first, then count to the number) sits just above
@@ -1096,6 +1142,9 @@ const VALUES = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 const SUITS = ["S","H","C","D"];
 
 let settings = loadSettings();
+// page + dup-tool palette: light is default, dark adds body.theme-dark (vars flip)
+function applyTheme() { document.documentElement.classList.toggle("theme-dark", settings.theme === "dark"); }
+applyTheme();
 let state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null };
 let numEntry = "", lastNumStep = -1;
 // Spectator mode is the default on every load (re-locked each visit). The
@@ -1209,6 +1258,7 @@ function loadSettings() {
       version: SETTINGS_VERSION,
       stack: STACKS[s.stack] ? s.stack : DEFAULT_SETTINGS.stack,
       topCard: s.topCard || DEFAULT_SETTINGS.topCard,
+      theme: s.theme === "dark" ? "dark" : "light",
       mode: s.mode || DEFAULT_SETTINGS.mode,
       noteEnd: s.noteEnd || DEFAULT_SETTINGS.noteEnd,
       base: { ...DEFAULT_SETTINGS.base, ...s.base },
@@ -1735,7 +1785,11 @@ function moveMethod(k, dir) {
 
 function renderSettings() {
   const activeStack = stackArr(settings);
-  let h = `<div class="set-group"><h3>Deck</h3>
+  let h = `<div class="set-group"><h3>Appearance</h3>
+    <div class="set-row"><span>Dark theme</span>
+      <label class="switch"><input type="checkbox" id="setTheme" ${settings.theme === "dark" ? "checked" : ""}><span class="slider"></span></label></div>
+    <p class="hint">Switches the page and the spectator gaff view between the light (tan / baby&#8209;blue) and dark palettes.</p></div>
+    <div class="set-group"><h3>Deck</h3>
     <div class="set-row"><span>Stack</span><select id="setStack">
       ${Object.keys(STACKS).map(k => `<option value="${k}" ${(settings.stack||"aronson")===k?"selected":""}>${STACK_LABELS[k]}</option>`).join("")}
     </select></div>
@@ -1794,6 +1848,7 @@ function renderSettings() {
   h += `</div>`;
   $("settingsBody").innerHTML = h;
 
+  $("setTheme").addEventListener("change", e => { settings.theme = e.target.checked ? "dark" : "light"; saveSettings(); applyTheme(); });
   $("setTopCard").addEventListener("change", e => { settings.topCard = e.target.value; saveSettings(); });
   $("setMode").addEventListener("change", e => { settings.mode = e.target.value; saveSettings(); renderSettings(); });
   if ($("setNoteEnd")) $("setNoteEnd").addEventListener("change", e => { settings.noteEnd = e.target.value; saveSettings(); });
@@ -1864,6 +1919,8 @@ const REGULAR_FACES = REGULAR_STACK.slice();   // all 48 non-ace cards
 let mode = "gaff", STACK = GAFF_STACK, HALF = 24, FACES = GAFF_FACES, CONFIGS = [];
 function setDeck(m) { mode = m; STACK = m === "regular" ? REGULAR_STACK : GAFF_STACK; HALF = STACK.length / 2; FACES = m === "regular" ? REGULAR_FACES : GAFF_FACES; CONFIGS = dupConfigs(); }
 function pretty(c) { return c === "JK" ? "🃏" : c.slice(0,-1) + SUIT_SYM[c.slice(-1)]; }
+// styled card: rank + a larger suit symbol, red for hearts/diamonds (matches the picker steps)
+function prettyHTML(c) { if (c === "JK") return "🃏"; const su = c.slice(-1); return c.slice(0,-1) + `<span class="sy${su === "H" || su === "D" ? " syr" : ""}">${SUIT_SYM[su]}</span>`; }
 function isRed(c) { return "HD".includes(c.slice(-1)); }
 // gaff equivoque: free value + colour -> pinned suit (black+odd=♣, black+even=♠, red+odd=♦, red+even=♥)
 function faceFor(value, color) { const odd = ODD.includes(value); const suit = color === "black" ? (odd ? "C" : "S") : (odd ? "D" : "H"); return value + suit; }
@@ -1920,12 +1977,16 @@ function stepsFor(out, face, N, coded) {
   const HOLD = "FACE " + (fromFace ? "UP" : "DOWN");                 // how the deck is HELD
   const into = fromFace ? "from the face" : "into a pile";           // deal facing (up/down) is shown by COLOUR, not words
   if (coded) {
-    // One coded sentence: cut/replace verb + aces (subject) + jokers + the HOLD facing.
-    const aces = out.cfg.added === 4 || out.cfg.added === 6;
-    const jk = (out.cfg.added === 2 || out.cfg.added === 6) ? " including the jokers" : "";
+    // One coded sentence. The SUBJECT phrase encodes which shims to add:
+    //   "Cards"=none, "All the cards"=aces, "Every card"=jokers, "Each and every card"=both.
+    // Passive ("…are/is held") = cut the bottom half to the top; active ("Pick up…") = no cut.
+    const [subj, verb, active] = { 0: ["Cards", "are", "the cards"],
+                                   4: ["All the cards", "are", "all the cards"],
+                                   2: ["Every card", "is", "every card"],
+                                   6: ["Each and every card", "is", "each and every card"] }[out.cfg.added] || ["Cards", "are", "the cards"];
     s.push(out.cfg.cut
-      ? (aces ? `All the cards${jk} are held ${HOLD}.` : `Cards are held ${HOLD}${jk}.`)
-      : (aces ? `Pick up the deck and hold all the cards${jk} ${HOLD}.` : `Pick up the deck and hold the cards ${HOLD}${jk}.`));
+      ? `${subj} ${verb} held ${HOLD}.`
+      : `Pick up the deck and hold ${active} ${HOLD}.`);
   } else {
     if (out.cfg.cut) s.push("Cut the bottom half to the top.");
     const al = addLabel(out.cfg.added); if (al) s.push("Add " + al + (fromFace ? " to the face." : "."));
@@ -1995,7 +2056,7 @@ $("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if 
 function resetGaff() { gColor = null; gKind = null; gValue = null; }
 function renderGaffStep() {
   const flow = $("ddGaffFlow"); let cols = 2, html = "", title = "";
-  if (!gColor) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black ♠♣</button><button data-g="color" data-v="red">Red ♥♦</button>`; }
+  if (!gColor) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
   else if (!gKind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
   else if (!gValue) {
     title = "Which value?";
@@ -2003,9 +2064,10 @@ function renderGaffStep() {
     else { cols = 3; html = [["J","Jack"],["Q","Queen"],["K","King"]].map(([v,l]) => `<button data-g="value" data-v="${v}">${l}</button>`).join(""); }
   } else {
     title = "Which suit?";
-    const pairs = gColor === "red" ? [["H","♥ Hearts"],["D","♦ Diamonds"]] : [["S","♠ Spades"],["C","♣ Clubs"]];
+    const pairs = gColor === "red" ? [["H","♥","Hearts"],["D","♦","Diamonds"]] : [["S","♠","Spades"],["C","♣","Clubs"]];
+    const redSuit = gColor === "red";
     const correct = faceFor(gValue, gColor).slice(-1);   // the wrong suit looks identical but is inert (no tap, no flash)
-    html = pairs.map(([s,l]) => `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}${s === correct ? "" : " off"}">${l}</button>`).join("");
+    html = pairs.map(([s,sym,name]) => `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}${s === correct ? "" : " off"}"><span class="sy${redSuit ? " syr" : ""}">${sym}</span> ${name}</button>`).join("");
   }
   $("ddCardTitle").textContent = title;
   flow.style.gridTemplateColumns = `repeat(${cols},1fr)`;
@@ -2118,7 +2180,7 @@ function renderOut(coded) {
 function ddRender() {
   const coded = !magicianMode;
   // chips
-  $("ddChipCard").innerHTML = ddState.card ? pretty(ddState.card) : "—";
+  $("ddChipCard").innerHTML = ddState.card ? prettyHTML(ddState.card) : "—";
   $("ddChipCard").className = "val" + (ddState.card && isRed(ddState.card) ? " red" : "");
   $("ddChipNum").textContent = ddState.num != null ? ddState.num : "—";
   $("ddChips").children[0].classList.toggle("active", ddState.step === 0);
