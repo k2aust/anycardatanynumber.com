@@ -141,7 +141,8 @@
   #ddScreen #suitsel button.lit, #ddScreen #ddGaffFlow button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
   #ddScreen #ddGaffFlow button { font-size: 20px; font-weight: 600; padding: 22px 0; }
   /* give the number keypad the same gold tap-flash as the other buttons (overrides the main app's no-flash pad rule) */
-  #ddScreen #keypad button { transition: background .15s, color .15s; }
+  #ddScreen #keypad { max-width: 340px; gap: 8px; }
+  #ddScreen #keypad button { transition: background .15s, color .15s; font-size: 24px; padding: 22px 0; }
   #ddScreen #keypad button:active { background: var(--gold); color: #000; }
   /* last step green = the deal keeps the stack in order (face-up-safe); normal = deal face down */
   #ddScreen .steps li.keep, #ddScreen .steps li.keep::before { color: var(--green); }
