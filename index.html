@@ -140,6 +140,7 @@
   #ddScreen #suitsel button, #ddScreen #ddGaffFlow button { transition: background .15s, color .15s, border-color .15s; }
   #ddScreen #suitsel button.lit, #ddScreen #ddGaffFlow button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
   #ddScreen #ddGaffFlow button { font-size: 20px; font-weight: 600; padding: 22px 0; }
+  #ddScreen #ddGaffFlow button.off { pointer-events: none; }   /* wrong suit: looks the same, no tap/flash */
   /* give the number keypad the same gold tap-flash as the other buttons (overrides the main app's no-flash pad rule) */
   #ddScreen #keypad { max-width: 340px; gap: 8px; }
   #ddScreen #keypad button { transition: background .15s, color .15s; font-size: 24px; padding: 22px 0; }
@@ -256,6 +257,7 @@
 
   <div class="picker" id="ddNumberPicker" style="display:none">
     <h2 id="ddNumTitle">Enter their number</h2>
+    <div class="hint" id="ddNumExample" style="text-align:center; margin:2px 0 4px"></div>
     <div id="ddNumEntry">&ndash;</div>
     <div class="grid pad" id="keypad"></div>
     <div class="hint" id="numGuide" style="text-align:center; margin-top:8px"></div>
@@ -2002,24 +2004,24 @@ function renderGaffStep() {
   } else {
     title = "Which suit?";
     const pairs = gColor === "red" ? [["H","♥ Hearts"],["D","♦ Diamonds"]] : [["S","♠ Spades"],["C","♣ Clubs"]];
-    html = pairs.map(([s,l]) => `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}">${l}</button>`).join("");
+    const correct = faceFor(gValue, gColor).slice(-1);   // the wrong suit looks identical but is inert (no tap, no flash)
+    html = pairs.map(([s,l]) => `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}${s === correct ? "" : " off"}">${l}</button>`).join("");
   }
   $("ddCardTitle").textContent = title;
   flow.style.gridTemplateColumns = `repeat(${cols},1fr)`;
   flow.innerHTML = html;
 }
-function pickGaffSuit() {
-  const f = faceFor(gValue, gColor), correct = f.slice(-1);   // value + colour pins the suit
-  [...$("ddGaffFlow").children].forEach(b => b.classList.remove("lit"));
-  const btn = $("ddGaffFlow").querySelector(`button[data-v="${correct}"]`); if (btn) btn.classList.add("lit");
-  setTimeout(() => { ddState.card = f; goStep(1); }, 450);
+function pickGaffSuit(s) {
+  const f = faceFor(gValue, gColor);
+  if (s !== f.slice(-1)) return;   // wrong-parity suit: looks the same, just doesn't work
+  ddState.card = f; goStep(1);
 }
 $("ddGaffFlow").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return; const g = b.dataset.g, v = b.dataset.v; if (!g) return;
   if (g === "color") gColor = v;
   else if (g === "kind") gKind = v;
   else if (g === "value") gValue = v;
-  else if (g === "suit") return pickGaffSuit();
+  else if (g === "suit") return pickGaffSuit(v);
   ddRender();
 });
 // random card generator (spectator view) — rolls only VALID faces; press again for a fresh one
@@ -2091,6 +2093,16 @@ function setCodedVisibility(coded) {
   $("ddDlLabel").style.display = dn;
   $("ddDetails").style.display = dn;
 }
+// 3 example numbers offered to the spectator = the WORST (indicator-requiring) numbers for this card.
+// Suggesting them as examples steers people OFF them, shrinking the chance of an indicator out.
+function exampleNumbers(face, dl) {
+  let bad = [];
+  for (let N = 10; N <= 43; N++) { const o = resolveOut(face, N, dl); if (o && o.tier === 2) bad.push(N); }
+  const shuf = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(p => p[1]);
+  let ex = shuf(bad).slice(0, 3);
+  if (ex.length < 3) for (const N of shuf([...Array(34)].map((_, i) => i + 10))) { if (ex.length >= 3) break; if (!ex.includes(N)) ex.push(N); }
+  return ex.sort((a, b) => a - b);
+}
 function renderOut(coded) {
   const f = ddState.card, N = ddState.num;
   const out = (f && N >= 1 && N <= 52) ? resolveOut(f, N, $("dl").checked) : null;
@@ -2145,9 +2157,15 @@ function ddRender() {
   [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
   if (ddState.step === 1) {
     $("ddNumEntry").textContent = numEntry || "–";
-    if (coded) $("numGuide").innerHTML = "";
-    else { const f = ddState.card, duds = f ? faceDuds($("dl").checked, 43)[f] : [];
-      $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`; }
+    const f = ddState.card;
+    if (coded) {
+      $("ddNumExample").textContent = f ? `Example: ${exampleNumbers(f, $("dl").checked).join(", ")}…` : "";
+      $("numGuide").innerHTML = "";
+    } else {
+      $("ddNumExample").textContent = "";
+      const duds = f ? faceDuds($("dl").checked, 43)[f] : [];
+      $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`;
+    }
   }
   if (ddState.step === 2) renderOut(coded);
 }
