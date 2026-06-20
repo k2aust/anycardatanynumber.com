@@ -137,6 +137,8 @@
   #ddScreen #modeSel button.sel { border-color:var(--gold); color:var(--gold); }
   #ddScreen #ddChips { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:12px; }
   #ddScreen #ddNumEntry { text-align:center; font-size:34px; font-weight:800; min-height:46px; padding:2px 0 10px; letter-spacing:2px; }
+  #ddScreen #suitsel button { transition: background .15s, color .15s, border-color .15s; }
+  #ddScreen #suitsel button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
   #ddScreen .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px; }
   #ddScreen .panel.gold { border-color:var(--gold); }
   #ddScreen .ok { color:var(--green); } #ddScreen .warn { color:var(--gold); } #ddScreen .bad { color:var(--red); }
@@ -1906,7 +1908,7 @@ function faceDuds(allowDL, hi) { hi = hi || 44; const m = {}; for (const F of FA
 /* ---- UI (scoped to #ddScreen) — stepped flow mirroring the main app ---- */
 const $ = id => document.getElementById(id);
 const DD_VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace — aces are held out as shims
-const DD_SUITS = ["S","H","C","D"];
+const DD_SUITS = ["S","C","H","D"];   // grouped by colour: ♠♣ (black) then ♥♦ (red)
 let pendingValue = null, pendingCard = null, numEntry = "";
 const ddState = { step: 0, card: null, num: null };
 
@@ -1922,9 +1924,16 @@ function styleValues() { [...$("vals").children].forEach(b => b.style.borderColo
 $("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; pendingValue = v;
   pendingCard = null; $("ddCardRoll").style.display = "none";   // a manual pick supersedes a rolled card
   styleValues(); });
-$("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if (!s || !pendingValue || !suitAllowed(s)) return;
-  const f = pendingValue + s; if (!FACES.includes(f)) return;
-  ddState.card = f; pendingValue = null; styleValues(); goStep(1);
+// gaff pins the suit: tapping a wrong suit auto-resolves to the valid suit of the SAME colour
+function sameColorValid(s) { const red = "HD".includes(s); return DD_SUITS.find(x => ("HD".includes(x) === red) && FACES.includes(pendingValue + x)) || null; }
+$("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if (!s || !pendingValue) return;
+  const target = suitAllowed(s) ? s : sameColorValid(s);
+  if (!target || !FACES.includes(pendingValue + target)) return;
+  const f = pendingValue + target;
+  // animate the correct suit lighting up, then advance
+  [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
+  const btn = $("suitsel").querySelector(`button[data-s="${target}"]`); if (btn) btn.classList.add("lit");
+  setTimeout(() => { ddState.card = f; pendingValue = null; styleValues(); goStep(1); }, 400);
 });
 // random card generator (spectator view) — rolls only VALID faces; press again for a fresh one
 $("ddRandomCard").addEventListener("click", () => {
@@ -2017,6 +2026,7 @@ function ddRender() {
   $("ddRandomNum").style.display = coded ? "" : "none";
   $("ddCardRoll").style.display = "none";
   $("ddNumRoll").style.display = "none";
+  [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
   if (ddState.step === 1) {
     $("ddNumEntry").textContent = numEntry || "–";
     if (coded) $("numGuide").innerHTML = "";
