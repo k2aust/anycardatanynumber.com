@@ -26,7 +26,7 @@
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
   header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dim); font-weight: 600; margin: 0; text-transform: uppercase; }
-  #gearBtn, #ddBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
+  #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
 
   /* step chips */
   #chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
@@ -137,8 +137,8 @@
   #ddScreen #modeSel button.sel { border-color:var(--gold); color:var(--gold); }
   #ddScreen #ddChips { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:12px; }
   #ddScreen #ddNumEntry { text-align:center; font-size:34px; font-weight:800; min-height:46px; padding:2px 0 10px; letter-spacing:2px; }
-  #ddScreen #suitsel button { transition: background .15s, color .15s, border-color .15s; }
-  #ddScreen #suitsel button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
+  #ddScreen #suitsel button, #ddScreen #ddGaffFlow button { transition: background .15s, color .15s, border-color .15s; }
+  #ddScreen #suitsel button.lit, #ddScreen #ddGaffFlow button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
   #ddScreen .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px; }
   #ddScreen .panel.gold { border-color:var(--gold); }
   #ddScreen .ok { color:var(--green); } #ddScreen .warn { color:var(--gold); } #ddScreen .bad { color:var(--red); }
@@ -153,10 +153,7 @@
 
 <header>
   <h1 id="title">Any Card At Any Number</h1>
-  <span>
-    <button id="ddBtn" aria-label="Duplicate-deck tool" style="display:none">&#127183;</button>
-    <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
-  </span>
+  <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
 </header>
 
 <main id="app">
@@ -218,6 +215,7 @@
 
   <div class="picker" id="ddCardPicker">
     <h2 id="ddCardTitle">Enter their card</h2>
+    <div class="grid" id="ddGaffFlow" style="display:none"></div>
     <div class="grid values" id="vals"></div>
     <div class="grid suits" id="suitsel"></div>
     <button class="randombtn" id="ddRandomCard">&#127922; Random card generator</button>
@@ -1505,7 +1503,6 @@ function render() {
     el.parentElement.classList.toggle("active", state.step === i);
   }
   $("gearBtn").style.display = magicianMode ? "" : "none";
-  $("ddBtn").style.display = magicianMode ? "" : "none";
   // random generators are a spectator aid; the magician types exact values
   $("randomCard").style.display = magicianMode ? "none" : "";
   $("randomNum").style.display = magicianMode ? "none" : "";
@@ -1698,6 +1695,7 @@ function renderSettings() {
     <div class="set-row"><span>Stack</span><select id="setStack">
       ${Object.keys(STACKS).map(k => `<option value="${k}" ${(settings.stack||"aronson")===k?"selected":""}>${STACK_LABELS[k]}</option>`).join("")}
     </select></div>
+    <button id="setOpenDup" class="randombtn" style="margin:8px 0 0">&#127183; Duplicate-gaff stack — constrained-choice tool</button>
     <div class="set-row"><span>Deck state</span><select id="setMode">
       <option value="full" ${settings.mode === "full" ? "selected" : ""}>Full deck (52)</option>
       <option value="half" ${settings.mode === "half" ? "selected" : ""}>Split: two halves (26 + 26)</option>
@@ -1759,6 +1757,7 @@ function renderSettings() {
     settings.topCard = STACKS[settings.stack][0]; // reset to the new stack's natural top
     saveSettings(); renderSettings();
   });
+  $("setOpenDup").addEventListener("click", () => { $("settings").style.display = "none"; $("ddScreen").style.display = "block"; if (ddRerender) ddRerender(); });
   $("settingsBody").querySelectorAll("input[data-base]").forEach(el =>
     el.addEventListener("change", () => { settings.base[el.dataset.base] = +el.value || 0; saveSettings(); }));
   $("settingsBody").querySelectorAll("input[data-mod]").forEach(el =>
@@ -1803,7 +1802,6 @@ $("title").addEventListener("click", () => {
 });
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
-$("ddBtn").addEventListener("click", () => { $("app").style.display = "none"; $("settings").style.display = "none"; $("ddScreen").style.display = "block"; if (ddRerender) ddRerender(); });
 $("ddBack").addEventListener("click", () => { $("ddScreen").style.display = "none"; $("app").style.display = "block"; render(); });
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
@@ -1872,33 +1870,35 @@ function resolveOut(face, N, allowDL) {
 }
 function stepsFor(out, face, N, coded) {
   if (!out) return null;
-  const s = [], F = pretty(face), fromFace = out.cfg.orient === "face", up = out.faceUp, fd = up ? "face up" : "face down";
+  const s = [], F = pretty(face), fromFace = out.cfg.orient === "face", up = out.faceUp;
+  const HOLD = "FACE " + (fromFace ? "UP" : "DOWN");                                              // how the deck is HELD
+  const into = fromFace ? "from the face" : (up ? "into a pile face up" : "into a pile face down"); // how the cards are dealt
+  const more = fromFace ? "from the face" : (up ? "face up" : "face down");
   if (coded) {
-    // One coded sentence: cut/replace verb + aces (subject) + jokers + deal facing.
-    const FACE = "FACE " + (up ? "UP" : "DOWN");
+    // One coded sentence: cut/replace verb + aces (subject) + jokers + the HOLD facing.
     const aces = out.cfg.added === 4 || out.cfg.added === 6;
     const jk = (out.cfg.added === 2 || out.cfg.added === 6) ? " including the jokers" : "";
     s.push(out.cfg.cut
-      ? (aces ? `All the cards${jk} are held ${FACE}.` : `Cards are held ${FACE}${jk}.`)
-      : (aces ? `Pick up the deck and hold all the cards${jk} ${FACE}.` : `Pick up the deck and hold the cards ${FACE}${jk}.`));
+      ? (aces ? `All the cards${jk} are held ${HOLD}.` : `Cards are held ${HOLD}${jk}.`)
+      : (aces ? `Pick up the deck and hold all the cards${jk} ${HOLD}.` : `Pick up the deck and hold the cards ${HOLD}${jk}.`));
   } else {
     if (out.cfg.cut) s.push("Cut the bottom half to the top.");
     const al = addLabel(out.cfg.added); if (al) s.push("Add " + al + (fromFace ? " to the face." : "."));
-    if (fromFace) s.push("Hold the deck face up and deal from the face.");
+    s.push(`Hold the deck ${HOLD.toLowerCase()}.`);
   }
-  if (out.method === "deal") s.push(`Deal ${N} cards ${fd} — the last card is the ${F}.`);
-  else if (out.method === "next") s.push(`Deal ${N} cards ${fd} — the NEXT card is the ${F}.`);
+  if (out.method === "deal") s.push(`Deal ${N} cards ${into} — the last card is the ${F}.`);
+  else if (out.method === "next") s.push(`Deal ${N} cards ${into} — the NEXT card is the ${F}.`);
   else if (out.method === "dl") s.push(coded
     ? `Deal ${N} cards into the magician's hands; the last one is the ${F}.`
     : `Deal ${N} cards face down, double-lifting the final count — the ${F}.`);
   else {
-    const ind = pretty(out.cfg.deck[out.q-1]);
-    if (out.off === 0) s.push(up ? `Deal ${N} cards face up — card #${N} is the ${ind} (a ${out.v}).`
-                                 : `Deal ${N} cards face down; turn up card #${N} — the ${ind} (a ${out.v}).`);
-    else s.push(up ? `Deal ${N} cards face up — the NEXT card is the ${ind} (a ${out.v}).`
-                   : `Deal ${N} cards face down; turn up the NEXT card — the ${ind} (a ${out.v}).`);
-    s.push(out.method === "ind" ? `Set it aside and deal ${out.v} more ${fd} — the ${F}.`
-                                : `Replace it ${fd} and deal ${out.v} (counting it as one) — the ${F}.`);
+    // indicator kept vague — don't name the card or state its value
+    if (up) s.push(out.off === 0 ? `Deal ${N} cards ${into} — note the value of card #${N}.`
+                                 : `Deal ${N} cards ${into} — note the value of the NEXT card.`);
+    else s.push(out.off === 0 ? `Deal ${N} cards ${into}; turn up card #${N} and note its value.`
+                              : `Deal ${N} cards ${into}; turn up the NEXT card and note its value.`);
+    s.push(out.method === "ind" ? `Whatever the value is, set that card aside and deal that many more ${more} — the ${F}.`
+                                : `Whatever the value is, deal that many ${more} counting that card as the first — the ${F}.`);
   }
   return s;
 }
@@ -1910,6 +1910,7 @@ const $ = id => document.getElementById(id);
 const DD_VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace — aces are held out as shims
 const DD_SUITS = ["S","C","H","D"];   // grouped by colour: ♠♣ (black) then ♥♦ (red)
 let pendingValue = null, pendingCard = null, numEntry = "";
+let gColor = null, gKind = null, gValue = null;   // gaff guided-equivoque sub-flow state
 const ddState = { step: 0, card: null, num: null };
 
 $("vals").innerHTML = DD_VALUES.map(v => `<button data-v="${v}">${v}</button>`).join("");
@@ -1934,6 +1935,39 @@ $("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if 
   [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
   const btn = $("suitsel").querySelector(`button[data-s="${target}"]`); if (btn) btn.classList.add("lit");
   setTimeout(() => { ddState.card = f; pendingValue = null; styleValues(); goStep(1); }, 400);
+});
+// --- gaff guided equivoque: Black/Red -> Number/Picture -> value -> suit (suit auto-pins) ---
+function resetGaff() { gColor = null; gKind = null; gValue = null; }
+function renderGaffStep() {
+  const flow = $("ddGaffFlow"); let cols = 2, html = "", title = "";
+  if (!gColor) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black ♠♣</button><button data-g="color" data-v="red">Red ♥♦</button>`; }
+  else if (!gKind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
+  else if (!gValue) {
+    title = "Which value?";
+    if (gKind === "num") { cols = 5; html = ["2","3","4","5","6","7","8","9","10"].map(v => `<button data-g="value" data-v="${v}">${v}</button>`).join(""); }
+    else { cols = 3; html = [["J","Jack"],["Q","Queen"],["K","King"]].map(([v,l]) => `<button data-g="value" data-v="${v}">${l}</button>`).join(""); }
+  } else {
+    title = "Which suit?";
+    const pairs = gColor === "red" ? [["H","♥ Hearts"],["D","♦ Diamonds"]] : [["S","♠ Spades"],["C","♣ Clubs"]];
+    html = pairs.map(([s,l]) => `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}">${l}</button>`).join("");
+  }
+  $("ddCardTitle").textContent = title;
+  flow.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  flow.innerHTML = html;
+}
+function pickGaffSuit() {
+  const f = faceFor(gValue, gColor), correct = f.slice(-1);   // value + colour pins the suit
+  [...$("ddGaffFlow").children].forEach(b => b.classList.remove("lit"));
+  const btn = $("ddGaffFlow").querySelector(`button[data-v="${correct}"]`); if (btn) btn.classList.add("lit");
+  setTimeout(() => { ddState.card = f; goStep(1); }, 450);
+}
+$("ddGaffFlow").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return; const g = b.dataset.g, v = b.dataset.v; if (!g) return;
+  if (g === "color") gColor = v;
+  else if (g === "kind") gKind = v;
+  else if (g === "value") gValue = v;
+  else if (g === "suit") return pickGaffSuit();
+  renderGaffStep();
 });
 // random card generator (spectator view) — rolls only VALID faces; press again for a fresh one
 $("ddRandomCard").addEventListener("click", () => {
@@ -1977,8 +2011,8 @@ $("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if 
 });
 $("dl").addEventListener("change", () => { if (ddState.step === 2) ddRender(); });
 
-function goStep(s) { ddState.step = s; if (s === 1) numEntry = ""; ddRender(); }
-function ddReset() { ddState.step = 0; ddState.card = null; ddState.num = null; pendingValue = null; numEntry = ""; styleValues(); ddRender(); }
+function goStep(s) { ddState.step = s; if (s === 1) numEntry = ""; if (s === 0) resetGaff(); ddRender(); }
+function ddReset() { ddState.step = 0; ddState.card = null; ddState.num = null; pendingValue = null; numEntry = ""; resetGaff(); styleValues(); ddRender(); }
 
 function renderStack() { $("stackGrid").innerHTML = STACK.map(c => `<span class="${isRed(c) ? "r" : ""}">${pretty(c)}</span>`).join(""); }
 function updateModeNote() {
@@ -2013,13 +2047,19 @@ function ddRender() {
   $("ddChipNum").textContent = ddState.num != null ? ddState.num : "—";
   $("ddChips").children[0].classList.toggle("active", ddState.step === 0);
   $("ddChips").children[1].classList.toggle("active", ddState.step === 1);
-  // titles match the main app (spectator-facing when coded)
-  $("ddCardTitle").textContent = coded ? "Enter your card" : "Enter their card";
   $("ddNumTitle").textContent = coded ? "Enter any number between 1 and 52" : "Enter their number";
   // panels by step
   $("ddCardPicker").style.display = ddState.step === 0 ? "" : "none";
   $("ddNumberPicker").style.display = ddState.step === 1 ? "" : "none";
   $("ddResults").style.display = ddState.step === 2 ? "" : "none";
+  // card picker contents: gaff uses the guided equivoque flow; regular uses the value grid + suits
+  if (mode === "gaff") {
+    $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
+    renderGaffStep();   // sets the card title per sub-step
+  } else {
+    $("vals").style.display = ""; $("suitsel").style.display = ""; $("ddGaffFlow").style.display = "none";
+    $("ddCardTitle").textContent = coded ? "Enter your card" : "Enter their card";
+  }
   setCodedVisibility(coded);
   // random generators are a spectator-facing fairness prop: shown only in the coded view
   $("ddRandomCard").style.display = coded ? "" : "none";
@@ -2041,6 +2081,10 @@ renderStack(); updateModeNote(); ddReset();   // init (gaff mode, step 0)
 
 buildPickers();
 render();
+// Default landing: the duplicate-gaff spectator (coded) view.
+$("app").style.display = "none";
+$("ddScreen").style.display = "block";
+if (ddRerender) ddRerender();
 </script>
 </body>
 </html>
