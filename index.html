@@ -137,7 +137,6 @@
   #ddScreen #modeSel button.sel { border-color:var(--gold); color:var(--gold); }
   #ddScreen #ddChips { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:12px; }
   #ddScreen #ddNumEntry { text-align:center; font-size:34px; font-weight:800; min-height:46px; padding:2px 0 10px; letter-spacing:2px; }
-  #ddScreen #suitsel button:disabled { opacity:.22; cursor:default; }
   #ddScreen .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px; }
   #ddScreen .panel.gold { border-color:var(--gold); }
   #ddScreen .ok { color:var(--green); } #ddScreen .warn { color:var(--gold); } #ddScreen .bad { color:var(--red); }
@@ -1919,11 +1918,10 @@ $("keypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button 
 // gaff allows only the parity-correct suit per value (a valid face); regular allows all four
 function suitAllowed(s) { return mode !== "gaff" || !pendingValue || FACES.includes(pendingValue + s); }
 function styleValues() { [...$("vals").children].forEach(b => b.style.borderColor = b.dataset.v === pendingValue ? "var(--gold)" : "var(--line)"); }
-function styleSuits() { [...$("suitsel").children].forEach(b => b.disabled = !suitAllowed(b.dataset.s)); }
 
 $("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; pendingValue = v;
   pendingCard = null; $("ddCardRoll").style.display = "none";   // a manual pick supersedes a rolled card
-  styleValues(); styleSuits(); });
+  styleValues(); });
 $("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if (!s || !pendingValue || !suitAllowed(s)) return;
   const f = pendingValue + s; if (!FACES.includes(f)) return;
   ddState.card = f; pendingValue = null; styleValues(); goStep(1);
@@ -1971,7 +1969,7 @@ $("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if 
 $("dl").addEventListener("change", () => { if (ddState.step === 2) ddRender(); });
 
 function goStep(s) { ddState.step = s; if (s === 1) numEntry = ""; ddRender(); }
-function ddReset() { ddState.step = 0; ddState.card = null; ddState.num = null; pendingValue = null; numEntry = ""; styleValues(); styleSuits(); ddRender(); }
+function ddReset() { ddState.step = 0; ddState.card = null; ddState.num = null; pendingValue = null; numEntry = ""; styleValues(); ddRender(); }
 
 function renderStack() { $("stackGrid").innerHTML = STACK.map(c => `<span class="${isRed(c) ? "r" : ""}">${pretty(c)}</span>`).join(""); }
 function updateModeNote() {
