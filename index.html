@@ -139,6 +139,12 @@
   #ddScreen #ddNumEntry { text-align:center; font-size:34px; font-weight:800; min-height:46px; padding:2px 0 10px; letter-spacing:2px; }
   #ddScreen #suitsel button, #ddScreen #ddGaffFlow button { transition: background .15s, color .15s, border-color .15s; }
   #ddScreen #suitsel button.lit, #ddScreen #ddGaffFlow button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
+  #ddScreen #ddGaffFlow button { font-size: 20px; font-weight: 600; padding: 22px 0; }
+  /* give the number keypad the same gold tap-flash as the other buttons (overrides the main app's no-flash pad rule) */
+  #ddScreen #keypad button { transition: background .15s, color .15s; }
+  #ddScreen #keypad button:active { background: var(--gold); color: #000; }
+  /* last step green = the deal keeps the stack in order (face-up-safe); normal = deal face down */
+  #ddScreen .steps li.keep, #ddScreen .steps li.keep::before { color: var(--green); }
   #ddScreen .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px; }
   #ddScreen .panel.gold { border-color:var(--gold); }
   #ddScreen .ok { color:var(--green); } #ddScreen .warn { color:var(--gold); } #ddScreen .bad { color:var(--red); }
@@ -1907,10 +1913,9 @@ function resolveOut(face, N, allowDL) {
 }
 function stepsFor(out, face, N, coded) {
   if (!out) return null;
-  const s = [], F = pretty(face), fromFace = out.cfg.orient === "face", up = out.faceUp;
-  const HOLD = "FACE " + (fromFace ? "UP" : "DOWN");                                              // how the deck is HELD
-  const into = fromFace ? "from the face" : (up ? "into a pile face up" : "into a pile face down"); // how the cards are dealt
-  const more = fromFace ? "from the face" : (up ? "face up" : "face down");
+  const s = [], F = pretty(face), fromFace = out.cfg.orient === "face";
+  const HOLD = "FACE " + (fromFace ? "UP" : "DOWN");                 // how the deck is HELD
+  const into = fromFace ? "from the face" : "into a pile";           // deal facing (up/down) is shown by COLOUR, not words
   if (coded) {
     // One coded sentence: cut/replace verb + aces (subject) + jokers + the HOLD facing.
     const aces = out.cfg.added === 4 || out.cfg.added === 6;
@@ -1930,12 +1935,10 @@ function stepsFor(out, face, N, coded) {
     : `Deal ${N} cards face down, double-lifting the final count — the ${F}.`);
   else {
     // indicator kept vague — don't name the card or state its value
-    if (up) s.push(out.off === 0 ? `Deal ${N} cards ${into} — note the value of card #${N}.`
-                                 : `Deal ${N} cards ${into} — note the value of the NEXT card.`);
-    else s.push(out.off === 0 ? `Deal ${N} cards ${into}; turn up card #${N} and note its value.`
-                              : `Deal ${N} cards ${into}; turn up the NEXT card and note its value.`);
-    s.push(out.method === "ind" ? `Whatever the value is, set that card aside and deal that many more ${more} — the ${F}.`
-                                : `Whatever the value is, deal that many ${more} counting that card as the first — the ${F}.`);
+    s.push(out.off === 0 ? `Deal ${N} cards ${into}; turn up card #${N} and note its value.`
+                         : `Deal ${N} cards ${into}; turn up the NEXT card and note its value.`);
+    s.push(out.method === "ind" ? `Whatever the value is, set that card aside and deal that many more — the ${F}.`
+                                : `Whatever the value is, deal that many counting that card as the first — the ${F}.`);
   }
   return s;
 }
@@ -2090,14 +2093,14 @@ function setCodedVisibility(coded) {
 function renderOut(coded) {
   const f = ddState.card, N = ddState.num;
   const out = (f && N >= 1 && N <= 52) ? resolveOut(f, N, $("dl").checked) : null;
-  if (coded) { $("out").innerHTML = out ? `<ol class="steps">${stepsFor(out, f, N, true).map(s => `<li>${s}</li>`).join("")}</ol>` : `<span class="hint">—</span>`; return; }
+  // steps; the LAST step is green when the deal can keep the stack in order (face-up-safe), normal otherwise
+  const stepsHtml = o => { const st = stepsFor(o, f, N, coded);
+    return `<ol class="steps">${st.map((line, i) => `<li class="${i === st.length - 1 && o.faceUp ? "keep" : ""}">${line}</li>`).join("")}</ol>`; };
+  if (coded) { $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`; return; }
   if (!out) { $("out").innerHTML = `<span class="bad">No clean out for ${pretty(f)} at ${N}.</span> <span class="hint">${N < 10 || N > 43 ? "Outside the forced range — redirect to a two-digit number under 44." : "Steer them off this number."}</span>`; return; }
   const tierName = out.tier === 0 ? "clean deal" : out.tier === 1 ? "double-lift" : "indicator";
   const oor = (N < 10 || N > 43) ? `<span class="warn"> · outside 10–43 — redirect if you can</span>` : "";
-  const faceUp = out.faceUp
-    ? `<div class="ok" style="margin-top:8px">✓ Safe to deal FACE UP${mode === "gaff" ? " (their duplicate stays buried)" : ""}.</div>`
-    : `<div class="warn" style="margin-top:8px">Must deal FACE DOWN — their duplicate would show face up.</div>`;
-  $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div><ol class="steps">${stepsFor(out, f, N, false).map(s => `<li>${s}</li>`).join("")}</ol>${faceUp}`;
+  $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div>${stepsHtml(out)}`;
 }
 function ddRender() {
   const coded = !magicianMode;
@@ -2107,11 +2110,11 @@ function ddRender() {
   $("ddChipNum").textContent = ddState.num != null ? ddState.num : "—";
   $("ddChips").children[0].classList.toggle("active", ddState.step === 0);
   $("ddChips").children[1].classList.toggle("active", ddState.step === 1);
-  if (coded) {   // spectator: only the card chip, and only once it's been entered
+  if (coded && ddState.step !== 2) {   // entry: only the card chip, and only once it's entered
     $("ddChips").style.gridTemplateColumns = "1fr";
     $("ddChips").children[1].style.display = "none";
     $("ddChips").style.display = ddState.card ? "" : "none";
-  } else {
+  } else {   // magician, or the end (results): show card + number on top
     $("ddChips").style.gridTemplateColumns = "";
     $("ddChips").children[1].style.display = "";
     $("ddChips").style.display = "";
