@@ -156,11 +156,12 @@
   #lkWeather { margin-top: 1.5vh; font-size: 5vw; color: rgba(255,255,255,.8); letter-spacing: 1px; }
   #lkWeather.u { text-decoration: underline; text-underline-offset: 3px; }
   /* vertical clock + fingerprint ARE the tap targets for 8 / 5 / 2 (middle column only, so 7/9 etc. stay tappable) */
-  #lkHrs, #lkMins { position: absolute; left: 28%; width: 44%; text-align: center; font-size: 23vw; font-weight: 200; line-height: 1; letter-spacing: -0.6vw; z-index: 62; cursor: pointer; }
-  #lkHrs { top: 39%; }
-  #lkMins { top: 51%; }
-  #lkFinger { position: absolute; left: 33.33%; width: 33.34%; top: 67%; text-align: center; z-index: 62; cursor: pointer; color: rgba(255,255,255,.6); font-size: 8vw; }
-  #lkFinger .lkHint { font-size: 3.4vw; margin-top: .4vh; }
+  #lkHrs, #lkMins { position: absolute; left: 22%; width: 56%; text-align: center; font-size: 33vw; font-weight: 200; line-height: 1; letter-spacing: -1vw; z-index: 62; cursor: pointer; }
+  #lkHrs { top: 32%; }
+  #lkMins { top: 49%; }
+  #lkFinger { position: absolute; left: 33.33%; width: 33.34%; top: 70%; text-align: center; z-index: 62; cursor: pointer; color: rgba(255,255,255,.6); }
+  #lkFinger .fp { width: 10vw; height: 10vw; display: block; margin: 0 auto; pointer-events: none; }
+  #lkFinger .lkHint { font-size: 3.4vw; margin-top: 1vh; }
   #lkZones { position: absolute; inset: 0; z-index: 60; pointer-events: none; }   /* only the zones capture taps */
   #lkZones .z { position: absolute; pointer-events: auto; display: flex; align-items: center; justify-content: center; }
   #lkZones .z .zl { display: none; font-size: 4.5vw; color: rgba(255,210,80,.9); }
@@ -279,7 +280,7 @@
   </div>
   <div id="lkHrs">--</div>
   <div id="lkMins">--</div>
-  <div id="lkFinger">&#128274;<div class="lkHint">Unlock to view</div></div>
+  <div id="lkFinger"><svg class="fp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/></svg><div class="lkHint">Unlock to view</div></div>
   <div id="lkZones"></div>
   <div id="lkSetup"></div>
   <div id="lkExit"></div>
@@ -1839,7 +1840,6 @@ $("title").addEventListener("click", () => {
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
 let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
-$("ddBack").addEventListener("click", () => { $("ddScreen").style.display = "none"; $("app").style.display = "block"; render(); });
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
 (function () {
@@ -2016,7 +2016,7 @@ $("ddGaffFlow").addEventListener("click", e => {
   else if (g === "kind") gKind = v;
   else if (g === "value") gValue = v;
   else if (g === "suit") return pickGaffSuit();
-  renderGaffStep();
+  ddRender();
 });
 // random card generator (spectator view) — rolls only VALID faces; press again for a fresh one
 $("ddRandomCard").addEventListener("click", () => {
@@ -2054,6 +2054,17 @@ $("ddChips").addEventListener("click", e => { const c = e.target.closest(".chip"
   const st = +c.dataset.step; if (st === 1 && !ddState.card) return; goStep(st); });
 $("ddEdit").addEventListener("click", () => goStep(0));
 $("ddReset").addEventListener("click", ddReset);
+// Back steps through the flow (results→number→card→undo equivoque); only leaves the tool from the very start
+$("ddBack").addEventListener("click", () => {
+  if (ddState.step === 2) return goStep(1);
+  if (ddState.step === 1) { ddState.card = null; return goStep(0); }
+  if (mode === "gaff") {
+    if (gValue) { gValue = null; ddRender(); return; }
+    if (gKind)  { gKind = null;  ddRender(); return; }
+    if (gColor) { gColor = null; ddRender(); return; }
+  }
+  $("ddScreen").style.display = "none"; $("app").style.display = "block"; render();
+});
 $("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if (!m || m === mode) return;
   setDeck(m); [...$("modeSel").children].forEach(b => b.classList.toggle("sel", b.dataset.m === m));
   renderStack(); updateModeNote(); ddReset();
@@ -2096,6 +2107,18 @@ function ddRender() {
   $("ddChipNum").textContent = ddState.num != null ? ddState.num : "—";
   $("ddChips").children[0].classList.toggle("active", ddState.step === 0);
   $("ddChips").children[1].classList.toggle("active", ddState.step === 1);
+  if (coded) {   // spectator: only the card chip, and only once it's been entered
+    $("ddChips").style.gridTemplateColumns = "1fr";
+    $("ddChips").children[1].style.display = "none";
+    $("ddChips").style.display = ddState.card ? "" : "none";
+  } else {
+    $("ddChips").style.gridTemplateColumns = "";
+    $("ddChips").children[1].style.display = "";
+    $("ddChips").style.display = "";
+  }
+  // no Back button on the very first (landing) page — nothing to go back to
+  const atRoot = ddState.step === 0 && !gColor && !gKind && !gValue;
+  $("ddBack").parentElement.style.display = (coded && atRoot) ? "none" : "";
   $("ddNumTitle").textContent = coded ? "Enter any number between 1 and 52" : "Enter their number";
   // panels by step
   $("ddCardPicker").style.display = ddState.step === 0 ? "" : "none";
@@ -2110,9 +2133,9 @@ function ddRender() {
     $("ddCardTitle").textContent = coded ? "Enter your card" : "Enter their card";
   }
   setCodedVisibility(coded);
-  // random generators are a spectator-facing fairness prop: shown only in the coded view
-  $("ddRandomCard").style.display = coded ? "" : "none";
-  $("ddRandomNum").style.display = coded ? "" : "none";
+  // random generators removed from the spectator view
+  $("ddRandomCard").style.display = "none";
+  $("ddRandomNum").style.display = "none";
   $("ddCardRoll").style.display = "none";
   $("ddNumRoll").style.display = "none";
   [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
@@ -2134,7 +2157,7 @@ const LK_KEYS = [["J",0,0],["Q",1,0],["K",2,0],["7",0,1],["8",1,1],["9",2,1],
                  ["4",0,2],["5",1,2],["6",2,2],["1",0,3],["2",1,3],["3",2,3],
                  ["10",0,4],["0",1,4],["clr",2,4]];
 $("lkZones").innerHTML = LK_KEYS.map(([k,cx,ry]) =>
-  `<div class="z" data-k="${k}" style="left:${(cx*33.34).toFixed(2)}%;top:${(25+ry*13).toFixed(1)}%;width:33.34%;height:13%"><span class="zl">${k==="clr"?"C":k}</span></div>`).join("");
+  `<div class="z" data-k="${k}" style="left:${(cx*33.34).toFixed(2)}%;top:${(14+ry*17).toFixed(1)}%;width:33.34%;height:17%"><span class="zl">${k==="clr"?"C":k}</span></div>`).join("");
 $("lkZones").addEventListener("click", e => { const z = e.target.closest(".z"); if (z) lkTap(z.dataset.k); });
 $("lkExit").addEventListener("click", lkHide);                                         // tap top-left: exit
 $("lkSetup").addEventListener("click", () => $("lkZones").classList.toggle("debug"));   // tap top-right: reveal the hidden zones
