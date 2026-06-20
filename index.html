@@ -313,8 +313,8 @@
   </div>
 
   <section id="ddResults" style="display:none">
-    <div class="btnrow"><button id="ddEdit">&#9998; Edit inputs</button><button id="ddReset">&#10227; New trick</button></div>
     <div class="panel gold" id="out"></div>
+    <div class="btnrow" style="margin-top:12px"><button id="ddReset">&#10227; Start over</button></div>
   </section>
 
   <details id="ddDetails">
@@ -2135,7 +2135,6 @@ function commitNum(v) { ddState.num = v; numEntry = ""; goStep(2); }
 
 $("ddChips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
   const st = +c.dataset.step; if (st === 1 && !ddState.card) return; goStep(st); });
-$("ddEdit").addEventListener("click", () => goStep(0));
 $("ddReset").addEventListener("click", ddReset);
 // Back steps through the flow (results→number→card→undo equivoque); only leaves the tool from the very start
 $("ddBack").addEventListener("click", () => {
