@@ -18,22 +18,7 @@
     --green: #57c98a;
     --amber: #d98b3a;
     --radius: 14px;
-    /* dup-tool / page theme — light is the default; body.theme-dark overrides below */
-    --dd-page: #d2b48c;
-    --dd-panel: #89cff0;
-    --dd-panel-label: #143642;
-    --dd-surface: #ffffff;
-    --dd-surface-text: #000000;
-    --dd-surface-border: #d0d7de;
-    --dd-reveal-border: #d0d7de;
-    --dd-btn: #ffffff;
-    --dd-btn-text: #000000;
-    --dd-btn-border: #d0d7de;
-    --dd-chip-label: #5a6b73;
-    --dd-title: #000000;
-  }
-  /* dark = the app's native palette (matches the live site) */
-  .theme-dark {
+    /* dup-tool surfaces — dark only (native palette) */
     --dd-page: #0e0f13;
     --dd-panel: #181a21;
     --dd-panel-label: #8b8fa0;
@@ -171,6 +156,10 @@
   #ddScreen #ddGaffFlow button.off { pointer-events: none; }   /* wrong suit: looks the same, no tap/flash */
   #ddScreen #ddGaffFlow .sy { font-size: 1.7em; vertical-align: -0.12em; }
   #ddScreen #ddGaffFlow .syr { color: var(--red); }
+  /* suit step: full card name on one line, suit icon centred on the next line */
+  #ddScreen #ddGaffFlow button[data-g="suit"] { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #ddScreen #ddGaffFlow button[data-g="suit"] .cn { white-space: nowrap; font-size: 15px; }
+  #ddScreen #ddGaffFlow .sy.sb { display: block; vertical-align: 0; line-height: 1; }
   /* colour step: white buttons, black/red content like real card colours */
   #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); }
   #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
@@ -276,16 +265,12 @@
 
 <section id="ddScreen" style="display:none">
   <div class="btnrow"><button id="ddBack">&#10094; Back</button></div>
-  <h1 id="ddTitle">Constrained-choice tool</h1>
-  <div class="row" id="modeSel" style="margin-bottom:8px">
-    <button data-m="gaff" class="sel">Duplicate gaff</button>
-    <button data-m="regular">Regular deck (Aronson)</button>
-  </div>
-  <label class="toggle" id="ddDlLabel" style="margin:0 2px 12px"><input type="checkbox" id="dl" checked> prefer double-lift (one-short) over indicator</label>
+  <h1 id="ddTitle">Real-deck ACAAN</h1>
+  <input type="checkbox" id="dl" checked style="display:none">
 
   <div id="ddChips">
-    <div class="chip" data-step="0"><div class="lbl">Card</div><div class="val" id="ddChipCard">&mdash;</div></div>
-    <div class="chip" data-step="1"><div class="lbl">Number</div><div class="val" id="ddChipNum">&mdash;</div></div>
+    <div class="chip" data-step="0"><div class="lbl">Number</div><div class="val" id="ddChipNum">&mdash;</div></div>
+    <div class="chip" data-step="1"><div class="lbl">Card</div><div class="val" id="ddChipCard">&mdash;</div></div>
   </div>
 
   <div class="picker" id="ddCardPicker">
@@ -320,24 +305,23 @@
   <details id="ddDetails">
     <summary>How to perform &middot; setup &middot; stack</summary>
     <div class="panel">
-      <p class="hint" id="modeNote"></p>
-      <div class="hint" style="margin-top:10px">Hold out 2 jokers + 4 aces. Deck (top &rarr; bottom):</div>
+      <div class="hint"><b>Real-deck ACAAN</b> &mdash; ordinary 52 + 2 jokers. <b>Hold out 9 cards as two add-piles:</b> a 3-card &ldquo;jokers&rdquo; pile and a 6-card &ldquo;aces&rdquo; pile (e.g. 2 jokers + a six = 3; 4 aces + two sixes = 6). Deal from the other 45 (below).</div>
+      <div class="hint" style="margin-top:6px">Patter: <b>name any number 1&ndash;52</b> (steer too-high / single digits back into <b>10&ndash;46</b>), then free <b>value + colour</b>; you force the suit. Resolves as a clean deal or a double-lift &mdash; never an indicator. 6 is never offered; 5 is offered except at 46.</div>
+      <div class="hint" style="margin-top:10px">Dealing stack (top &rarr; bottom, 45):</div>
       <div class="stackgrid" id="stackGrid"></div>
-      <div class="hint" style="margin-top:14px"><b>Coded language</b> &mdash; in the spectator view the steps read as a normal deal, but the wording tells <i>you</i> the secret handling:</div>
-      <div class="hint" style="margin-top:8px"><b>Opening line &mdash; what to add</b> (the subject phrase):<br>
-        &ldquo;<b>Cards</b> are held&hellip;&rdquo; &rarr; add nothing<br>
-        &ldquo;<b>All the cards</b> are held&hellip;&rdquo; &rarr; add the <b>aces</b><br>
-        &ldquo;<b>Every card</b> is held&hellip;&rdquo; &rarr; add the <b>jokers</b><br>
-        &ldquo;<b>Each and every card</b> is held&hellip;&rdquo; &rarr; add <b>jokers + aces</b></div>
-      <div class="hint" style="margin-top:8px"><b>Opening line &mdash; cut</b> (the verb form):<br>
-        &ldquo;&hellip;are/is <b>held</b>&hellip;&rdquo; (passive) &rarr; first <b>cut</b> the bottom half to the top<br>
-        &ldquo;<b>Pick up the deck and hold</b>&hellip;&rdquo; (active) &rarr; <b>no cut</b></div>
-      <div class="hint" style="margin-top:8px"><b>Deal line &mdash; finding the card:</b><br>
-        &ldquo;the <b>last</b> card is the&hellip;&rdquo; &rarr; it&rsquo;s card #N<br>
-        &ldquo;the <b>NEXT</b> card is the&hellip;&rdquo; &rarr; it&rsquo;s card #N+1<br>
-        &ldquo;into the <b>magician&rsquo;s hands</b>; the last one&hellip;&rdquo; &rarr; <b>double-lift</b> the final count<br>
-        &ldquo;turn up card #N and note its value&hellip;&rdquo; &rarr; <b>indicator</b> (that value leads to the card)</div>
-      <div class="hint" style="margin-top:8px"><b>Last step colour:</b> <span style="color:var(--green)">green</span> = the deal keeps the stack in order (safe to leave the cards as dealt); normal = deal face down.</div>
+      <div class="hint" style="margin-top:14px"><b>Coded language</b> &mdash; the spectator hears a normal deal; the wording tells <i>you</i> the secret:</div>
+      <div class="hint" style="margin-top:8px"><b>Opening line &mdash; how many to add</b> (subject phrase):<br>
+        &ldquo;<b>Cards</b>&hellip;&rdquo; &rarr; add nothing<br>
+        &ldquo;<b>Every card</b>&hellip;&rdquo; &rarr; add the <b>jokers (3)</b><br>
+        &ldquo;<b>All the cards</b>&hellip;&rdquo; &rarr; add the <b>aces (6)</b><br>
+        &ldquo;<b>Each and every card</b>&hellip;&rdquo; &rarr; add <b>jokers + aces (9)</b></div>
+      <div class="hint" style="margin-top:8px"><b>Opening line &mdash; cut</b> (verb form):<br>
+        &ldquo;<b>Pick up the deck and hold</b>&hellip;&rdquo; &rarr; first <b>cut</b> bottom half to top<br>
+        &ldquo;&hellip;are/is <b>held</b>&hellip;&rdquo; &rarr; <b>no cut</b></div>
+      <div class="hint" style="margin-top:8px"><b>Deal line &mdash; double-lift:</b><br>
+        &ldquo;&hellip;<b>into a pile</b> &mdash; the last card&hellip;&rdquo; &rarr; straight deal<br>
+        &ldquo;&hellip;<b>into your hands</b> &mdash; the last card&hellip;&rdquo; &rarr; <b>double-lift</b> the final card<br>
+        &ldquo;&hellip;the <b>NEXT</b> card&hellip;&rdquo; &rarr; it&rsquo;s the card after your number</div>
     </div>
   </details>
 </section>
@@ -431,7 +415,6 @@ const DEFAULT_SETTINGS = {
   // their own stack/mode via 6 title taps (those choices persist per device).
   stack: "mnemonica",
   topCard: "4C",
-  theme: "light",   // "light" | "dark" — page + dup-tool palette (applyTheme)
   mode: "full",     // "full" | "half" (split into two 26-packets) | "cut" (spectator cuts, you glimpse)
   noteEnd: "top",   // in cut mode: did you glimpse the "top" or "bottom" card?
   // spellCount (spell the card first, then count to the number) sits just above
@@ -1157,9 +1140,6 @@ const VALUES = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 const SUITS = ["S","H","C","D"];
 
 let settings = loadSettings();
-// page + dup-tool palette: light is default, dark adds body.theme-dark (vars flip)
-function applyTheme() { document.documentElement.classList.toggle("theme-dark", settings.theme === "dark"); }
-applyTheme();
 let state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null };
 let numEntry = "", lastNumStep = -1;
 // Spectator mode is the default on every load (re-locked each visit). The
@@ -1273,7 +1253,6 @@ function loadSettings() {
       version: SETTINGS_VERSION,
       stack: STACKS[s.stack] ? s.stack : DEFAULT_SETTINGS.stack,
       topCard: s.topCard || DEFAULT_SETTINGS.topCard,
-      theme: s.theme === "dark" ? "dark" : "light",
       mode: s.mode || DEFAULT_SETTINGS.mode,
       noteEnd: s.noteEnd || DEFAULT_SETTINGS.noteEnd,
       base: { ...DEFAULT_SETTINGS.base, ...s.base },
@@ -1800,15 +1779,11 @@ function moveMethod(k, dir) {
 
 function renderSettings() {
   const activeStack = stackArr(settings);
-  let h = `<div class="set-group"><h3>Appearance</h3>
-    <div class="set-row"><span>Dark theme</span>
-      <label class="switch"><input type="checkbox" id="setTheme" ${settings.theme === "dark" ? "checked" : ""}><span class="slider"></span></label></div>
-    <p class="hint">Switches the page and the spectator gaff view between the light (tan / baby&#8209;blue) and dark palettes.</p></div>
-    <div class="set-group"><h3>Deck</h3>
+  let h = `<div class="set-group"><h3>Deck</h3>
     <div class="set-row"><span>Stack</span><select id="setStack">
       ${Object.keys(STACKS).map(k => `<option value="${k}" ${(settings.stack||"aronson")===k?"selected":""}>${STACK_LABELS[k]}</option>`).join("")}
     </select></div>
-    <button id="setOpenDup" class="randombtn" style="margin:8px 0 0">&#127183; Duplicate-gaff stack — constrained-choice tool</button>
+    <button id="setOpenDup" class="randombtn" style="margin:8px 0 0">&#127183; Real-deck ACAAN (number-first)</button>
     <button id="setOpenLock" class="randombtn" style="margin:8px 0 0">&#128274; Lockscreen (gaff)</button>
     <div class="set-row"><span>Deck state</span><select id="setMode">
       <option value="full" ${settings.mode === "full" ? "selected" : ""}>Full deck (52)</option>
@@ -1863,7 +1838,6 @@ function renderSettings() {
   h += `</div>`;
   $("settingsBody").innerHTML = h;
 
-  $("setTheme").addEventListener("change", e => { settings.theme = e.target.checked ? "dark" : "light"; saveSettings(); applyTheme(); });
   $("setTopCard").addEventListener("change", e => { settings.topCard = e.target.value; saveSettings(); });
   $("setMode").addEventListener("change", e => { settings.mode = e.target.value; saveSettings(); renderSettings(); });
   if ($("setNoteEnd")) $("setNoteEnd").addEventListener("change", e => { settings.noteEnd = e.target.value; saveSettings(); });
@@ -2036,216 +2010,196 @@ function encodeOut(out) {
 }
 /*CC-DUP-ENGINE-END*/
 
+/*RD-ENGINE-START*/
+// Real single deck + 2 jokers. Number-first, suit-force. Clean deal or double-lift only (no indicators).
+const RD_STACK = ["5D","8D","KD","JS","JH","4D","9D","2C","4C","KC","QD","5H","3C","7D","KH","JC","JD","4H","7S","2S","9S","KS","5S","3S","7H","10D","8C","QS","3H","7C","10C","9C","2D","6D","5C","8H","10H","8S","QC","3D","9H","10S","4S","2H","QH"];
+const RD_SHIMS = ["JK","JK","AS","AH","AC","AD","6S","6C","6H"];   // packets 0/3/6/9 drawn from these
+const RD_PACKETS = [0,3,6,9], RD_LO = 10, RD_HI = 46, RD_HALF = Math.floor(RD_STACK.length/2);
+const RD_SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
+function rdPretty(c){ return c === "JK" ? "🃏" : c.slice(0,-1) + RD_SUIT_SYM[c.slice(-1)]; }
+// all configs: 2 cut states × 4 packet sizes
+function rdConfigs(){ const cuts = [{ d: RD_STACK, cut: false }, { d: [...RD_STACK.slice(RD_HALF), ...RD_STACK.slice(0, RD_HALF)], cut: true }];
+  const out = []; for (const c of cuts) for (const k of RD_PACKETS) out.push({ deck: [...Array(k).fill("JK"), ...c.d], packet: k, cut: c.cut }); return out; }
+const RD_CONFIGS = rdConfigs();
+// best out for a specific card at N: prefer clean (deal/next) over double-lift; then fewest packet; then no-cut.
+function rdResolve(card, N){
+  const c = [];
+  for (const cfg of RD_CONFIGS){ const d = cfg.deck, L = d.length;
+    if (N <= L && d[N-1] === card) c.push({ method:"deal", packet:cfg.packet, cut:cfg.cut, tier:0 });
+    else if (N+1 <= L && d[N] === card) c.push({ method:"next", packet:cfg.packet, cut:cfg.cut, tier:0 });
+    else if (N-1 >= 1 && d[N-2] === card) c.push({ method:"dl", packet:cfg.packet, cut:cfg.cut, tier:1 });
+  }
+  if (!c.length) return null;
+  c.sort((a,b) => (a.tier-b.tier) || (a.packet-b.packet) || ((a.cut?1:0)-(b.cut?1:0)));
+  return c[0];
+}
+// suit selection: color "red"|"black" -> { suits:[left,right], force, anySuit, out }. Forced (better) suit LEFT.
+function rdSuit(value, color, N){
+  const suits = color === "red" ? ["H","D"] : ["S","C"];
+  const o0 = rdResolve(value + suits[0], N), o1 = rdResolve(value + suits[1], N);
+  const rank = o => o ? (o.method === "dl" ? 1 : 0) : 2;   // 0 clean, 1 dl, 2 none
+  const r0 = rank(o0), r1 = rank(o1);
+  if (r0 === r1) return { suits, force: false, anySuit: r0 < 2, out: o0 || o1 };
+  const leftFirst = r0 < r1;
+  return { suits: leftFirst ? [suits[0], suits[1]] : [suits[1], suits[0]], force: true, anySuit: false, out: leftFirst ? o0 : o1 };
+}
+// 5 is offerable at N when both red and black 5 resolve (clean or DL).
+function rdFiveOk(N){ const w = (a, b) => rdResolve("5" + a, N) || rdResolve("5" + b, N); return !!(w("S", "C") && w("H", "D")); }
+// secret = packet (0/3/6/9) + cut + double-lift. The number is spoken openly.
+function rdEncode(out){ return out ? { packet: out.packet, cut: !!out.cut, dl: out.method === "dl" } : { packet: 0, cut: false, dl: false }; }
+// steps: plain = explicit (magician); coded = one natural sentence hiding packet/cut/dl.
+function rdSteps(out, card, N, coded){
+  if (!out) return null;
+  const F = rdPretty(card);
+  if (!coded) {
+    const s = [];
+    if (out.cut) s.push("Cut the deck (bottom half to top).");
+    const grp = { 0: null, 3: "the jokers (3)", 6: "the aces (6)", 9: "the jokers and aces (9)" }[out.packet];
+    if (grp) s.push("Add " + grp + " to the top.");
+    s.push(`Deal ${N} cards.`);
+    if (out.method === "dl") s.push("Double-lift the final card.");
+    else if (out.method === "next") s.push("The next card is theirs.");
+    s.push(`That's the ${F}.`);
+    return s;
+  }
+  // coded: subject phrase encodes packet; passive/active verb encodes cut; "into your hands"/"into a pile" encodes dl.
+  const subj = { 0: ["Cards", "are"], 3: ["Every card", "is"], 6: ["All the cards", "are"], 9: ["Each and every card", "is"] }[out.packet];
+  const head = out.cut ? `Pick up the deck and hold ${subj[0].toLowerCase()} face down.` : `${subj[0]} ${subj[1]} held face down.`;
+  if (out.method === "dl") return [head, `Deal ${N} cards into your hands face down.`, `Turn over the ${F}.`];
+  const finder = out.method === "next" ? "the NEXT card is" : "the last card is";
+  return [head, `Deal ${N} cards into a pile — ${finder} the ${F}.`];
+}
+/*RD-ENGINE-END*/
+
 /* ---- UI (scoped to #ddScreen) — stepped flow mirroring the main app ---- */
 const $ = id => document.getElementById(id);
-const DD_VALUES = ["2","3","4","5","6","7","8","9","10","J","Q","K"];   // no ace — aces are held out as shims
-const DD_SUITS = ["S","C","H","D"];   // grouped by colour: ♠♣ (black) then ♥♦ (red)
-let pendingValue = null, pendingCard = null, numEntry = "";
-let gColor = null, gKind = null, gValue = null;   // gaff guided-equivoque sub-flow state
-const ddState = { step: 0, card: null, num: null };
-
-$("vals").innerHTML = DD_VALUES.map(v => `<button data-v="${v}">${v}</button>`).join("");
-$("suitsel").innerHTML = DD_SUITS.map(s => `<button data-s="${s}" class="suit-${s.toLowerCase()}">${SUIT_SYM[s]}</button>`).join("");
 $("keypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button data-k="${d}">${d}</button>`).join("")
   + `<button data-k="clear">C</button><button data-k="0">0</button><button data-k="ok" class="ok">&#10003;</button>`;
 
-// gaff allows only the parity-correct suit per value (a valid face); regular allows all four
-function suitAllowed(s) { return mode !== "gaff" || !pendingValue || FACES.includes(pendingValue + s); }
-function styleValues() { [...$("vals").children].forEach(b => b.style.borderColor = b.dataset.v === pendingValue ? "var(--gold)" : "var(--line)"); }
+// real-deck flow state: number first, then guided equivoque, then suit.
+let numEntry = "";
+const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null };
+const RD_VNAME = { "2":"Two","3":"Three","4":"Four","5":"Five","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
+const RD_SNAME = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" }, RD_SSYM = { S:"♠", C:"♣", H:"♥", D:"♦" };
+function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; numEntry=""; }
 
-$("vals").addEventListener("click", e => { const v = e.target.dataset?.v; if (!v) return; pendingValue = v;
-  pendingCard = null; $("ddCardRoll").style.display = "none";   // a manual pick supersedes a rolled card
-  styleValues(); });
-// gaff pins the suit: tapping a wrong suit auto-resolves to the valid suit of the SAME colour
-function sameColorValid(s) { const red = "HD".includes(s); return DD_SUITS.find(x => ("HD".includes(x) === red) && FACES.includes(pendingValue + x)) || null; }
-$("suitsel").addEventListener("click", e => { const s = e.target.dataset?.s; if (!s || !pendingValue) return;
-  const target = suitAllowed(s) ? s : sameColorValid(s);
-  if (!target || !FACES.includes(pendingValue + target)) return;
-  const f = pendingValue + target;
-  // animate the correct suit lighting up, then advance
-  [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
-  const btn = $("suitsel").querySelector(`button[data-s="${target}"]`); if (btn) btn.classList.add("lit");
-  setTimeout(() => { ddState.card = f; pendingValue = null; styleValues(); goStep(1); }, 400);
+// ---- number step ----
+$("keypad").addEventListener("click", e => {
+  const k = e.target.dataset?.k; if (!k) return;
+  if (k === "clear") numEntry = "";
+  else if (k === "ok") return rdCommitNum();
+  else if (numEntry.length < 2) numEntry += k;
+  $("ddNumEntry").textContent = numEntry || "–";
+  rdNumGuide();
+  if (numEntry.length === 2) return rdCommitNum();   // auto-advance after the second digit
 });
-// --- gaff guided equivoque: Black/Red -> Number/Picture -> value -> suit (suit auto-pins) ---
-function resetGaff() { gColor = null; gKind = null; gValue = null; }
-function renderGaffStep() {
+function rdNumGuide(){
+  if (magicianMode) {
+    const v = parseInt(numEntry, 10);
+    let g = "";
+    if (numEntry && v < RD_LO) g = `<span class="warn">make it a two-digit number</span>`;
+    else if (v > RD_HI) g = `<span class="warn">too high — ask for another</span>`;
+    else if (numEntry) g = `<span class="ok">ok</span>`;
+    $("numGuide").innerHTML = g;
+  } else $("numGuide").innerHTML = "";
+}
+function rdCommitNum(){
+  const v = parseInt(numEntry, 10);
+  if (!(v >= 1 && v <= 52)) return;
+  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low — ask for a two-digit number.</span>`; return; }
+  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high — ask for another number.</span>`; return; }
+  rd.num = v; rd.step = 1; rdRender();
+}
+
+// ---- equivoque + suit flow (rendered in #ddGaffFlow) ----
+$("ddGaffFlow").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || b.classList.contains("off")) return;
+  const g = b.dataset.g, v = b.dataset.v; if (!g) return;
+  if (g === "color") rd.color = v;
+  else if (g === "kind") { rd.kind = v; rd.hl = null; }
+  else if (g === "hl") rd.hl = v;
+  else if (g === "value") rd.value = v;
+  else if (g === "suit") { rd.card = rd.value + v; rd.step = 2; }
+  rdRender();
+});
+function rdFlowStep(){
   const flow = $("ddGaffFlow"); let cols = 2, html = "", title = "";
-  if (!gColor) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
-  else if (!gKind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
-  else if (!gValue) {
+  if (!rd.color) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
+  else if (!rd.kind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
+  else if (rd.kind === "num" && !rd.hl) { title = "High or low?"; html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
+  else if (!rd.value) {
     title = "Which value?";
-    if (gKind === "num") { cols = 5; html = ["2","3","4","5","6","7","8","9","10"].map(v => `<button data-g="value" data-v="${v}">${v}</button>`).join(""); }
-    else { cols = 3; html = [["J","Jack"],["Q","Queen"],["K","King"]].map(([v,l]) => `<button data-g="value" data-v="${v}">${l}</button>`).join(""); }
+    let vals;
+    if (rd.kind === "pic") { cols = 3; vals = ["J","Q","K"]; }
+    else if (rd.hl === "high") { cols = 4; vals = ["7","8","9","10"]; }
+    else { vals = ["2","3","4"]; if (rdFiveOk(rd.num)) vals.push("5"); cols = vals.length; }
+    html = vals.map(v => `<button data-g="value" data-v="${v}">${rd.kind === "pic" ? RD_VNAME[v] : v}</button>`).join("");
   } else {
-    title = "Which suit?";
-    const pairs = gColor === "red" ? [["H","♥","Hearts"],["D","♦","Diamonds"]] : [["S","♠","Spades"],["C","♣","Clubs"]];
-    const redSuit = gColor === "red";
-    const correct = faceFor(gValue, gColor).slice(-1);   // the wrong suit looks identical but is inert (no tap, no flash)
-    html = pairs.map(([s,sym,name]) => `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}${s === correct ? "" : " off"}"><span class="sy${redSuit ? " syr" : ""}">${sym}</span> ${name}</button>`).join("");
+    const r = rdSuit(rd.value, rd.color, rd.num);
+    title = r.force ? "Which suit?" : "Choose any suit";
+    html = r.suits.map(s => { const red = "HD".includes(s);
+      return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${RD_VNAME[rd.value]} of ${RD_SNAME[s]}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
   }
   $("ddCardTitle").textContent = title;
   flow.style.gridTemplateColumns = `repeat(${cols},1fr)`;
   flow.innerHTML = html;
 }
-function pickGaffSuit(s) {
-  const f = faceFor(gValue, gColor);
-  if (s !== f.slice(-1)) return;   // wrong-parity suit: looks the same, just doesn't work
-  ddState.card = f; goStep(1);
-}
-$("ddGaffFlow").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b) return; const g = b.dataset.g, v = b.dataset.v; if (!g) return;
-  if (g === "color") gColor = v;
-  else if (g === "kind") gKind = v;
-  else if (g === "value") gValue = v;
-  else if (g === "suit") return pickGaffSuit(v);
-  ddRender();
-});
-// random card generator (spectator view) — rolls only VALID faces; press again for a fresh one
-$("ddRandomCard").addEventListener("click", () => {
-  const choices = FACES.length > 1 ? FACES.filter(c => c !== pendingCard) : FACES;
-  pendingCard = choices[Math.floor(Math.random() * choices.length)];
-  const pv = $("ddCardRollPreview");
-  pv.textContent = pretty(pendingCard);
-  pv.className = "rollcard" + (isRed(pendingCard) ? " red" : "");
-  $("ddCardRoll").style.display = "block";
-});
-$("ddUseCard").addEventListener("click", () => { if (!pendingCard) return; ddState.card = pendingCard; pendingCard = null; pendingValue = null; styleValues(); goStep(1); });
-// random number generator (spectator view) — rolls only WORKING numbers (10–43, clean out)
-$("ddRandomNum").addEventListener("click", () => {
-  if (!ddState.card) return;
-  let pool = []; for (let N = 10; N <= 43; N++) if (resolveOut(ddState.card, N, $("dl").checked)) pool.push(N);
-  if (!pool.length) for (let N = 10; N <= 43; N++) pool.push(N);
-  const cur = parseInt(numEntry, 10), choices = pool.length > 1 ? pool.filter(n => n !== cur) : pool;
-  numEntry = String(choices[Math.floor(Math.random() * choices.length)]);
-  $("ddNumEntry").textContent = numEntry;
-  $("ddNumRoll").style.display = "block";
-});
-$("ddUseNum").addEventListener("click", () => { const v = parseInt(numEntry, 10); if (v >= 1 && v <= 52) commitNum(v); });
-$("keypad").addEventListener("click", e => {
-  const k = e.target.dataset?.k; if (!k) return;
-  $("ddNumRoll").style.display = "none";   // manual pad use supersedes a rolled number
-  if (k === "clear") numEntry = "";
-  else if (k === "ok") { const v = parseInt(numEntry, 10); if (v >= 1 && v <= 52) return commitNum(v); }
-  else if (numEntry.length < 2) numEntry += k;
-  $("ddNumEntry").textContent = numEntry || "–";
-  if (numEntry.length === 2) { const v = parseInt(numEntry, 10); if (v >= 1 && v <= 52) commitNum(v); }
-});
-function commitNum(v) { ddState.num = v; numEntry = ""; goStep(2); }
 
+// ---- result ----
+function rdRenderOut(coded){
+  const out = rdResolve(rd.card, rd.num);
+  const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, coded).map(l => `<li>${l}</li>`).join("")}</ol>`;
+  if (coded) { $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`; return; }
+  if (!out) { $("out").innerHTML = `<span class="bad">No out for ${rdPretty(rd.card)} at ${rd.num}.</span>`; return; }
+  const e = rdEncode(out);
+  const tag = `${rdPretty(rd.card)} at ${rd.num} · ${out.method === "dl" ? "double-lift" : "clean deal"} · add ${e.packet}${e.cut ? " · cut" : ""}`;
+  $("out").innerHTML = `<div class="hint">${tag}</div>${stepsHtml(out)}`;
+}
+
+// ---- chrome ----
+$("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
 $("ddChips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
-  const st = +c.dataset.step; if (st === 1 && !ddState.card) return; goStep(st); });
-$("ddReset").addEventListener("click", ddReset);
-// Back steps through the flow (results→number→card→undo equivoque); only leaves the tool from the very start
+  const st = +c.dataset.step; if (st === 1 && rd.num == null) return; rd.step = st; rdRender(); });
 $("ddBack").addEventListener("click", () => {
-  if (ddState.step === 2) return goStep(1);
-  if (ddState.step === 1) { ddState.card = null; return goStep(0); }
-  if (mode === "gaff") {
-    if (gValue) { gValue = null; ddRender(); return; }
-    if (gKind)  { gKind = null;  ddRender(); return; }
-    if (gColor) { gColor = null; ddRender(); return; }
+  if (rd.step === 2) { rd.card = null; rd.step = 1; return rdRender(); }
+  if (rd.step === 1) {
+    if (rd.value) { rd.value = null; return rdRender(); }
+    if (rd.hl) { rd.hl = null; return rdRender(); }
+    if (rd.kind) { rd.kind = null; return rdRender(); }
+    if (rd.color) { rd.color = null; return rdRender(); }
+    rd.step = 0; numEntry = ""; return rdRender();
   }
   $("ddScreen").style.display = "none"; $("app").style.display = "block"; render();
 });
-$("modeSel").addEventListener("click", e => { const m = e.target.dataset?.m; if (!m || m === mode) return;
-  setDeck(m); [...$("modeSel").children].forEach(b => b.classList.toggle("sel", b.dataset.m === m));
-  renderStack(); updateModeNote(); ddReset();
-});
-$("dl").addEventListener("change", () => { if (ddState.step === 2) ddRender(); });
 
-function goStep(s) { ddState.step = s; if (s === 1) numEntry = ""; if (s === 0) resetGaff(); ddRender(); }
-function ddReset() { ddState.step = 0; ddState.card = null; ddState.num = null; pendingValue = null; numEntry = ""; resetGaff(); styleValues(); ddRender(); }
-
-function renderStack() { $("stackGrid").innerHTML = STACK.map(c => `<span class="${isRed(c) ? "r" : ""}">${pretty(c)}</span>`).join(""); }
-function updateModeNote() {
-  $("modeNote").innerHTML = mode === "gaff"
-    ? `<b>Gaff:</b> 24 faces ×2. Free value <b>2–K</b> + "red or black" → suit is pinned; tap the named card (only its two valid suits enable). Force a number <b>10–43</b> — every card is a clean hit. Hold out 2 jokers + 4 aces; if they name an Ace, ask for another.`
-    : `<b>Regular (Aronson):</b> name any value <b>2–K</b> + suit. Aces held out (with 2 jokers) as shims, so if they name an Ace ask for another. Single-copy deck, so coverage is lower — some cards have a few <b>excluded numbers</b> (shown), handled with "don't think of my number". Dealing face up is always safe.`;
-}
-function setCodedVisibility(coded) {
-  const dn = coded ? "none" : "";
-  $("ddTitle").style.display = dn;
-  $("modeSel").style.display = dn;
-  $("ddDlLabel").style.display = dn;
-  $("ddDetails").style.display = dn;
-}
-// 5 example numbers offered to the spectator = the WORST (indicator-requiring) numbers for this card.
-// Suggesting them as examples steers people OFF them, shrinking the chance of an indicator out.
-function exampleNumbers(face, dl) {
-  let bad = [];
-  for (let N = 10; N <= 43; N++) { const o = resolveOut(face, N, dl); if (o && o.tier === 2) bad.push(N); }
-  const shuf = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(p => p[1]);
-  let ex = shuf(bad).slice(0, 5);
-  if (ex.length < 5) for (const N of shuf([...Array(34)].map((_, i) => i + 10))) { if (ex.length >= 5) break; if (!ex.includes(N)) ex.push(N); }
-  return ex.sort((a, b) => a - b);
-}
-function renderOut(coded) {
-  const f = ddState.card, N = ddState.num;
-  const out = (f && N >= 1 && N <= 52) ? resolveOut(f, N, $("dl").checked) : null;
-  // steps; the LAST step is green when the deal can keep the stack in order (face-up-safe), normal otherwise
-  const stepsHtml = o => { const st = stepsFor(o, f, N, coded);
-    return `<ol class="steps">${st.map((line, i) => `<li class="${i === st.length - 1 && o.faceUp ? "keep" : ""}">${line}</li>`).join("")}</ol>`; };
-  if (coded) { $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`; return; }
-  if (!out) { $("out").innerHTML = `<span class="bad">No clean out for ${pretty(f)} at ${N}.</span> <span class="hint">${N < 10 || N > 43 ? "Outside the forced range — redirect to a two-digit number under 44." : "Steer them off this number."}</span>`; return; }
-  const tierName = out.tier === 0 ? "clean deal" : out.tier === 1 ? "double-lift" : "indicator";
-  const oor = (N < 10 || N > 43) ? `<span class="warn"> · outside 10–43 — redirect if you can</span>` : "";
-  $("out").innerHTML = `<div class="hint">${pretty(f)} at ${N} · ${tierName}${oor}</div>${stepsHtml(out)}`;
-}
-function ddRender() {
+function rdSetCoded(coded){ const dn = coded ? "none" : ""; $("ddTitle").style.display = dn; $("ddDetails").style.display = dn; }
+function rdRender(){
   const coded = !magicianMode;
-  // chips
-  $("ddChipCard").innerHTML = ddState.card ? prettyHTML(ddState.card) : "—";
-  $("ddChipCard").className = "val" + (ddState.card && isRed(ddState.card) ? " red" : "");
-  $("ddChipNum").textContent = ddState.num != null ? ddState.num : "—";
-  $("ddChips").children[0].classList.toggle("active", ddState.step === 0);
-  $("ddChips").children[1].classList.toggle("active", ddState.step === 1);
-  if (coded && ddState.step !== 2) {   // entry: only the card chip, and only once it's entered
-    $("ddChips").style.gridTemplateColumns = "1fr";
-    $("ddChips").children[1].style.display = "none";
-    $("ddChips").style.display = ddState.card ? "" : "none";
-  } else {   // magician, or the end (results): show card + number on top
-    $("ddChips").style.gridTemplateColumns = "";
-    $("ddChips").children[1].style.display = "";
-    $("ddChips").style.display = "";
-  }
-  // no Back button on the very first (landing) page — nothing to go back to
-  const atRoot = ddState.step === 0 && !gColor && !gKind && !gValue;
+  $("ddChipNum").textContent = rd.num != null ? rd.num : "—";
+  $("ddChipCard").innerHTML = rd.card ? prettyHTML(rd.card) : "—";
+  $("ddChipCard").className = "val" + (rd.card && /[HD]$/.test(rd.card) ? " red" : "");
+  $("ddChips").children[0].classList.toggle("active", rd.step === 0);
+  $("ddChips").children[1].classList.toggle("active", rd.step === 1);
+  $("ddChips").style.display = (coded && rd.step === 0) ? "none" : "";
+  $("ddChips").style.gridTemplateColumns = "";
+  const atRoot = rd.step === 0 && !numEntry;
   $("ddBack").parentElement.style.display = (coded && atRoot) ? "none" : "";
-  $("ddNumTitle").textContent = coded ? "Enter any number between 1 and 52" : "Enter their number";
-  // panels by step
-  $("ddCardPicker").style.display = ddState.step === 0 ? "" : "none";
-  $("ddNumberPicker").style.display = ddState.step === 1 ? "" : "none";
-  $("ddResults").style.display = ddState.step === 2 ? "" : "none";
-  // card picker contents: gaff uses the guided equivoque flow; regular uses the value grid + suits
-  if (mode === "gaff") {
-    $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
-    renderGaffStep();   // sets the card title per sub-step
-  } else {
-    $("vals").style.display = ""; $("suitsel").style.display = ""; $("ddGaffFlow").style.display = "none";
-    $("ddCardTitle").textContent = coded ? "Enter your card" : "Enter their card";
-  }
-  setCodedVisibility(coded);
-  // random generators removed from the spectator view
-  $("ddRandomCard").style.display = "none";
-  $("ddRandomNum").style.display = "none";
-  $("ddCardRoll").style.display = "none";
-  $("ddNumRoll").style.display = "none";
-  [...$("suitsel").children].forEach(b => b.classList.remove("lit"));
-  if (ddState.step === 1) {
-    $("ddNumEntry").textContent = numEntry || "–";
-    const f = ddState.card;
-    if (coded) {
-      $("ddNumExample").textContent = f ? `Example: ${exampleNumbers(f, $("dl").checked).join(", ")}…` : "";
-      $("numGuide").innerHTML = "";
-    } else {
-      $("ddNumExample").textContent = "";
-      const duds = f ? faceDuds($("dl").checked, 43)[f] : [];
-      $("numGuide").innerHTML = duds.length ? `<span class="warn">avoid ${duds.join(", ")}</span>` : `<span class="ok">any 10–43 works</span>`;
-    }
-  }
-  if (ddState.step === 2) renderOut(coded);
+  $("ddNumberPicker").style.display = rd.step === 0 ? "" : "none";
+  $("ddCardPicker").style.display = rd.step === 1 ? "" : "none";
+  $("ddResults").style.display = rd.step === 2 ? "" : "none";
+  // legacy gaff pickers stay hidden; the flow uses #ddGaffFlow
+  $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
+  $("ddRandomCard").style.display = "none"; $("ddRandomNum").style.display = "none";
+  $("ddCardRoll").style.display = "none"; $("ddNumRoll").style.display = "none";
+  $("ddNumExample").textContent = "";
+  rdSetCoded(coded);
+  if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; $("ddNumTitle").textContent = coded ? "Name any number (1–52)" : "Their number"; rdNumGuide(); }
+  if (rd.step === 1) rdFlowStep();
+  if (rd.step === 2) rdRenderOut(coded);
 }
-ddRerender = ddRender;
+ddRerender = rdRender;
+function rdRenderStack(){ $("stackGrid").innerHTML = RD_STACK.map(c => `<span class="${/[HD]$/.test(c) ? "r" : ""}">${rdPretty(c)}</span>`).join(""); }
+rdRenderStack();
 
 /* ---- Lockscreen covert view (gaff): hidden-keypad input, disguised date/code ---- */
 let lkValue = null, lkColor = null, lkNum = "", lkPhase = "value", lkTimer = null, lkWeatherTxt = "--°";
@@ -2316,7 +2270,7 @@ function lkShow() { setDeck("gaff"); $("app").style.display="none"; $("settings"
 function lkHide() { $("lockScreen").style.display="none"; lkStopClock(); $("app").style.display="block"; }
 lkOpen = lkShow;
 
-renderStack(); updateModeNote(); ddReset();   // init (gaff mode, step 0)
+rdResetState(); rdRender();   // init (real-deck tool, number step)
 })();
 
 buildPickers();
