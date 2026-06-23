@@ -35,7 +35,9 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; background: var(--dd-page); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; }
+  body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; box-sizing: border-box; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+  /* push the spectator entry flow to the bottom so number + card are thumb-reachable one-handed */
+  #ddScreen { margin-top: auto; }
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
   header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dd-title); font-weight: 600; margin: 0; text-transform: uppercase; }
@@ -153,6 +155,13 @@
   #ddScreen #suitsel button, #ddScreen #ddGaffFlow button { transition: background .15s, color .15s, border-color .15s; }
   #ddScreen #suitsel button.lit, #ddScreen #ddGaffFlow button.lit { background: var(--gold); color:#000; border-color: var(--gold); }
   #ddScreen #ddGaffFlow button { font-size: 20px; font-weight: 600; padding: 22px 0; }
+  #ddScreen #ddReveal { text-align: center; font-size: 19px; font-weight: 700; color: var(--gold); margin-bottom: 12px; }
+  #ddScreen #ddReveal:empty { display: none; }
+  #ddPop { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(8,9,12,.97); pointer-events: none; opacity: 0; transition: opacity .16s ease; z-index: 70; }
+  #ddPop.show { opacity: 1; pointer-events: auto; }
+  #ddPop .bubble { background: rgba(18,20,26,.96); border: 1px solid var(--gold); color: #fff; border-radius: 16px; padding: 20px 24px; font-size: 19px; font-weight: 700; line-height: 1.35; max-width: 360px; text-align: center; box-shadow: 0 12px 48px rgba(0,0,0,.65); transform: scale(.96); transition: transform .16s ease; }
+  #ddPop.show .bubble { transform: scale(1); }
+  #ddPop .bubble.final { color: var(--gold); font-size: 24px; padding: 24px 30px; }
   #ddScreen #ddGaffFlow button.off { pointer-events: none; }   /* wrong suit: looks the same, no tap/flash */
   #ddScreen #ddGaffFlow .sy { font-size: 1.7em; vertical-align: -0.12em; }
   #ddScreen #ddGaffFlow .syr { color: var(--red); }
@@ -161,7 +170,7 @@
   #ddScreen #ddGaffFlow button[data-g="suit"] .cn { white-space: nowrap; font-size: 15px; }
   #ddScreen #ddGaffFlow .sy.sb { display: block; vertical-align: 0; line-height: 1; }
   /* colour step: white buttons, black/red content like real card colours */
-  #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); }
+  #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
   #ddScreen .picker h2 { color: var(--dd-panel-label); }           /* labels with contrast on the panel */
   #ddScreen #ddNumEntry, #ddScreen #ddNumExample { color: var(--dd-panel-label); }
@@ -289,6 +298,7 @@
 </section>
 
 <section id="ddScreen" style="display:none">
+  <div id="ddPop"><div class="bubble" id="ddPopText"></div></div>
   <div class="btnrow"><button id="ddBack">&#10094; Back</button></div>
   <h1 id="ddTitle">Real-deck ACAAN</h1>
   <input type="checkbox" id="dl" checked style="display:none">
@@ -323,6 +333,7 @@
   </div>
 
   <section id="ddResults" style="display:none">
+    <div class="reveal" id="ddReveal"></div>
     <div class="panel gold" id="out"></div>
     <div class="btnrow" style="margin-top:12px"><button id="ddReset">&#10227; Start over</button></div>
   </section>
@@ -2135,10 +2146,10 @@ $("keypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button 
 
 // real-deck flow state: number first, then guided equivoque, then suit.
 let numEntry = "";
-const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null };
+const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null, valElim: [] };
 const RD_VNAME = { "2":"Two","3":"Three","4":"Four","5":"Five","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
 const RD_SNAME = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" }, RD_SSYM = { S:"♠", C:"♣", H:"♥", D:"♦" };
-function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; numEntry=""; }
+function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; rd.suitPicked=null; rd.valElim=[]; numEntry=""; }
 
 // ---- number step ----
 $("keypad").addEventListener("click", e => {
@@ -2169,41 +2180,86 @@ function rdCommitNum(){
 }
 
 // ---- equivoque + suit flow (rendered in #ddGaffFlow) ----
+// elimination narrative: the binary tap is REMOVED, so we continue with the other side.
 $("ddGaffFlow").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || b.classList.contains("off")) return;
   const g = b.dataset.g, v = b.dataset.v; if (!g) return;
-  if (g === "color") rd.color = v;
-  else if (g === "kind") { rd.kind = v; rd.hl = null; }
-  else if (g === "hl") rd.hl = v;
-  else if (g === "value") rd.value = v;
-  else if (g === "suit") { rd.card = rd.value + v; rd.step = 2; }
+  if (g === "suit") {
+    const r = rdSuit(rd.value, rd.color, rd.num);
+    rd.suitPicked = v;
+    const forceSuit = r.force ? r.suits[0] : v;
+    rd.card = rd.value + forceSuit;                            // always resolve to the force card
+    rd.step = 2; rdRender();
+    const yourCard = { msg: `Your card is the ${rdFullName(rd.value + forceSuit)}.`, final: true };
+    if (r.force && v !== forceSuit) rdPopupChain([{ msg: `${rdFullName(rd.value + v)} was removed.` }, yourCard]);
+    else rdPopupChain([yourCard]);
+    return;
+  }
+  if (g === "value") {                                        // values: eliminate one at a time; last left = their value
+    rd.valElim.push(v);
+    const remaining = rdOfferedValues().filter(x => !rd.valElim.includes(x));
+    if (remaining.length === 1) { rd.value = remaining[0]; rdRender(); rdPopup("Final Decision"); }
+    else rdRender();                                           // no popup mid-elimination — the button just disappears
+    return;
+  }
+  if (g === "color") rd.color = (v === "black") ? "red" : "black";
+  else if (g === "kind") { rd.kind = (v === "num") ? "pic" : "num"; rd.hl = null; }
+  else if (g === "hl") rd.hl = (v === "high") ? "low" : "high";
+  else return;
   rdRender();
+  rdPopup(rdElimText());                                       // brief popup between screens
 });
+let ddPopTimer = null;
+// show one or more popups back-to-back; the backdrop stays up until the last one ends
+function rdPopupChain(steps){ const p = $("ddPop"), b = $("ddPopText"); clearTimeout(ddPopTimer);
+  let i = 0;
+  const next = () => { if (i >= steps.length) { p.classList.remove("show"); return; }
+    const s = steps[i++]; b.textContent = s.msg; b.classList.toggle("final", !!s.final); p.classList.add("show");
+    ddPopTimer = setTimeout(next, s.final ? 1700 : 1400); };
+  next();
+}
+function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!final }]); }
+// values offered at the value step (depends on the surviving kind/high-low)
+function rdOfferedValues(){
+  if (rd.kind === "pic") return ["J","Q","K"];
+  if (rd.hl === "high") return ["7","8","9","10"];
+  const v = ["2","3","4"]; if (rdFiveOk(rd.num)) v.push("5"); return v;
+}
+function rdNameList(vals){ const n = vals.map(v => RD_VNAME[v] || v);
+  if (n.length <= 1) return n[0] || "";
+  if (n.length === 2) return `${n[0]} and ${n[1]}`;
+  return `${n.slice(0,-1).join(", ")}, and ${n[n.length-1]}`; }
+// confirmation for the most recently completed equivoque pick (shown above the next step)
+function rdElimText(){
+  if (rd.value != null) return `You just eliminated the ${rdNameList(rdOfferedValues().filter(v => v !== rd.value))}.`;
+  if (rd.hl != null)    return `${rd.hl === "high" ? "Low" : "High"} cards removed.`;
+  if (rd.kind != null)  return `${rd.kind === "num" ? "Picture" : "Number"} cards removed.`;
+  if (rd.color != null) return `${rd.color === "black" ? "Red" : "Black"} cards removed.`;
+  return "";
+}
+// reveal text on the results page (always the force card)
+function rdRevealText(){ return rd.card ? `Your card is the ${rdFullName(rd.card)}.` : ""; }
 function rdFlowStep(){
-  const flow = $("ddGaffFlow"); let cols = 2, html = "", title = "";
-  if (!rd.color) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
-  else if (!rd.kind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
-  else if (rd.kind === "num" && !rd.hl) { title = "High or low?"; html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
+  const flow = $("ddGaffFlow"); let cols = 2, html = "";
+  if (!rd.color) { html = `<button data-g="color" data-v="black">Remove Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Remove Red <span class="sy syr sb">♥♦</span></button>`; }
+  else if (!rd.kind) { html = `<button data-g="kind" data-v="num">Remove Number Cards</button><button data-g="kind" data-v="pic">Remove Picture Cards</button>`; }
+  else if (rd.kind === "num" && !rd.hl) { html = `<button data-g="hl" data-v="high">Remove High Numbers</button><button data-g="hl" data-v="low">Remove Low Numbers</button>`; }
   else if (!rd.value) {
-    title = "Which value?";
-    let vals;
-    if (rd.kind === "pic") { cols = 3; vals = ["J","Q","K"]; }
-    else if (rd.hl === "high") { cols = 4; vals = ["7","8","9","10"]; }
-    else { vals = ["2","3","4"]; if (rdFiveOk(rd.num)) vals.push("5"); cols = vals.length; }
-    html = vals.map(v => `<button data-g="value" data-v="${v}">${rd.kind === "pic" ? RD_VNAME[v] : v}</button>`).join("");
+    const vals = rdOfferedValues().filter(x => !rd.valElim.includes(x)); cols = vals.length;
+    html = vals.map(v => `<button data-g="value" data-v="${v}">Remove ${rd.kind === "pic" ? RD_VNAME[v] + "s" : v + "s"}</button>`).join("");
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num);
-    title = r.force ? "Which suit?" : "Choose any suit";
     html = r.suits.map(s => { const red = "HD".includes(s);
       return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${RD_VNAME[rd.value]} of ${RD_SNAME[s]}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
   }
-  $("ddCardTitle").textContent = title;
+  $("ddCardTitle").textContent = rd.value != null ? "Final decision" : "Which card should we remove?";
   flow.style.gridTemplateColumns = `repeat(${cols},1fr)`;
   flow.innerHTML = html;
 }
 
 // ---- result ----
 function rdRenderOut(coded){
+  $("ddReveal").textContent = rdRevealText();
   const out = rdResolve(rd.card, rd.num);
   const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, coded).map(l => `<li>${l}</li>`).join("")}</ol>`;
   if (coded) { $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`; return; }
@@ -2218,9 +2274,10 @@ $("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
 $("ddChips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
   const st = +c.dataset.step; if (st === 1 && rd.num == null) return; rd.step = st; rdRender(); });
 $("ddBack").addEventListener("click", () => {
-  if (rd.step === 2) { rd.card = null; rd.step = 1; return rdRender(); }
+  if (rd.step === 2) { rd.card = null; rd.suitPicked = null; rd.step = 1; return rdRender(); }
   if (rd.step === 1) {
-    if (rd.value) { rd.value = null; return rdRender(); }
+    if (rd.value != null) { rd.value = null; rd.valElim.pop(); return rdRender(); }   // undo: restore the survivor + one
+    if (rd.valElim.length) { rd.valElim.pop(); return rdRender(); }                    // undo one value elimination
     if (rd.hl) { rd.hl = null; return rdRender(); }
     if (rd.kind) { rd.kind = null; return rdRender(); }
     if (rd.color) { rd.color = null; return rdRender(); }
@@ -2240,7 +2297,7 @@ function rdRender(){
   $("ddChips").style.display = (coded && rd.step === 0) ? "none" : "";
   $("ddChips").style.gridTemplateColumns = "";
   const atRoot = rd.step === 0 && !numEntry;
-  $("ddBack").parentElement.style.display = (coded && atRoot) ? "none" : "";
+  $("ddBack").parentElement.style.display = ((coded && atRoot) || rd.step === 2) ? "none" : "";
   $("ddNumberPicker").style.display = rd.step === 0 ? "" : "none";
   $("ddCardPicker").style.display = rd.step === 1 ? "" : "none";
   $("ddResults").style.display = rd.step === 2 ? "" : "none";
