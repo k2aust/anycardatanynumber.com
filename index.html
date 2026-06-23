@@ -215,14 +215,14 @@
   /* ---- Camera ACAAN (#camScreen) ---- */
   #camScreen { position: fixed; inset: 0; background: #000; z-index: 55; max-width: none; }
   #camVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0e0f13; }
-  #camOverlay { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0 12px calc(5vh + 64px); pointer-events: none; }
-  #camOverlay .campanel { pointer-events: auto; width: 100%; max-width: 420px; background: rgba(14,15,19,.62); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 12px; color: #fff; }
+  #camOverlay { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0 12px calc(3vh + 54px); pointer-events: none; }
+  #camOverlay .campanel { pointer-events: auto; width: 100%; max-width: 420px; background: rgba(14,15,19,.62); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 8px 10px; color: #fff; }
   #camScreen.hideui #camOverlay { display: none; }
-  #camScreen .campanel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #cfd3dd; text-align: center; }
-  #camNumEntry { text-align: center; font-size: 34px; font-weight: 800; min-height: 46px; }
+  #camScreen .campanel h2 { margin: 0 0 4px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #cfd3dd; text-align: center; }
+  #camNumEntry { text-align: center; font-size: 26px; font-weight: 800; min-height: 32px; }
   #camScreen .grid { display: grid; gap: 6px; }
   #camScreen .grid.pad { grid-template-columns: repeat(3,1fr); }
-  #camScreen .grid.pad button, #camScreen #camFlow button { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 9px; font-size: 18px; font-weight: 600; padding: 14px 0; cursor: pointer; }
+  #camScreen .grid.pad button, #camScreen #camFlow button { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 9px; font-size: 18px; font-weight: 600; padding: 11px 0; cursor: pointer; }
   #camScreen .grid.pad button:active, #camScreen #camFlow button:active { background: rgba(255,210,80,.35); }
   #camScreen #camFlow .sy { font-size: 1.7em; } #camScreen #camFlow .syr { color: var(--red); }
   #camScreen #camFlow button[data-g="suit"] { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -231,7 +231,7 @@
   #camScreen #camOut { background: rgba(14,15,19,.85); }
   #camScreen .row { display: flex; gap: 8px; }
   #camScreen .row .cambtn { flex: 1; }
-  #camBar { position: absolute; left: 0; right: 0; bottom: 5vh; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 60; }
+  #camBar { position: absolute; left: 0; right: 0; bottom: 3vh; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 60; }
   #camScreen .cambtn { background: rgba(0,0,0,.5); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 22px; padding: 12px 18px; font-size: 15px; font-weight: 600; cursor: pointer; }
   #camScreen .cambtn.rec { background: #c0392b; border-color: #c0392b; }
   #camScreen .cambtn.rec.on { background: #fff; color: #c0392b; }
@@ -2066,6 +2066,7 @@ const RD_SHIMS = ["JK","JK","AS","AH","AC","AD","6S","6C","6H"];   // packets 0/
 const RD_PACKETS = [0,3,6,9], RD_LO = 10, RD_HI = 46, RD_HALF = Math.floor(RD_STACK.length/2);
 const RD_SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
 function rdPretty(c){ return c === "JK" ? "🃏" : c.slice(0,-1) + RD_SUIT_SYM[c.slice(-1)]; }
+function rdOrdinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
 // all configs: 2 cut states × 4 packet sizes
 function rdConfigs(){ const cuts = [{ d: RD_STACK, cut: false }, { d: [...RD_STACK.slice(RD_HALF), ...RD_STACK.slice(0, RD_HALF)], cut: true }];
   const out = []; for (const c of cuts) for (const k of RD_PACKETS) out.push({ deck: [...Array(k).fill("JK"), ...c.d], packet: k, cut: c.cut }); return out; }
@@ -2105,10 +2106,14 @@ function rdSteps(out, card, N, coded){
     s.push(out.cut ? "CUT the deck." : "REPLACE the packets.");
     const grp = { 3: "the JOKERS", 6: "the ACES", 9: "the JOKERS and ACES" }[out.packet];
     if (grp) s.push("Add " + grp + ".");
-    s.push(out.method === "dl" ? `Deal ${N} cards into the magician's hands.` : `Deal ${N} cards.`);
-    if (out.method === "dl") s.push(`DOUBLE-LIFT the last card — it's the ${F}.`);
-    else if (out.method === "next") s.push(`The NEXT card is the ${F}.`);
-    else s.push(`The LAST card is the ${F}.`);
+    if (out.method === "dl") {
+      s.push(`Deal ${N} cards into the magician's hands.`);
+      s.push(`DOUBLE-LIFT the last card — it's the ${F}.`);
+    } else {
+      s.push(`Deal ${N} cards into a pile.`);
+      if (out.method === "next") s.push(`The NEXT card is the ${F}.`);
+      else s.push(`The ${F} is the ${rdOrdinal(N)} card.`);
+    }
     return s;
   }
   // coded: subject phrase encodes packet; passive/active verb encodes cut; "into your hands"/"into a pile" encodes dl.
