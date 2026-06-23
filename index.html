@@ -2067,6 +2067,9 @@ const RD_PACKETS = [0,3,6,9], RD_LO = 10, RD_HI = 46, RD_HALF = Math.floor(RD_ST
 const RD_SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
 function rdPretty(c){ return c === "JK" ? "🃏" : c.slice(0,-1) + RD_SUIT_SYM[c.slice(-1)]; }
 function rdOrdinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
+const RD_VNAME_FULL = { "2":"Two","3":"Three","4":"Four","5":"Five","6":"Six","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King",A:"Ace" };
+const RD_SNAME_FULL = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" };
+function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1), s = c.slice(-1); return `${RD_VNAME_FULL[v] || v} of ${RD_SNAME_FULL[s] || s}`; }
 // all configs: 2 cut states × 4 packet sizes
 function rdConfigs(){ const cuts = [{ d: RD_STACK, cut: false }, { d: [...RD_STACK.slice(RD_HALF), ...RD_STACK.slice(0, RD_HALF)], cut: true }];
   const out = []; for (const c of cuts) for (const k of RD_PACKETS) out.push({ deck: [...Array(k).fill("JK"), ...c.d], packet: k, cut: c.cut }); return out; }
@@ -2100,7 +2103,7 @@ function rdEncode(out){ return out ? { packet: out.packet, cut: !!out.cut, dl: o
 // steps: plain = explicit (magician); coded = one natural sentence hiding packet/cut/dl.
 function rdSteps(out, card, N, coded){
   if (!out) return null;
-  const F = rdPretty(card);
+  const F = rdPretty(card), FN = rdFullName(card);
   if (!coded) {
     const s = [];
     s.push(out.cut ? "CUT the deck." : "REPLACE the packets.");
@@ -2108,11 +2111,11 @@ function rdSteps(out, card, N, coded){
     if (grp) s.push("Add " + grp + ".");
     if (out.method === "dl") {
       s.push(`Deal ${N} cards into the magician's hands.`);
-      s.push(`DOUBLE-LIFT the last card — it's the ${F}.`);
+      s.push(`DOUBLE-LIFT the last card — it's the ${FN}.`);
     } else {
       s.push(`Deal ${N} cards into a pile.`);
-      if (out.method === "next") s.push(`The NEXT card is the ${F}.`);
-      else s.push(`The ${F} is the ${rdOrdinal(N)} card.`);
+      if (out.method === "next") s.push(`The NEXT card is the ${FN}.`);
+      else s.push(`The ${FN} is the ${rdOrdinal(N)} card.`);
     }
     return s;
   }
