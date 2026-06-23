@@ -211,6 +211,31 @@
   #lkZones.debug .z .zl { display: block; }
   #lkSetup { position: absolute; top: 0; right: 0; width: 22%; height: 10%; z-index: 61; }
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
+
+  /* ---- Camera ACAAN (#camScreen) ---- */
+  #camScreen { position: fixed; inset: 0; background: #000; z-index: 55; max-width: none; }
+  #camVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0e0f13; }
+  #camOverlay { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 12px 0; pointer-events: none; }
+  #camOverlay .campanel { pointer-events: auto; width: 100%; max-width: 420px; background: rgba(14,15,19,.62); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 12px; color: #fff; }
+  #camScreen.hideui #camOverlay { display: none; }
+  #camScreen .campanel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #cfd3dd; text-align: center; }
+  #camNumEntry { text-align: center; font-size: 34px; font-weight: 800; min-height: 46px; }
+  #camScreen .grid { display: grid; gap: 6px; }
+  #camScreen .grid.pad { grid-template-columns: repeat(3,1fr); }
+  #camScreen .grid.pad button, #camScreen #camFlow button { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 9px; font-size: 18px; font-weight: 600; padding: 14px 0; cursor: pointer; }
+  #camScreen .grid.pad button:active, #camScreen #camFlow button:active { background: rgba(255,210,80,.35); }
+  #camScreen #camFlow .sy { font-size: 1.7em; } #camScreen #camFlow .syr { color: var(--red); }
+  #camScreen #camFlow button[data-g="suit"] { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #camScreen #camFlow button[data-g="suit"] .cn { white-space: nowrap; font-size: 15px; }
+  #camScreen #camFlow .sy.sb { display: block; }
+  #camScreen #camOut { background: rgba(14,15,19,.85); }
+  #camScreen .row { display: flex; gap: 8px; }
+  #camScreen .row .cambtn { flex: 1; }
+  #camBar { position: absolute; left: 0; right: 0; bottom: 5vh; display: flex; gap: 12px; justify-content: center; align-items: center; z-index: 60; }
+  #camScreen .cambtn { background: rgba(0,0,0,.5); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 22px; padding: 12px 18px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  #camScreen .cambtn.rec { background: #c0392b; border-color: #c0392b; }
+  #camScreen .cambtn.rec.on { background: #fff; color: #c0392b; }
+  #camExit { position: absolute; top: 0; left: 0; width: 22%; height: 9%; z-index: 61; }
 </style>
 </head>
 <body>
@@ -337,6 +362,27 @@
   <div id="lkZones"></div>
   <div id="lkSetup"></div>
   <div id="lkExit"></div>
+</section>
+
+<section id="camScreen" style="display:none">
+  <video id="camVideo" autoplay muted playsinline></video>
+  <div id="camOverlay">
+    <div id="camPanel" class="campanel">
+      <h2 id="camTitle">Their number</h2>
+      <div id="camNumEntry">&ndash;</div>
+      <div class="grid pad" id="camKeypad"></div>
+      <div class="grid" id="camFlow" style="display:none"></div>
+      <div id="camOut" class="panel gold" style="display:none"></div>
+      <div class="hint" id="camGuide" style="text-align:center;margin-top:8px"></div>
+      <div class="row" style="margin-top:8px"><button id="camBack" class="cambtn">&lsaquo; Back</button><button id="camRestart" class="cambtn">&#8635; Start over</button></div>
+    </div>
+  </div>
+  <div id="camBar">
+    <button id="camHideBtn" class="cambtn">Hide</button>
+    <button id="camRec" class="cambtn rec">&#9679; Record</button>
+    <button id="camFlip" class="cambtn">Flip</button>
+  </div>
+  <div id="camExit"></div>
 </section>
 
 <script>
@@ -1785,6 +1831,7 @@ function renderSettings() {
     </select></div>
     <button id="setOpenDup" class="randombtn" style="margin:8px 0 0">&#127183; Real-deck ACAAN (number-first)</button>
     <button id="setOpenLock" class="randombtn" style="margin:8px 0 0">&#128274; Lockscreen (gaff)</button>
+    <button id="setOpenCam" class="randombtn" style="margin:8px 0 0">&#128247; Camera ACAAN (record)</button>
     <div class="set-row"><span>Deck state</span><select id="setMode">
       <option value="full" ${settings.mode === "full" ? "selected" : ""}>Full deck (52)</option>
       <option value="half" ${settings.mode === "half" ? "selected" : ""}>Split: two halves (26 + 26)</option>
@@ -1848,6 +1895,7 @@ function renderSettings() {
   });
   $("setOpenDup").addEventListener("click", () => { $("settings").style.display = "none"; $("ddScreen").style.display = "block"; if (ddRerender) ddRerender(); });
   $("setOpenLock").addEventListener("click", () => { $("settings").style.display = "none"; if (lkOpen) lkOpen(); });
+  $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("settingsBody").querySelectorAll("input[data-base]").forEach(el =>
     el.addEventListener("change", () => { settings.base[el.dataset.base] = +el.value || 0; saveSettings(); }));
   $("settingsBody").querySelectorAll("input[data-mod]").forEach(el =>
@@ -1893,6 +1941,7 @@ $("title").addEventListener("click", () => {
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
 let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
+let camOpen = null;     // set by the tool's IIFE; shows the camera view
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
 (function () {
@@ -2269,6 +2318,123 @@ function lkFetchWeather() {
 function lkShow() { setDeck("gaff"); $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="block"; lkReset(); lkStartClock(); lkFetchWeather(); }
 function lkHide() { $("lockScreen").style.display="none"; lkStopClock(); $("app").style.display="block"; }
 lkOpen = lkShow;
+
+/* ---- Camera ACAAN (#camScreen): records video while running the real-deck flow ---- */
+let camStream = null, camFacing = "environment";
+let camRecorder = null, camChunks = [], camRecording = false;
+let camNumEntry = "";
+const camRd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null };
+
+// --- camera lifecycle ---
+async function camStart() {
+  try {
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing }, audio: true });
+    $("camVideo").srcObject = camStream; $("camVideo").style.display = "";
+  } catch (e) { camStream = null; $("camVideo").style.display = "none"; }   // fallback: dark bg
+}
+function camStopStream() { if (camRecording) camStopRec(); if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } }
+function camFlip() { camFacing = camFacing === "environment" ? "user" : "environment"; camStart(); }
+function camShow() { $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="none"; $("camScreen").style.display="block"; $("camScreen").classList.remove("hideui"); camReset(); camStart(); }
+function camHide() { camStopStream(); $("camScreen").style.display="none"; $("app").style.display="block"; }
+
+// --- recording ---
+function camMime() { return ["video/mp4","video/webm;codecs=vp9","video/webm"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || ""; }
+function camStartRec() {
+  if (!camStream || !window.MediaRecorder) return;
+  camChunks = []; const mime = camMime();
+  try { camRecorder = new MediaRecorder(camStream, mime ? { mimeType: mime } : undefined); }
+  catch (e) { return; }
+  camRecorder.ondataavailable = e => { if (e.data.size) camChunks.push(e.data); };
+  camRecorder.onstop = camSave;
+  camRecorder.start(); camRecording = true;
+  $("camRec").classList.add("on"); $("camRec").textContent = "■ Stop";
+}
+function camStopRec() { if (camRecorder && camRecording) { camRecording = false; try { camRecorder.stop(); } catch (e) {} $("camRec").classList.remove("on"); $("camRec").textContent = "● Record"; } }
+async function camSave() {
+  if (!camChunks.length) return;
+  const type = (camRecorder && camRecorder.mimeType) || "video/mp4";
+  const blob = new Blob(camChunks, { type });
+  const ext = type.includes("mp4") ? "mp4" : "webm";
+  const file = new File([blob], `acaan-${Date.now()}.${ext}`, { type });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) {}
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// --- overlay flow (mirrors the real-deck spectator flow; reuses the engine) ---
+$("camKeypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button data-k="${d}">${d}</button>`).join("") + `<button data-k="clear">C</button><button data-k="0">0</button><button data-k="ok" class="ok">&#10003;</button>`;
+function camReset() { camRd.step=0; camRd.num=null; camRd.color=null; camRd.kind=null; camRd.hl=null; camRd.value=null; camRd.card=null; camNumEntry=""; camRender(); }
+function camNumGuide() { const v = parseInt(camNumEntry,10); let g = "";
+  if (camNumEntry && v < RD_LO) g = "make it a two-digit number"; else if (v > RD_HI) g = "too high — ask for another";
+  $("camGuide").innerHTML = g ? `<span class="warn">${g}</span>` : ""; }
+function camCommitNum() { const v = parseInt(camNumEntry,10); if (!(v>=1 && v<=52)) return;
+  if (v < RD_LO) { $("camGuide").innerHTML = `<span class="warn">Too low — ask for a two-digit number.</span>`; return; }
+  if (v > RD_HI) { $("camGuide").innerHTML = `<span class="warn">Too high — ask for another number.</span>`; return; }
+  camRd.num = v; camRd.step = 1; camRender(); }
+$("camKeypad").addEventListener("click", e => { const k = e.target.dataset && e.target.dataset.k; if (!k) return;
+  if (k === "clear") camNumEntry = "";
+  else if (k === "ok") return camCommitNum();
+  else if (camNumEntry.length < 2) camNumEntry += k;
+  $("camNumEntry").textContent = camNumEntry || "–"; camNumGuide();
+  if (camNumEntry.length === 2) return camCommitNum();
+});
+const CAM_VN = { "2":"Two","3":"Three","4":"Four","5":"Five","6":"Six","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
+const CAM_SN = { S:"Spades",C:"Clubs",H:"Hearts",D:"Diamonds" }, CAM_SS = { S:"♠",C:"♣",H:"♥",D:"♦" };
+$("camFlow").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.classList.contains("off")) return;
+  const g = b.dataset.g, v = b.dataset.v; if (!g) return;
+  if (g === "color") camRd.color = v; else if (g === "kind") { camRd.kind = v; camRd.hl = null; }
+  else if (g === "hl") camRd.hl = v; else if (g === "value") camRd.value = v;
+  else if (g === "suit") { camRd.card = camRd.value + v; camRd.step = 2; }
+  camRender();
+});
+function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title = "";
+  if (!camRd.color) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
+  else if (!camRd.kind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
+  else if (camRd.kind === "num" && !camRd.hl) { title = "High or low?"; html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
+  else if (!camRd.value) { title = "Which value?"; let vals;
+    if (camRd.kind === "pic") { cols = 3; vals = ["J","Q","K"]; }
+    else if (camRd.hl === "high") { cols = 4; vals = ["7","8","9","10"]; }
+    else { vals = ["2","3","4"]; if (rdFiveOk(camRd.num)) vals.push("5"); cols = vals.length; }
+    html = vals.map(v => `<button data-g="value" data-v="${v}">${camRd.kind === "pic" ? CAM_VN[v] : v}</button>`).join("");
+  } else { const r = rdSuit(camRd.value, camRd.color, camRd.num); title = r.force ? "Which suit?" : "Choose any suit";
+    html = r.suits.map(s => { const red = "HD".includes(s);
+      return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${CAM_VN[camRd.value]} of ${CAM_SN[s]}</span><span class="sy${red ? " syr" : ""} sb">${CAM_SS[s]}</span></button>`; }).join("");
+  }
+  $("camTitle").textContent = title; f.style.gridTemplateColumns = `repeat(${cols},1fr)`; f.innerHTML = html;
+}
+function camRenderOut() { const o = rdResolve(camRd.card, camRd.num);
+  $("camOut").innerHTML = o
+    ? `<div class="hint">${rdPretty(camRd.card)} at ${camRd.num}</div><ol class="steps">${rdSteps(o, camRd.card, camRd.num, false).map(l => `<li>${l}</li>`).join("")}</ol>`
+    : `<span class="bad">No out.</span>`;
+}
+function camRender() {
+  $("camKeypad").style.display = camRd.step === 0 ? "" : "none";
+  $("camNumEntry").style.display = camRd.step === 0 ? "" : "none";
+  $("camFlow").style.display = camRd.step === 1 ? "" : "none";
+  $("camOut").style.display = camRd.step === 2 ? "" : "none";
+  if (camRd.step === 0) { $("camTitle").textContent = "Their number"; $("camNumEntry").textContent = camNumEntry || "–"; camNumGuide(); }
+  else $("camGuide").innerHTML = "";
+  if (camRd.step === 1) camFlowStep();
+  if (camRd.step === 2) camRenderOut();
+}
+
+// --- controls ---
+$("camExit").addEventListener("click", camHide);
+$("camFlip").addEventListener("click", camFlip);
+$("camHideBtn").addEventListener("click", () => $("camScreen").classList.toggle("hideui"));
+$("camRec").addEventListener("click", () => { camRecording ? camStopRec() : camStartRec(); });
+$("camRestart").addEventListener("click", () => camReset());   // keeps camera/recording running
+$("camBack").addEventListener("click", () => {
+  if (camRd.step === 2) { camRd.card = null; camRd.step = 1; return camRender(); }
+  if (camRd.step === 1) {
+    if (camRd.value) { camRd.value = null; return camRender(); }
+    if (camRd.hl) { camRd.hl = null; return camRender(); }
+    if (camRd.kind) { camRd.kind = null; return camRender(); }
+    if (camRd.color) { camRd.color = null; return camRender(); }
+    camRd.step = 0; camNumEntry = ""; return camRender();
+  }
+});
+camOpen = camShow;
 
 rdResetState(); rdRender();   // init (real-deck tool, number step)
 })();
