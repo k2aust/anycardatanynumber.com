@@ -2343,7 +2343,8 @@ async function camStart() {
 }
 function camStopStream() { if (camRecording) camStopRec(); if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } }
 function camFlip() { camFacing = camFacing === "environment" ? "user" : "environment"; camStart(); }
-function camShow() { $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="none"; $("camScreen").style.display="block"; $("camScreen").classList.remove("hideui"); camReset(); camStart(); }
+function camShow() { $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="none"; $("camScreen").style.display="block"; $("camScreen").classList.add("hideui"); camUpdateHideBtn(); camReset(); camStart(); }
+function camUpdateHideBtn() { $("camHideBtn").textContent = $("camScreen").classList.contains("hideui") ? "Keypad" : "Hide"; }
 function camHide() { camStopStream(); $("camScreen").style.display="none"; $("app").style.display="block"; }
 
 // --- recording ---
@@ -2429,7 +2430,7 @@ function camRender() {
 // --- controls ---
 $("camExit").addEventListener("click", camHide);
 $("camFlip").addEventListener("click", camFlip);
-$("camHideBtn").addEventListener("click", () => $("camScreen").classList.toggle("hideui"));
+$("camHideBtn").addEventListener("click", () => { $("camScreen").classList.toggle("hideui"); camUpdateHideBtn(); });
 $("camRec").addEventListener("click", () => { camRecording ? camStopRec() : camStartRec(); });
 $("camRestart").addEventListener("click", () => camReset());   // keeps camera/recording running
 $("camBack").addEventListener("click", () => {
@@ -2449,10 +2450,14 @@ rdResetState(); rdRender();   // init (real-deck tool, number step)
 
 buildPickers();
 render();
-// Default landing: the duplicate-gaff spectator (coded) view.
-$("app").style.display = "none";
-$("ddScreen").style.display = "block";
-if (ddRerender) ddRerender();
+// Deep link: #camera (or #cam) opens camera mode directly; otherwise land on the spectator view.
+if (/^#cam(era)?$/i.test(location.hash) && camOpen) {
+  camOpen();
+} else {
+  $("app").style.display = "none";
+  $("ddScreen").style.display = "block";
+  if (ddRerender) ddRerender();
+}
 </script>
 </body>
 </html>
