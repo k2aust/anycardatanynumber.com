@@ -163,7 +163,7 @@
   #ddPop.show { opacity: 1; pointer-events: auto; transition: none; }   /* cover instantly (no fade-in flash); fade-out uses the base transition */
   #ddPop .bubble { background: rgba(18,20,26,.96); border: 1px solid var(--gold); color: #fff; border-radius: 18px; padding: 32px 30px; font-size: 30px; font-weight: 700; line-height: 1.3; max-width: 92%; text-align: center; box-shadow: 0 12px 48px rgba(0,0,0,.65); transform: scale(.96); transition: transform .16s ease; }
   #ddPop.show .bubble { transform: scale(1); }
-  #ddPop .bubble.final { color: var(--gold); font-size: 42px; padding: 40px 34px; line-height: 1.2; }
+  #ddPop .bubble.final { color: var(--gold); font-size: 32px; padding: 32px 30px; line-height: 1.25; }
   #ddScreen #ddGaffFlow button.off { pointer-events: none; }   /* wrong suit: looks the same, no tap/flash */
   #ddScreen #ddGaffFlow .sy { font-size: 1.7em; vertical-align: -0.12em; }
   #ddScreen #ddGaffFlow .syr { color: var(--red); }
@@ -174,7 +174,7 @@
   /* colour step: white buttons, black/red content like real card colours */
   #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
-  #ddScreen .picker h2 { color: var(--dd-panel-label); text-align: center; }           /* labels with contrast on the panel */
+  #ddScreen .picker h2 { color: var(--dd-panel-label); text-align: center; font-size: 19px; letter-spacing: 1px; margin-bottom: 14px; }   /* bigger question labels */
   #ddScreen #ddNumEntry, #ddScreen #ddNumExample { color: var(--dd-panel-label); }
   #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); text-transform: capitalize; }
   /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
@@ -2082,7 +2082,9 @@ function rdPretty(c){ return c === "JK" ? "🃏" : c.slice(0,-1) + RD_SUIT_SYM[c
 function rdOrdinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
 const RD_VNAME_FULL = { "2":"Two","3":"Three","4":"Four","5":"Five","6":"Six","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King",A:"Ace" };
 const RD_SNAME_FULL = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" };
-function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1), s = c.slice(-1); return `${RD_VNAME_FULL[v] || v} of ${RD_SNAME_FULL[s] || s}`; }
+function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1), s = c.slice(-1);
+  const val = (v === "J" || v === "Q" || v === "K" || v === "A") ? RD_VNAME_FULL[v] : v;   // digit for number cards, word for faces
+  return `${val} of ${RD_SNAME_FULL[s] || s}`; }
 // all configs: 2 cut states × 4 packet sizes
 function rdConfigs(){ const cuts = [{ d: RD_STACK, cut: false }, { d: [...RD_STACK.slice(RD_HALF), ...RD_STACK.slice(0, RD_HALF)], cut: true }];
   const out = []; for (const c of cuts) for (const k of RD_PACKETS) out.push({ deck: [...Array(k).fill("JK"), ...c.d], packet: k, cut: c.cut }); return out; }
@@ -2256,7 +2258,7 @@ function rdFlowStep(){
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num);
     html = r.suits.map(s => { const red = "HD".includes(s);
-      const name = `${RD_VNAME[rd.value]} of ${RD_SNAME[s]}`;
+      const name = rdCardLabel(rd.value + s);   // digit for number cards, word for faces
       return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${name}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
   }
   $("ddCardTitle").textContent = rd.value != null ? "Final decision" : "Which card should we remove?";
