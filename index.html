@@ -41,7 +41,7 @@
   #ddScreen #ddNumberPicker, #ddScreen #ddCardPicker, #ddScreen #ddResults { margin-top: auto; margin-bottom: auto; width: 100%; }
 
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
-  header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dd-title); font-weight: 600; margin: 0; text-transform: uppercase; }
+  header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dd-title); font-weight: 600; margin: 0; text-transform: uppercase; flex: 1; text-align: center; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
 
   /* step chips */
@@ -173,7 +173,7 @@
   /* colour step: white buttons, black/red content like real card colours */
   #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
-  #ddScreen .picker h2 { color: var(--dd-panel-label); }           /* labels with contrast on the panel */
+  #ddScreen .picker h2 { color: var(--dd-panel-label); text-align: center; }           /* labels with contrast on the panel */
   #ddScreen #ddNumEntry, #ddScreen #ddNumExample { color: var(--dd-panel-label); }
   #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); text-transform: capitalize; }
   /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
@@ -2166,17 +2166,17 @@ function rdNumGuide(){
   if (magicianMode) {
     const v = parseInt(numEntry, 10);
     let g = "";
-    if (numEntry && v < RD_LO) g = `<span class="warn">make it a two-digit number</span>`;
-    else if (v > RD_HI) g = `<span class="warn">too high — ask for another</span>`;
+    if (numEntry && v < RD_LO) g = `<span class="warn">Too low, enter a 2 digit number</span>`;
+    else if (v > RD_HI) g = `<span class="warn">Too high, enter a lower 2 digit number</span>`;
     else if (numEntry) g = `<span class="ok">ok</span>`;
     $("numGuide").innerHTML = g;
   } else $("numGuide").innerHTML = "";
 }
 function rdCommitNum(){
   const v = parseInt(numEntry, 10);
-  if (!(v >= 1 && v <= 52)) return;
-  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low — ask for a two-digit number.</span>`; return; }
-  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high — ask for another number.</span>`; return; }
+  if (!(v >= 1)) return;
+  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low, enter a 2 digit number</span>`; return; }
+  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high, enter a lower 2 digit number</span>`; return; }
   rd.num = v; rd.step = 1; rdRender();
 }
 
@@ -2191,8 +2191,8 @@ $("ddGaffFlow").addEventListener("click", e => {
     const forceSuit = r.force ? r.suits[0] : v;
     rd.card = rd.value + forceSuit;                            // always resolve to the force card
     rd.step = 2; rdRender();
-    const yourCard = { msg: `Your card is the<br>${rdFullName(rd.value + forceSuit)}`, final: true };
-    if (r.force && v !== forceSuit) rdPopupChain([{ msg: `${rdFullName(rd.value + v)} was removed.` }, yourCard]);
+    const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.value + forceSuit)}`, final: true };
+    if (r.force && v !== forceSuit) rdPopupChain([{ msg: `${rdCardLabel(rd.value + v)} Was Removed` }, yourCard]);
     else rdPopupChain([yourCard]);
     return;
   }
@@ -2230,12 +2230,16 @@ function rdNameList(vals){ const n = vals.map(v => RD_VNAME[v] || v);
   if (n.length <= 1) return n[0] || "";
   if (n.length === 2) return `${n[0]} and ${n[1]}`;
   return `${n.slice(0,-1).join(", ")}, and ${n[n.length-1]}`; }
+// card label for popups: digit for number cards, word for faces (e.g. "8 of Hearts", "Jack of Clubs")
+function rdCardLabel(card){ const v = card.slice(0,-1), s = card.slice(-1);
+  const val = (v === "J" || v === "Q" || v === "K") ? RD_VNAME[v] : v;
+  return `${val} of ${RD_SNAME[s]}`; }
 // confirmation for the most recently completed equivoque pick (shown above the next step)
 function rdElimText(){
   if (rd.value != null) return `You just eliminated the ${rdNameList(rdOfferedValues().filter(v => v !== rd.value))}.`;
-  if (rd.hl != null)    return `${rd.hl === "high" ? "Low" : "High"} cards removed.`;
-  if (rd.kind != null)  return `${rd.kind === "num" ? "Picture" : "Number"} cards removed.`;
-  if (rd.color != null) return `${rd.color === "black" ? "Red" : "Black"} cards removed.`;
+  if (rd.hl != null)    return `${rd.hl === "high" ? "Low" : "High"} Cards Removed`;
+  if (rd.kind != null)  return `${rd.kind === "num" ? "Picture" : "Number"} Cards Removed`;
+  if (rd.color != null) return `${rd.color === "black" ? "Red" : "Black"} Cards Removed`;
   return "";
 }
 // reveal text on the results page (always the force card)
@@ -2243,11 +2247,11 @@ function rdRevealText(){ return rd.card ? `Your card is the ${rdFullName(rd.card
 function rdFlowStep(){
   const flow = $("ddGaffFlow"); let cols = 2, html = "";
   if (!rd.color) { html = `<button data-g="color" data-v="black">Remove Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Remove Red <span class="sy syr sb">♥♦</span></button>`; }
-  else if (!rd.kind) { html = `<button data-g="kind" data-v="num">Remove Number Cards</button><button data-g="kind" data-v="pic">Remove Picture Cards</button>`; }
-  else if (rd.kind === "num" && !rd.hl) { html = `<button data-g="hl" data-v="high">Remove High Numbers</button><button data-g="hl" data-v="low">Remove Low Numbers</button>`; }
+  else if (!rd.kind) { html = `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`; }
+  else if (rd.kind === "num" && !rd.hl) { html = `<button data-g="hl" data-v="high">Remove<br>High Numbers</button><button data-g="hl" data-v="low">Remove<br>Low Numbers</button>`; }
   else if (!rd.value) {
     const vals = rdOfferedValues().filter(x => !rd.valElim.includes(x)); cols = vals.length;
-    html = vals.map(v => `<button data-g="value" data-v="${v}">Remove ${rd.kind === "pic" ? RD_VNAME[v] + "s" : v + "s"}</button>`).join("");
+    html = vals.map(v => `<button data-g="value" data-v="${v}">Remove<br>${rd.kind === "pic" ? RD_VNAME[v] + "s" : v + "s"}</button>`).join("");
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num);
     html = r.suits.map(s => { const red = "HD".includes(s);
