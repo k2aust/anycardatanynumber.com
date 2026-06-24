@@ -44,7 +44,6 @@
   header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
   header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dd-title); font-weight: 600; margin: 0; text-transform: uppercase; flex: 1; text-align: center; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
-  #tapZone { width: 72px; height: 34px; flex: none; }   /* invisible unlock target, right of the title */
 
   /* step chips */
   #chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
@@ -254,7 +253,6 @@
 
 <header>
   <h1 id="title">Any Card At Any Number</h1>
-  <div id="tapZone" aria-hidden="true"></div>
   <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
 </header>
 
@@ -342,6 +340,28 @@
     <div class="btnrow" style="margin-top:12px"><button id="ddReset">&#10227; Start over</button></div>
   </section>
 
+  <details id="ddDetails">
+    <summary>How to perform &middot; setup &middot; stack</summary>
+    <div class="panel">
+      <div class="hint"><b>Real-deck ACAAN</b> &mdash; ordinary 52 + 2 jokers. <b>Hold out 9 cards as two add-piles:</b> a 3-card &ldquo;jokers&rdquo; pile and a 6-card &ldquo;aces&rdquo; pile (e.g. 2 jokers + a six = 3; 4 aces + two sixes = 6). Deal from the other 45 (below).</div>
+      <div class="hint" style="margin-top:6px">Patter: <b>name any number 1&ndash;52</b> (steer too-high / single digits back into <b>10&ndash;46</b>), then free <b>value + colour</b>; you force the suit. Resolves as a clean deal or a double-lift &mdash; never an indicator. 6 is never offered; 5 is offered except at 46.</div>
+      <div class="hint" style="margin-top:10px">Dealing stack (top &rarr; bottom, 45):</div>
+      <div class="stackgrid" id="stackGrid"></div>
+      <div class="hint" style="margin-top:14px"><b>Coded language</b> &mdash; the spectator hears a normal deal; the wording tells <i>you</i> the secret:</div>
+      <div class="hint" style="margin-top:8px"><b>Opening line &mdash; how many to add</b> (subject phrase):<br>
+        &ldquo;<b>Cards</b>&hellip;&rdquo; &rarr; add nothing<br>
+        &ldquo;<b>Every card</b>&hellip;&rdquo; &rarr; add the <b>jokers (3)</b><br>
+        &ldquo;<b>All the cards</b>&hellip;&rdquo; &rarr; add the <b>aces (6)</b><br>
+        &ldquo;<b>Each and every card</b>&hellip;&rdquo; &rarr; add <b>jokers + aces (9)</b></div>
+      <div class="hint" style="margin-top:8px"><b>Opening line &mdash; cut</b> (verb form):<br>
+        &ldquo;<b>Pick up the deck and hold</b>&hellip;&rdquo; &rarr; first <b>cut</b> bottom half to top<br>
+        &ldquo;&hellip;are/is <b>held</b>&hellip;&rdquo; &rarr; <b>no cut</b></div>
+      <div class="hint" style="margin-top:8px"><b>Deal line &mdash; double-lift:</b><br>
+        &ldquo;&hellip;<b>into a pile</b> &mdash; the last card&hellip;&rdquo; &rarr; straight deal<br>
+        &ldquo;&hellip;<b>into your hands</b> &mdash; the last card&hellip;&rdquo; &rarr; <b>double-lift</b> the final card<br>
+        &ldquo;&hellip;the <b>NEXT</b> card&hellip;&rdquo; &rarr; it&rsquo;s the card after your number</div>
+    </div>
+  </details>
 </section>
 
 <section id="lockScreen" style="display:none">
@@ -1817,18 +1837,6 @@ function moveMethod(k, dir) {
 }
 
 function renderSettings() {
-  // v2: only the camera view + the new-stack setup/reference are exposed.
-  const grid = (stackForSettings || []).map(c => {
-    const red = /[HD]$/.test(c); return `<span class="cd" style="${red ? "color:var(--red)" : ""}">${c}</span>`;
-  }).join("");
-  $("settingsBody").innerHTML =
-      '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
-    + '<div class="set-group"><div class="set-label">Card choice</div><button id="setSelMode" class="randombtn">' + (selectMode ? "Selecting &mdash; spectator picks the value" : "Removing &mdash; eliminate down to one") + '</button></div>'
-    + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">Hold out <b>2 jokers</b> + <b>4 aces</b> as add-piles &mdash; jokers = <b>+2</b>, aces = <b>+4</b>, both = <b>+6</b>. All four 6s stay in the deck (spacers). Offer numbers <b>10&ndash;45</b>; values steer away from <b>5/6/7</b>.</div></div>'
-    + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
-  $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
-  $("setSelMode").addEventListener("click", () => { selectMode = !selectMode; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
-  return;
   const activeStack = stackArr(settings);
   let h = `<div class="set-group"><h3>Deck</h3>
     <div class="set-row"><span>Stack</span><select id="setStack">
@@ -1913,34 +1921,40 @@ function renderSettings() {
     el.addEventListener("click", () => moveMethod(el.dataset.down, 1)));
 }
 
-$("gearBtn").addEventListener("click", () => { renderSettings(); $("ddScreen").style.display = "none"; $("camScreen").style.display = "none"; $("settings").style.display = "block"; });
-$("closeSettings").addEventListener("click", () => { $("settings").style.display = "none"; $("ddScreen").style.display = "flex"; if (ddRerender) ddRerender(); });
+$("gearBtn").addEventListener("click", () => { renderSettings(); $("app").style.display = "none"; $("settings").style.display = "block"; });
+$("closeSettings").addEventListener("click", () => { $("settings").style.display = "none"; $("app").style.display = "block"; render(); });
 $("resetSettings").addEventListener("click", () => { settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); });
 $("editBtn").addEventListener("click", () => { state.step = 0; render(); });
 $("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null }; fumble = null; render(); });
 document.querySelectorAll(".chip").forEach(ch => ch.addEventListener("click", () => { state.step = +ch.dataset.step; render(); }));
 
-// Secret unlock: tap the blank space just right of the title 5 times in a row
-// (within 2.5s) to toggle the magician view. Re-locks on every page load.
+// Secret unlock: tap the title 6 times in a row (within 2.5s) to toggle the
+// magician view. Re-locks on every page load.
 let tapCount = 0, tapTimer = null;
-$("tapZone").addEventListener("click", () => {
+$("title").addEventListener("click", () => {
   tapCount++;
   clearTimeout(tapTimer);
   tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
-  if (tapCount >= 5) {
+  if (tapCount >= 6) {
     tapCount = 0;
     magicianMode = !magicianMode;
-    $("gearBtn").style.display = magicianMode ? "" : "none";   // reveal/hide the settings gear
-    if (!magicianMode) { $("settings").style.display = "none"; $("ddScreen").style.display = "flex"; }
-    if (ddRerender) ddRerender();                              // flip explicit/coded patter
+    // first time the magician unlocks on this device, switch to the magician
+    // preset (Aronson, half setup, jokers + aces; digit-sum stays on but ranks
+    // last, so it's only used when no clean out exists)
+    if (magicianMode && !settings.magicianReady) applyMagicianPreset();
+    // leaving the settings screen if we just locked
+    if ($("ddScreen").style.display !== "none") {
+      if (ddRerender) ddRerender();              // tool stays open; flip explicit/coded
+    } else if (!magicianMode) {
+      $("settings").style.display = "none"; $("app").style.display = "block";
+    }
+    render();
   }
 });
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
 let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
-let stackForSettings = null;  // the dealing stack, exposed to the settings panel
-let selectMode = localStorage.getItem("rdSelectMode") === "1";  // false = removing (eliminate), true = selecting (tap the value)
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
 (function () {
@@ -2060,14 +2074,9 @@ function encodeOut(out) {
 
 /*RD-ENGINE-START*/
 // Real single deck + 2 jokers. Number-first, suit-force. Clean deal or double-lift only (no indicators).
-// Optimized 0/2/4/6 stack: hold out only the 2 jokers + 4 aces as packets; all four 6s
-// stay in the deck as spacers (never offered). Full coverage of values 2,3,4,8,9,10,J,Q,K
-// (5,6,7 are steered away from). Packets 0/2/4/6 added to the deal end (top or face);
-// optional half-cut; reveal by deal/next/double-lift (top) or deal/next (face). 6 double-lifts.
-const RD_STACK = ["2D","JC","3C","9D","6D","6H","7S","2H","10S","KS","4H","4S","QC","3S","QH","KH","5D","5C","6C","8H","4D","QD","JD","KD","3D","2C","9C","4C","7H","7D","5S","9H","3H","JH","10H","8D","8C","9S","2S","JS","7C","5H","6S","8S","QS","10D","KC","10C"];
-const RD_PACKETS = [0,2,4,6], RD_LO = 10, RD_HI = 45, RD_L0 = RD_STACK.length, RD_HALF = Math.floor(RD_L0/2);
-const RD_POS = {}; RD_STACK.forEach((c,i) => RD_POS[c] = i+1);   // 1-based base position
-stackForSettings = RD_STACK;
+const RD_STACK = ["5D","8D","KD","JS","JH","4D","9D","2C","4C","KC","QD","5H","3C","7D","KH","JC","JD","4H","7S","2S","9S","KS","5S","3S","7H","10D","8C","QS","3H","7C","10C","9C","2D","6D","5C","8H","10H","8S","QC","3D","9H","10S","4S","2H","QH"];
+const RD_SHIMS = ["JK","JK","AS","AH","AC","AD","6S","6C","6H"];   // packets 0/3/6/9 drawn from these
+const RD_PACKETS = [0,3,6,9], RD_LO = 10, RD_HI = 46, RD_HALF = Math.floor(RD_STACK.length/2);
 const RD_SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
 function rdPretty(c){ return c === "JK" ? "🃏" : c.slice(0,-1) + RD_SUIT_SYM[c.slice(-1)]; }
 function rdOrdinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
@@ -2076,59 +2085,47 @@ const RD_SNAME_FULL = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" };
 function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1), s = c.slice(-1);
   const val = (v === "J" || v === "Q" || v === "K" || v === "A") ? RD_VNAME_FULL[v] : v;   // digit for number cards, word for faces
   return `${val} of ${RD_SNAME_FULL[s] || s}`; }
-// best out for a card at N: prefer clean (deal/next, either end) over double-lift; then
-// fewest added cards; then no-cut; then top end. Packet on top shifts top positions by k
-// (face unchanged); packet on face shifts face positions by k (top unchanged).
+// all configs: 2 cut states × 4 packet sizes
+function rdConfigs(){ const cuts = [{ d: RD_STACK, cut: false }, { d: [...RD_STACK.slice(RD_HALF), ...RD_STACK.slice(0, RD_HALF)], cut: true }];
+  const out = []; for (const c of cuts) for (const k of RD_PACKETS) out.push({ deck: [...Array(k).fill("JK"), ...c.d], packet: k, cut: c.cut }); return out; }
+const RD_CONFIGS = rdConfigs();
+// best out for a specific card at N: prefer clean (deal/next) over double-lift; then fewest packet; then no-cut.
 function rdResolve(card, N){
-  const p = RD_POS[card]; if (p === undefined) return null;
   const c = [];
-  for (const cut of [false, true]){
-    const pp = cut ? (p <= RD_HALF ? p + (RD_L0 - RD_HALF) : p - RD_HALF) : p;
-    const faceBase = RD_L0 + 1 - pp;
-    for (const k of RD_PACKETS){
-      const tp = pp + k;                                  // packet on TOP, deal from top
-      if (tp === N)        c.push({ method:"deal", end:"top",  packet:k, cut, tier:0 });
-      else if (tp-1 === N) c.push({ method:"next", end:"top",  packet:k, cut, tier:0 });
-      else if (tp+1 === N) c.push({ method:"dl",   end:"top",  packet:k, cut, tier:1 });
-      const fp = faceBase + k;                            // packet on FACE, deal from face
-      if (fp === N)        c.push({ method:"deal", end:"face", packet:k, cut, tier:0 });
-      else if (fp-1 === N) c.push({ method:"next", end:"face", packet:k, cut, tier:0 });
-    }
+  for (const cfg of RD_CONFIGS){ const d = cfg.deck, L = d.length;
+    if (N <= L && d[N-1] === card) c.push({ method:"deal", packet:cfg.packet, cut:cfg.cut, tier:0 });
+    else if (N+1 <= L && d[N] === card) c.push({ method:"next", packet:cfg.packet, cut:cfg.cut, tier:0 });
+    else if (N-1 >= 1 && d[N-2] === card) c.push({ method:"dl", packet:cfg.packet, cut:cfg.cut, tier:1 });
   }
   if (!c.length) return null;
-  c.sort((a,b) => (a.tier-b.tier) || (a.packet-b.packet) || ((a.cut?1:0)-(b.cut?1:0)) || ((a.end==="top"?0:1)-(b.end==="top"?0:1)));
+  c.sort((a,b) => (a.tier-b.tier) || (a.packet-b.packet) || ((a.cut?1:0)-(b.cut?1:0)));
   return c[0];
 }
 // suit selection: color "red"|"black" -> { suits:[left,right], force, anySuit, out }. Forced (better) suit LEFT.
 function rdSuit(value, color, N){
   const suits = color === "red" ? ["H","D"] : ["S","C"];
   const o0 = rdResolve(value + suits[0], N), o1 = rdResolve(value + suits[1], N);
-  const rank = o => o ? (o.tier === 1 ? 1 : 0) : 2;   // 0 clean, 1 dl, 2 none
+  const rank = o => o ? (o.method === "dl" ? 1 : 0) : 2;   // 0 clean, 1 dl, 2 none
   const r0 = rank(o0), r1 = rank(o1);
   if (r0 === r1) return { suits, force: false, anySuit: r0 < 2, out: o0 || o1 };
   const leftFirst = r0 < r1;
   return { suits: leftFirst ? [suits[0], suits[1]] : [suits[1], suits[0]], force: true, anySuit: false, out: leftFirst ? o0 : o1 };
 }
-// 5/6/7 are never offered (steered away), so 5 is never a final value.
-function rdFiveOk(){ return false; }
-// secret = packet (0/2/4/6) + end (top/face) + cut + double-lift. The number is spoken openly.
-function rdEncode(out){ return out ? { packet: out.packet, end: out.end, cut: !!out.cut, dl: out.method === "dl" } : { packet: 0, end: "top", cut: false, dl: false }; }
+// 5 is offerable at N when both red and black 5 resolve (clean or DL).
+function rdFiveOk(N){ const w = (a, b) => rdResolve("5" + a, N) || rdResolve("5" + b, N); return !!(w("S", "C") && w("H", "D")); }
+// secret = packet (0/3/6/9) + cut + double-lift. The number is spoken openly.
+function rdEncode(out){ return out ? { packet: out.packet, cut: !!out.cut, dl: out.method === "dl" } : { packet: 0, cut: false, dl: false }; }
 // steps: plain = explicit (magician); coded = one natural sentence hiding packet/cut/dl.
 function rdSteps(out, card, N, coded){
   if (!out) return null;
   const F = rdPretty(card), FN = rdFullName(card);
-  const endWord = out.end === "face" ? "FACE" : "TOP";
-  const grp = { 2: "the JOKERS", 4: "the ACES", 6: "the JOKERS and ACES" }[out.packet];
   if (!coded) {
     const s = [];
-    s.push(out.cut ? "CUT the deck in half." : "Leave the deck as is.");
-    if (grp) s.push(`Add ${grp} to the ${endWord}.`);
-    if (out.end === "face") {
-      s.push("Hold the deck FACE UP.");
-      if (out.method === "next") s.push(`Deal ${N} cards face down — the NEXT card is the ${FN}.`);
-      else s.push(`Deal ${N} cards face down — the ${rdOrdinal(N)} card is the ${FN}.`);
-    } else if (out.method === "dl") {
-      s.push(`Deal ${N} cards into your hands.`);
+    s.push(out.cut ? "CUT the deck." : "REPLACE the packets.");
+    const grp = { 3: "the JOKERS", 6: "the ACES", 9: "the JOKERS and ACES" }[out.packet];
+    if (grp) s.push("Add " + grp + ".");
+    if (out.method === "dl") {
+      s.push(`Deal ${N} cards into the magician's hands.`);
       s.push(`DOUBLE-LIFT the last card — it's the ${FN}.`);
     } else {
       s.push(`Deal ${N} cards into a pile.`);
@@ -2137,15 +2134,12 @@ function rdSteps(out, card, N, coded){
     }
     return s;
   }
-  // coded: opening line encodes packet (subject phrase) + cut ("Hold…" prefix = cut) +
-  // deal end (FACE UP = deal from the face, FACE DOWN = deal from the top). The deal
-  // line encodes the method (deal / next / double-lift).
-  const faceWord = out.end === "face" ? "UP" : "DOWN";
-  const ncSubj = { 0:["Cards","are"], 2:["Every card","is"], 4:["All cards","are"], 6:["Each and every card","is"] }[out.packet];
-  const cSubj  = { 0:"the cards", 2:"every card", 4:"all cards", 6:"each and every card" }[out.packet];
-  const head = out.cut ? `Hold ${cSubj} FACE ${faceWord}.` : `${ncSubj[0]} ${ncSubj[1]} held FACE ${faceWord}.`;
-  const finder = out.method === "next" ? "the next card is" : out.method === "dl" ? "the card you turn over is" : "the card you stop on is";
-  return [head, `Deal ${N} cards — ${finder} the ${F}.`];
+  // coded: subject phrase encodes packet; passive/active verb encodes cut; "into your hands"/"into a pile" encodes dl.
+  const subj = { 0: ["Cards", "are"], 3: ["Every card", "is"], 6: ["All the cards", "are"], 9: ["Each and every card", "is"] }[out.packet];
+  const head = out.cut ? `Hold ${subj[0].toLowerCase()} face down.` : `${subj[0]} ${subj[1]} held face down.`;
+  if (out.method === "dl") return [head, `Deal ${N} cards into your hands face down.`, `Turn over the ${F}.`];
+  const finder = out.method === "next" ? "the NEXT card is" : "the last card is";
+  return [head, `Deal ${N} cards into a pile — ${finder} the ${F}.`];
 }
 /*RD-ENGINE-END*/
 
@@ -2201,26 +2195,23 @@ $("ddGaffFlow").addEventListener("click", e => {
     rd.card = rd.value + forceSuit;                            // always resolve to the force card
     rd.step = 2; rdRender();
     const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.value + forceSuit)}`, final: true };
-    if (!selectMode && r.force && v !== forceSuit) rdPopupChain([{ msg: `${rdCardLabel(rd.value + v)} Was Removed` }, yourCard]);
+    if (r.force && v !== forceSuit) rdPopupChain([{ msg: `${rdCardLabel(rd.value + v)} Was Removed` }, yourCard]);
     else rdPopupChain([yourCard]);
     return;
   }
-  if (g === "value") {
-    if (selectMode) { rd.value = v; rdRender(); }              // selecting: tap the value you want
-    else {                                                     // removing: eliminate one at a time; last left = their value
-      rd.valElim.push(v);
-      const remaining = rdOfferedValues().filter(x => !rd.valElim.includes(x));
-      if (remaining.length === 1) { rd.value = remaining[0]; rdRender(); rdPopup("Final Decision"); }
-      else rdRender();                                         // no popup mid-elimination — the button just disappears
-    }
+  if (g === "value") {                                        // values: eliminate one at a time; last left = their value
+    rd.valElim.push(v);
+    const remaining = rdOfferedValues().filter(x => !rd.valElim.includes(x));
+    if (remaining.length === 1) { rd.value = remaining[0]; rdRender(); rdPopup("Final Decision"); }
+    else rdRender();                                           // no popup mid-elimination — the button just disappears
     return;
   }
-  if (g === "color") rd.color = selectMode ? v : (v === "black" ? "red" : "black");
-  else if (g === "kind") { rd.kind = selectMode ? v : (v === "num" ? "pic" : "num"); rd.hl = null; }
-  else if (g === "hl") rd.hl = selectMode ? v : (v === "high" ? "low" : "high");
+  if (g === "color") rd.color = (v === "black") ? "red" : "black";
+  else if (g === "kind") { rd.kind = (v === "num") ? "pic" : "num"; rd.hl = null; }
+  else if (g === "hl") rd.hl = (v === "high") ? "low" : "high";
   else return;
   rdRender();
-  if (!selectMode) rdPopup(rdElimText());                      // elimination popups only in removing mode
+  rdPopup(rdElimText());                                       // brief popup between screens
 });
 let ddPopTimer = null;
 // show one or more popups back-to-back; the backdrop stays up until the last one ends
@@ -2234,11 +2225,9 @@ function rdPopupChain(steps){ const p = $("ddPop"), b = $("ddPopText"); clearTim
 function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!final }]); }
 // values offered at the value step (depends on the surviving kind/high-low)
 function rdOfferedValues(){
-  // must-cover values (2,3,4,8,9,10,J,Q,K) always offered; 5/6/7 only when reachable at this number+colour.
-  const reach = v => !!rdSuit(v, rd.color, rd.num).out;
   if (rd.kind === "pic") return ["J","Q","K"];
-  if (rd.hl === "high") return ["7","8","9","10"].filter(v => v !== "7" || reach("7"));
-  return ["2","3","4","5","6"].filter(v => (v === "5" || v === "6") ? reach(v) : true);
+  if (rd.hl === "high") return ["7","8","9","10"];
+  const v = ["2","3","4"]; if (rdFiveOk(rd.num)) v.push("5"); return v;
 }
 function rdNameList(vals){ const n = vals.map(v => RD_VNAME[v] || v);
   if (n.length <= 1) return n[0] || "";
@@ -2259,30 +2248,20 @@ function rdElimText(){
 // reveal text on the results page (always the force card)
 function rdRevealText(){ return rd.card ? `Your card is the ${rdFullName(rd.card)}.` : ""; }
 function rdFlowStep(){
-  const flow = $("ddGaffFlow"); let cols = 2, html = "", freeSuit = false;
-  if (!rd.color) { html = selectMode
-      ? `<button data-g="color" data-v="black">Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr sb">♥♦</span></button>`
-      : `<button data-g="color" data-v="black">Remove Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Remove Red <span class="sy syr sb">♥♦</span></button>`; }
-  else if (!rd.kind) { html = selectMode
-      ? `<button data-g="kind" data-v="num">Number<br>Cards</button><button data-g="kind" data-v="pic">Picture<br>Cards</button>`
-      : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`; }
-  else if (rd.kind === "num" && !rd.hl) { html = selectMode
-      ? `<button data-g="hl" data-v="high">High<br>Numbers</button><button data-g="hl" data-v="low">Low<br>Numbers</button>`
-      : `<button data-g="hl" data-v="high">Remove<br>High Numbers</button><button data-g="hl" data-v="low">Remove<br>Low Numbers</button>`; }
+  const flow = $("ddGaffFlow"); let cols = 2, html = "";
+  if (!rd.color) { html = `<button data-g="color" data-v="black">Remove Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Remove Red <span class="sy syr sb">♥♦</span></button>`; }
+  else if (!rd.kind) { html = `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`; }
+  else if (rd.kind === "num" && !rd.hl) { html = `<button data-g="hl" data-v="high">Remove<br>High Numbers</button><button data-g="hl" data-v="low">Remove<br>Low Numbers</button>`; }
   else if (!rd.value) {
-    const vals = selectMode ? rdOfferedValues() : rdOfferedValues().filter(x => !rd.valElim.includes(x)); cols = vals.length;
-    html = vals.map(v => selectMode
-      ? `<button data-g="value" data-v="${v}">${rd.kind === "pic" ? RD_VNAME[v] : v}</button>`
-      : `<button data-g="value" data-v="${v}">Remove<br>${rd.kind === "pic" ? RD_VNAME[v] + "s" : v + "s"}</button>`).join("");
+    const vals = rdOfferedValues().filter(x => !rd.valElim.includes(x)); cols = vals.length;
+    html = vals.map(v => `<button data-g="value" data-v="${v}">Remove<br>${rd.kind === "pic" ? RD_VNAME[v] + "s" : v + "s"}</button>`).join("");
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num);
-    freeSuit = !r.force;                        // both suits reachable -> spectator may name any suit
     html = r.suits.map(s => { const red = "HD".includes(s);
       const name = rdCardLabel(rd.value + s);   // digit for number cards, word for faces
       return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${name}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
   }
-  if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Choose Any Card" : "Final decision";
-  else $("ddCardTitle").textContent = selectMode ? "Choose your card" : "Which card should we remove?";
+  $("ddCardTitle").textContent = rd.value != null ? "Final decision" : "Which card should we remove?";
   flow.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
   flow.innerHTML = html;
   if (rd.value != null) rdFitCardNames();   // shrink each name so the whole card fits one line
@@ -2324,7 +2303,7 @@ $("ddBack").addEventListener("click", () => {
   $("ddScreen").style.display = "none"; $("app").style.display = "block"; render();
 });
 
-function rdSetCoded(coded){ const dn = coded ? "none" : ""; $("ddTitle").style.display = dn; }
+function rdSetCoded(coded){ const dn = coded ? "none" : ""; $("ddTitle").style.display = dn; $("ddDetails").style.display = dn; }
 function rdRender(){
   const coded = !magicianMode;
   $("ddChipNum").textContent = rd.num != null ? rd.num : "—";
@@ -2350,6 +2329,8 @@ function rdRender(){
   if (rd.step === 2) rdRenderOut(coded);
 }
 ddRerender = rdRender;
+function rdRenderStack(){ $("stackGrid").innerHTML = RD_STACK.map(c => `<span class="${/[HD]$/.test(c) ? "r" : ""}">${rdPretty(c)}</span>`).join(""); }
+rdRenderStack();
 
 /* ---- Lockscreen covert view (gaff): hidden-keypad input, disguised date/code ---- */
 let lkValue = null, lkColor = null, lkNum = "", lkPhase = "value", lkTimer = null, lkWeatherTxt = "--°";
@@ -2494,11 +2475,9 @@ function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title 
   else if (!camRd.kind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
   else if (camRd.kind === "num" && !camRd.hl) { title = "High or low?"; html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
   else if (!camRd.value) { title = "Which value?"; let vals;
-    const cReach = v => !!rdSuit(v, camRd.color, camRd.num).out;
-    if (camRd.kind === "pic") { vals = ["J","Q","K"]; }
-    else if (camRd.hl === "high") { vals = ["7","8","9","10"].filter(v => v !== "7" || cReach("7")); }
-    else { vals = ["2","3","4","5","6"].filter(v => (v === "5" || v === "6") ? cReach(v) : true); }
-    cols = vals.length;
+    if (camRd.kind === "pic") { cols = 3; vals = ["J","Q","K"]; }
+    else if (camRd.hl === "high") { cols = 4; vals = ["7","8","9","10"]; }
+    else { vals = ["2","3","4"]; if (rdFiveOk(camRd.num)) vals.push("5"); cols = vals.length; }
     html = vals.map(v => `<button data-g="value" data-v="${v}">${camRd.kind === "pic" ? CAM_VN[v] : v}</button>`).join("");
   } else { const r = rdSuit(camRd.value, camRd.color, camRd.num); title = r.force ? "Which suit?" : "Choose any suit";
     html = r.suits.map(s => { const red = "HD".includes(s);
