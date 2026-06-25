@@ -2156,18 +2156,12 @@ function rdSteps(out, card, N, coded){
     const s = [];
     s.push(out.cut ? "CUT the deck in half." : "Leave the deck as is.");
     if (grp) s.push(`Add ${grp} to the ${endWord}.`);
-    if (out.end === "face") {
-      s.push("Hold the deck FACE UP.");
-      if (out.method === "next") s.push(`Deal ${N} cards face down — the NEXT card is the ${FN}.`);
-      else s.push(`Deal ${N} cards face down — the ${rdOrdinal(N)} card is the ${FN}.`);
-    } else if (out.method === "dl") {
-      s.push(`Deal ${N} cards into your hands.`);
-      s.push(`DOUBLE-LIFT the last card — it's the ${FN}.`);
-    } else {
-      s.push(`Deal ${N} cards into a pile.`);
-      if (out.method === "next") s.push(`The NEXT card is the ${FN}.`);
-      else s.push(`The ${FN} is the ${rdOrdinal(N)} card.`);
-    }
+    if (out.end === "face") s.push("Hold the deck FACE UP.");
+    // last 2 steps match the other modes
+    const ord = rdOrdinal(N);
+    if (out.method === "next")    { s.push(`Deal ${N} cards to the table.`);            s.push(`The next card is the ${FN}!`); }
+    else if (out.method === "dl") { s.push(`Deal ${N} cards into your hand.`);          s.push(`The ${ord} card is the ${FN}!`); }
+    else                          { s.push(`Deal ${N-1} cards then stop on the ${ord}.`); s.push(`The ${ord} card is the ${FN}!`); }
     return s;
   }
   // coded: opening line encodes packet (subject phrase) + cut ("Hold…" prefix = cut) +
@@ -2315,7 +2309,9 @@ function rdHiLoSplit(){
 function rdOfferedValues(){
   if (rd.kind === "pic") return ["J","Q","K"];
   const { low, high } = rdHiLoSplit();
-  return rd.hl === "high" ? high : low;
+  if (rd.hl === "high") return high;
+  if (rd.hl === "low")  return low;
+  return [...low, ...high];   // no high/low split (selection mode) — all reachable numbers
 }
 function rdNameList(vals){ const n = vals.map(v => RD_VNAME_FULL[v] || v);
   if (n.length <= 1) return n[0] || "";
@@ -2373,7 +2369,7 @@ function rdFlowStep(){
       ? `<button data-g="kind" data-v="num">Number<br>Cards</button><button data-g="kind" data-v="pic">Picture<br>Cards</button>`
       : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`;
     html = `${rdMiniFan(rdRun(rd.color, rdSpreadVals(), true))}<div class="optrow">${btns}</div>`;
-  } else if (rd.kind === "num" && !rd.hl) {
+  } else if (!selectMode && rd.kind === "num" && !rd.hl) {   // removing mode only — selecting picks the value directly
     layout="shared";
     const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));   // aces are gone by the high/low step
     const btns = selectMode
@@ -2396,7 +2392,8 @@ function rdFlowStep(){
     }).join("");
   }
   if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Choose Any Card" : "Final Decision";
-  else $("ddCardTitle").textContent = selectMode ? "Which?" : "Which cards should we remove?";
+  else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : !rd.kind ? "Number or picture cards?" : "Which value?";
+  else $("ddCardTitle").textContent = "Which cards should we remove?";
   flow.className = "flow-" + layout;
   flow.style.gridTemplateColumns = layout==="cells" ? grid : "";
   flow.innerHTML = html;
