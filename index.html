@@ -182,6 +182,7 @@
   #ddScreen .optcell { background: var(--dd-btn); border: 1px solid var(--dd-btn-border); border-radius: 12px; padding: 8px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
   #ddScreen .optcell:active { border-color: var(--gold); }
   #ddScreen .optcell .optlbl { font-size: 15px; font-weight: 700; color: var(--dd-btn-text); text-align: center; line-height: 1.15; text-transform: none; }
+  #ddScreen .optcell[data-g="color"] .optlbl { font-size: 22px; }
   #ddScreen .optcell[data-g="suit"] .optlbl { width: 100%; }
   #ddScreen .optcell[data-g="suit"] .cn { display: block; width: 100%; white-space: nowrap; overflow: hidden; }
   #ddScreen .optcell[data-g="suit"] .pngcard { display: block; height: 150px; width: auto; max-width: 100%; margin: 0 auto 8px; object-fit: contain; }
@@ -2232,11 +2233,16 @@ $("ddGaffFlow").addEventListener("click", e => {
     const cell = [...fl.querySelectorAll('[data-g="suit"]')].find(x => x.dataset.v !== keep); if (cell) gone = [cell];
   } else if (g === "color" || g === "value") {                 // cell-based: fade whole cells (cards + labels)
     gone = selectMode ? [...fl.querySelectorAll(`[data-g="${g}"]`)].filter(x => x.dataset.v !== v) : [b];
-  } else if (g === "kind" || g === "hl") {                     // shared spread: fade the non-surviving cards + its word
-    const grp = g === "kind" ? (c => ["J","Q","K","A"].includes(valOf(c))) : (c => ["7","8","9","10"].includes(valOf(c)));
-    const flag = g === "kind" ? (v === "pic") : (v === "high");
-    const deadBtn = [...fl.querySelectorAll(`[data-g="${g}"]`)].find(x => selectMode ? x.dataset.v !== v : x.dataset.v === v);
-    gone = [deadBtn, ...all.filter(c => grp(c) === (flag !== selectMode))];
+  } else if (g === "kind") {                                  // shared spread: fade pictures+aces or numbers
+    const isPic = c => ["J","Q","K","A"].includes(valOf(c));
+    const deadBtn = [...fl.querySelectorAll('[data-g="kind"]')].find(x => selectMode ? x.dataset.v !== v : x.dataset.v === v);
+    gone = [deadBtn, ...all.filter(c => isPic(c) === ((v === "pic") !== selectMode))];
+  } else if (g === "hl") {                                     // keep only the surviving low/high group; everything else (incl. unavailable 5/6/7) fades
+    const { low, high } = rdHiLoSplit();
+    const survHl = selectMode ? v : (v === "high" ? "low" : "high");
+    const survVals = survHl === "high" ? high : low;
+    const deadBtn = [...fl.querySelectorAll('[data-g="hl"]')].find(x => selectMode ? x.dataset.v !== v : x.dataset.v === v);
+    gone = [deadBtn, ...all.filter(c => !survVals.includes(valOf(c)))];
   }
   rdVanish(gone, () => rdApply(g, v));
 });
@@ -2279,12 +2285,21 @@ function rdPopupChain(steps){ const p = $("ddPop"), b = $("ddPopText"); clearTim
 }
 function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!final }]); }
 // values offered at the value step (depends on the surviving kind/high-low)
+// split the number cards into low/high. must-covers (2,3,4,8,9,10) always reachable; 5/6/7 only when
+// forceable here. the boundary sits just below the lowest unavailable middle card, so an unavailable 5
+// gives low 2-4 / high 6-10; an unavailable 7 gives low 2-6 / high 8-10; all available → low 2-6 / high 7-10.
+function rdHiLoSplit(){
+  const reach = v => !!rdSuit(String(v), rd.color, rd.num).out;
+  const unavailMid = [5,6,7].filter(v => !reach(v));
+  const B = unavailMid.length ? Math.min(...unavailMid) - 1 : 6;
+  const nums = [2,3,4,5,6,7,8,9,10];
+  return { low:  nums.filter(v => v <= B && reach(v)).map(String),
+           high: nums.filter(v => v >  B && reach(v)).map(String) };
+}
 function rdOfferedValues(){
-  // must-cover values (2,3,4,8,9,10,J,Q,K) always offered; 5/6/7 only when reachable at this number+colour.
-  const reach = v => !!rdSuit(v, rd.color, rd.num).out;
   if (rd.kind === "pic") return ["J","Q","K"];
-  if (rd.hl === "high") return ["7","8","9","10"].filter(v => v !== "7" || reach("7"));
-  return ["2","3","4","5","6"].filter(v => (v === "5" || v === "6") ? reach(v) : true);
+  const { low, high } = rdHiLoSplit();
+  return rd.hl === "high" ? high : low;
 }
 function rdNameList(vals){ const n = vals.map(v => RD_VNAME[v] || v);
   if (n.length <= 1) return n[0] || "";
@@ -2319,9 +2334,9 @@ function rdSizeFan(el){ const inner=el.querySelector(".mfan-in"); if(!inner) ret
   const ew=mxR-mnL, eh=mxB-mnT, avail=el.clientWidth-6, sc=ew>avail?avail/ew:1;
   inner.style.transform=`scale(${sc})`; el.style.height=(eh*sc+4)+"px"; }
 // candidate values at this number (no aces; 5/6/7 only when reachable)
-function rdSpreadVals(){ const must=["2","3","4","8","9","10","J","Q","K"];
-  const v = ["2","3","4","5","6","7","8","9","10","J","Q","K"].filter(x => must.includes(x) || ["S","H","C","D"].some(s=>rdResolve(x+s, rd.num)));
-  return [...v, "A"];   // aces shown in the spreads (held-out shims; never offered as a final value)
+function rdSpreadVals(){
+  // spreads always show the full deck (2–A); unreachable 5/6/7 stay visible and just fade out at the high/low step
+  return ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 }
 function rdRun(color, vals, interleave){ const a = color==="red"?"H":"C", b = color==="red"?"D":"S";
   return interleave ? vals.flatMap(v=>[v+a, v+b]) : [...vals.map(v=>v+a), ...vals.map(v=>v+b)]; }
@@ -2329,6 +2344,7 @@ function rdRun(color, vals, interleave){ const a = color==="red"?"H":"C", b = co
 function rdFlowStep(){
   const flow = $("ddGaffFlow"); let html="", freeSuit=false, layout="cells", grid="repeat(2,minmax(0,1fr))";
   if (!rd.color) {
+    grid = "minmax(0,1fr)";                                    // stack Blacks over Reds, full width (min 0 so the fan scales to fit, not overflow)
     html = ["black","red"].map(col => {
       const lbl = (selectMode ? "" : "Remove ") + (col==="black" ? "Blacks" : "Reds");
       return `<div class="optcell" data-g="color" data-v="${col}">${rdMiniFan(rdRun(col, rdSpreadVals()))}<div class="optlbl">${lbl}</div></div>`;
