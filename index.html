@@ -41,8 +41,8 @@
   #ddScreen #ddNumberPicker, #ddScreen #ddCardPicker, #ddScreen #ddResults { margin-top: auto; margin-bottom: auto; width: 100%; }
   #ddScreen #ddNumberPicker { transform: translateY(7vh); }   /* nudge the numpad down a touch */
 
-  header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; }
-  header h1 { font-size: 14px; letter-spacing: 1.5px; color: var(--dd-title); font-weight: 600; margin: 0; text-transform: uppercase; flex: 1; text-align: center; }
+  header { position: relative; display: flex; align-items: center; justify-content: flex-end; padding: 4px 2px 10px; min-height: 40px; }
+  header h1 { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; font-size: clamp(15px, 5.2vw, 22px); letter-spacing: 1px; color: var(--dd-title); font-weight: 600; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
   #tapZone { width: 72px; height: 34px; flex: none; }   /* invisible unlock target, right of the title */
 
@@ -177,16 +177,19 @@
   /* colour step: white buttons, black/red content like real card colours */
   #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); display: flex; flex-direction: column; align-items: center; gap: 4px; }
   /* ---- card spreads above the equivoque options ---- */
-  #ddScreen #ddGaffFlow.flow-cells { display: grid; gap: 8px; }
+  #ddScreen #ddGaffFlow.flow-cells { display: grid; gap: 16px; }
   #ddScreen #ddGaffFlow.flow-shared { display: block; }
-  #ddScreen .optcell { background: var(--dd-btn); border: 1px solid var(--dd-btn-border); border-radius: 12px; padding: 8px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+  #ddScreen .optcell { background: var(--dd-btn); border: 2px solid var(--dd-btn-border); border-radius: 12px; padding: 10px 6px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
   #ddScreen .optcell:active { border-color: var(--gold); }
   #ddScreen .optcell .optlbl { font-size: 15px; font-weight: 700; color: var(--dd-btn-text); text-align: center; line-height: 1.15; text-transform: none; }
   #ddScreen .optcell[data-g="color"] .optlbl { font-size: 22px; }
   #ddScreen .optcell[data-g="suit"] .optlbl { width: 100%; }
   #ddScreen .optcell[data-g="suit"] .cn { display: block; width: 100%; white-space: nowrap; overflow: hidden; }
   #ddScreen .optcell[data-g="suit"] .pngcard { display: block; height: 150px; width: auto; max-width: 100%; margin: 0 auto 8px; object-fit: contain; }
-  #ddScreen .optrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  #ddScreen .pngpair { display: flex; justify-content: center; align-items: flex-start; margin-bottom: 4px; }
+  #ddScreen .pngpair img { width: 84px; height: auto; display: block; filter: drop-shadow(1px 1px 2px rgba(0,0,0,.55)); }
+  #ddScreen .pngpair img + img { margin-left: -52px; }
+  #ddScreen .optrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
   #ddScreen .mfan { width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; padding: 3px 1px; }
   #ddScreen .mfan-in { display: flex; align-items: center; transform-origin: center center; }
   #ddScreen .mc { position: relative; background: #fff; border: 1px solid #8a8a8a; border-radius: 5px; box-shadow: 1px 1px 3px rgba(0,0,0,.4); color: #111; flex: none; transform-origin: bottom center; overflow: hidden; }
@@ -1844,10 +1847,18 @@ function renderSettings() {
     const red = /[HD]$/.test(c); return `<span class="cd" style="${red ? "color:var(--red)" : ""}">${c}</span>`;
   }).join("");
   $("settingsBody").innerHTML =
-      '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
+      '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
+    + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
     + '<div class="set-group"><div class="set-label">Card choice</div><button id="setSelMode" class="randombtn">' + (selectMode ? "Selecting &mdash; spectator picks the value" : "Removing &mdash; eliminate down to one") + '</button></div>'
     + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">Hold out <b>2 jokers</b> + <b>4 aces</b> as add-piles &mdash; jokers = <b>+2</b>, aces = <b>+4</b>, both = <b>+6</b>. All four 6s stay in the deck (spacers). Offer numbers <b>10&ndash;45</b>; values steer away from <b>5/6/7</b>.</div></div>'
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
+  $("setExitMagician").addEventListener("click", () => {
+    magicianMode = false;
+    $("gearBtn").style.display = "none";
+    $("settings").style.display = "none";
+    $("ddScreen").style.display = "flex";
+    if (ddRerender) ddRerender();
+  });
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("setSelMode").addEventListener("click", () => { selectMode = !selectMode; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
   return;
@@ -2096,7 +2107,7 @@ function rdOrdinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + 
 const RD_VNAME_FULL = { "2":"Two","3":"Three","4":"Four","5":"Five","6":"Six","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King",A:"Ace" };
 const RD_SNAME_FULL = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" };
 function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1), s = c.slice(-1);
-  const val = (v === "J" || v === "Q" || v === "K" || v === "A") ? RD_VNAME_FULL[v] : v;   // digit for number cards, word for faces
+  const val = RD_VNAME_FULL[v] || v;   // value spelled out for every card
   return `${val} of ${RD_SNAME_FULL[s] || s}`; }
 // best out for a card at N: prefer clean (deal/next, either end) over double-lift; then
 // fewest added cards; then no-cut; then top end. Packet on top shifts top positions by k
@@ -2166,8 +2177,13 @@ function rdSteps(out, card, N, coded){
   const ncSubj = { 0:["Cards","are"], 2:["Every card","is"], 4:["All cards","are"], 6:["Each and every card","is"] }[out.packet];
   const cSubj  = { 0:"the cards", 2:"every card", 4:"all cards", 6:"each and every card" }[out.packet];
   const head = out.cut ? `Hold ${cSubj} FACE ${faceWord}.` : `${ncSubj[0]} ${ncSubj[1]} held FACE ${faceWord}.`;
-  const finder = out.method === "next" ? "the next card is" : out.method === "dl" ? "the card you turn over is" : "the card you stop on is";
-  return [head, `Deal ${N} cards — ${finder} the ${FN}.`];
+  // step 2 = the deal (table = next card, hand = double lift, "stop on" = direct hit); step 3 = where the card is
+  const ord = rdOrdinal(N);
+  let step2, step3;
+  if (out.method === "next")      { step2 = `Deal ${N} cards to the table.`;            step3 = `The next card is the ${FN}!`; }
+  else if (out.method === "dl")   { step2 = `Deal ${N} cards into your hand.`;          step3 = `The ${ord} card is the ${FN}!`; }
+  else                            { step2 = `Deal ${N-1} cards then stop on the ${ord}.`; step3 = `The ${ord} card is the ${FN}!`; }
+  return [head, step2, step3];
 }
 /*RD-ENGINE-END*/
 
@@ -2253,7 +2269,7 @@ function rdApply(g, v){
     const forceSuit = r.force ? r.suits[0] : v;
     rd.card = rd.value + forceSuit;                            // always resolve to the force card
     rd.step = 2; rdRender();
-    const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.card)}<img class="popcard" src="cards/${rd.card}.png" alt="${rdCardLabel(rd.card)}" draggable="false">`, final: true };
+    const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.card)}!<img class="popcard" src="cards/${rd.card}.png" alt="${rdCardLabel(rd.card)}" draggable="false">`, final: true };
     rdPopupChain([yourCard]);                                  // (the "… Was Removed" popup is suppressed per request)
     return;
   }
@@ -2301,13 +2317,13 @@ function rdOfferedValues(){
   const { low, high } = rdHiLoSplit();
   return rd.hl === "high" ? high : low;
 }
-function rdNameList(vals){ const n = vals.map(v => RD_VNAME[v] || v);
+function rdNameList(vals){ const n = vals.map(v => RD_VNAME_FULL[v] || v);
   if (n.length <= 1) return n[0] || "";
   if (n.length === 2) return `${n[0]} and ${n[1]}`;
   return `${n.slice(0,-1).join(", ")}, and ${n[n.length-1]}`; }
 // card label for popups: digit for number cards, word for faces (e.g. "8 of Hearts", "Jack of Clubs")
 function rdCardLabel(card){ const v = card.slice(0,-1), s = card.slice(-1);
-  const val = (v === "J" || v === "Q" || v === "K") ? RD_VNAME[v] : v;
+  const val = RD_VNAME_FULL[v] || v;   // value spelled out for every card
   return `${val} of ${RD_SNAME[s]}`; }
 // confirmation for the most recently completed equivoque pick (shown above the next step)
 function rdElimText(){
@@ -2324,6 +2340,8 @@ function rdMiniCard(code){ const r=code.slice(0,-1), s=code.slice(-1), red=(s===
   const ix = `<span class="r">${r}</span><span class="s">${RD_SSYM[s]}</span>`;
   return `<div class="mc${red?" r":""}" data-code="${code}"><span class="corner tl">${ix}</span><span class="pip">${RD_SSYM[s]}</span><span class="corner br">${ix}</span></div>`; }
 function rdMiniFan(codes){ return `<div class="mfan"><div class="mfan-in">${codes.map(rdMiniCard).join("")}</div></div>`; }
+// overlapping real card-face PNGs (used for the value pairs)
+function rdPngPair(codes){ return `<div class="pngpair">${codes.map(c => `<img src="cards/${c}.png" alt="" draggable="false">`).join("")}</div>`; }
 function rdSizeFan(el){ const inner=el.querySelector(".mfan-in"); if(!inner) return; const cards=[...inner.querySelectorAll(".mc")]; const n=cards.length; if(!n) return;
   const w=60, ov=0.62, h=Math.round(w*1.45), mid=(n-1)/2, per=n>1?Math.min(5,20/(n-1)):0, step=Math.max(3,Math.round(w*(1-ov)));
   cards.forEach((c,i)=>{ const last=i===n-1; c.style.width=w+"px"; c.style.height=h+"px"; c.style.marginLeft=i===0?"0":(step-w)+"px"; c.style.transform=`rotate(${((i-mid)*per).toFixed(2)}deg)`; c.style.zIndex=i;
@@ -2346,7 +2364,7 @@ function rdFlowStep(){
   if (!rd.color) {
     grid = "minmax(0,1fr)";                                    // stack Blacks over Reds, full width (min 0 so the fan scales to fit, not overflow)
     html = ["black","red"].map(col => {
-      const lbl = (selectMode ? "" : "Remove ") + (col==="black" ? "Blacks" : "Reds");
+      const lbl = (selectMode ? "" : "Remove ") + (col==="black" ? "Black Cards" : "Red Cards");
       return `<div class="optcell" data-g="color" data-v="${col}">${rdMiniFan(rdRun(col, rdSpreadVals()))}<div class="optlbl">${lbl}</div></div>`;
     }).join("");
   } else if (!rd.kind) {
@@ -2367,8 +2385,8 @@ function rdFlowStep(){
     const vals = selectMode ? rdOfferedValues() : rdOfferedValues().filter(x => !rd.valElim.includes(x));
     grid = "repeat(auto-fill,minmax(150px,1fr))";
     html = vals.map(v => {
-      const lbl = selectMode ? (rd.kind==="pic"?RD_VNAME[v]:v) : `Remove<br>${rd.kind==="pic"?RD_VNAME[v]+"s":v+"s"}`;
-      return `<div class="optcell" data-g="value" data-v="${v}">${rdMiniFan([v+a, v+b])}<div class="optlbl">${lbl}</div></div>`;
+      const lbl = selectMode ? RD_VNAME_FULL[v] : `Remove<br>${RD_VNAME_FULL[v]}s`;
+      return `<div class="optcell" data-g="value" data-v="${v}">${rdPngPair([v+a, v+b])}<div class="optlbl">${lbl}</div></div>`;
     }).join("");
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num); freeSuit = !r.force;
@@ -2377,8 +2395,8 @@ function rdFlowStep(){
       return `<div class="optcell" data-g="suit" data-v="${s}"><img class="pngcard" src="cards/${rd.value+s}.png" alt="${name}" draggable="false"><div class="optlbl"><span class="cn">${name}</span></div></div>`;
     }).join("");
   }
-  if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Choose Any Card" : "Final decision";
-  else $("ddCardTitle").textContent = selectMode ? "Choose your card" : "Which cards should we remove?";
+  if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Choose Any Card" : "Final Decision";
+  else $("ddCardTitle").textContent = selectMode ? "Which?" : "Which cards should we remove?";
   flow.className = "flow-" + layout;
   flow.style.gridTemplateColumns = layout==="cells" ? grid : "";
   flow.innerHTML = html;
