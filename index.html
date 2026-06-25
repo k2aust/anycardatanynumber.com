@@ -2170,7 +2170,9 @@ function rdSteps(out, card, N, coded){
   const faceWord = out.end === "face" ? "UP" : "DOWN";
   const ncSubj = { 0:["Cards","are"], 2:["Every card","is"], 4:["All cards","are"], 6:["Each and every card","is"] }[out.packet];
   const cSubj  = { 0:"the cards", 2:"every card", 4:"all cards", 6:"each and every card" }[out.packet];
-  const head = out.cut ? `Hold ${cSubj} FACE ${faceWord}.` : `${ncSubj[0]} ${ncSubj[1]} held FACE ${faceWord}.`;
+  const headBase = out.cut ? `Hold ${cSubj} FACE ${faceWord}` : `${ncSubj[0]} ${ncSubj[1]} held FACE ${faceWord}`;
+  const posTail = selectMode ? "" : (out.method === "next" ? " in your hands" : out.method === "dl" ? " in dealing position" : "");   // method position cue — elimination (removing) version only
+  const head = `${headBase}${posTail}.`;
   // step 2 = the deal (table = next card, hand = double lift, "stop on" = direct hit); step 3 = where the card is
   const ord = rdOrdinal(N);
   let step2, step3;
