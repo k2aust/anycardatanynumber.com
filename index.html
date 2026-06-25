@@ -1850,7 +1850,7 @@ function renderSettings() {
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
     + '<div class="set-group"><div class="set-label">Card choice</div><button id="setSelMode" class="randombtn">' + (selectMode ? "Selecting &mdash; spectator picks the value" : "Removing &mdash; eliminate down to one") + '</button></div>'
-    + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">Hold out <b>2 jokers</b> + <b>4 aces</b> as add-piles &mdash; jokers = <b>+2</b>, aces = <b>+4</b>, both = <b>+6</b>. All four 6s stay in the deck (spacers). Offer numbers <b>10&ndash;45</b>; values steer away from <b>5/6/7</b>.</div></div>'
+    + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>2D&ndash;KD</b> and <b>3D&ndash;10C</b>.</div></div>'
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
   $("setExitMagician").addEventListener("click", () => {
     magicianMode = false;
@@ -2295,16 +2295,19 @@ function rdPopupChain(steps){ const p = $("ddPop"), b = $("ddPopText"); clearTim
 }
 function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!final }]); }
 // values offered at the value step (depends on the surviving kind/high-low)
-// split the number cards into low/high. must-covers (2,3,4,8,9,10) always reachable; 5/6/7 only when
-// forceable here. the boundary sits just below the lowest unavailable middle card, so an unavailable 5
-// gives low 2-4 / high 6-10; an unavailable 7 gives low 2-6 / high 8-10; all available → low 2-6 / high 7-10.
+// split the number cards into low/high. low is anchored on 2,3,4 and high on 8,9,10 (always reachable);
+// the middles 5,6,7 join only if they bridge contiguously to their anchor (5→low, 7→high). 6 goes low if
+// 5 is reachable, else high if 7 is reachable, else it's an orphan and is dropped (e.g. 5 & 7 both dud →
+// low 2-4 / high 8-10 even though 6 is available). all reachable → low 2-6 / high 7-10.
 function rdHiLoSplit(){
   const reach = v => !!rdSuit(String(v), rd.color, rd.num).out;
-  const unavailMid = [5,6,7].filter(v => !reach(v));
-  const B = unavailMid.length ? Math.min(...unavailMid) - 1 : 6;
-  const nums = [2,3,4,5,6,7,8,9,10];
-  return { low:  nums.filter(v => v <= B && reach(v)).map(String),
-           high: nums.filter(v => v >  B && reach(v)).map(String) };
+  const r5 = reach(5), r6 = reach(6), r7 = reach(7);
+  const low = [2,3,4], high = [8,9,10];
+  if (r5) low.push(5);
+  if (r7) high.push(7);
+  if (r6) { if (r5) low.push(6); else if (r7) high.push(6); }   // 6 must bridge 5 (low) or 7 (high), else dropped
+  low.sort((a,b)=>a-b); high.sort((a,b)=>a-b);
+  return { low: low.map(String), high: high.map(String) };
 }
 function rdOfferedValues(){
   if (rd.kind === "pic") return ["J","Q","K"];
