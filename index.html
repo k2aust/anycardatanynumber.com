@@ -165,6 +165,8 @@
   #ddPop .bubble { background: rgba(18,20,26,.96); border: 1px solid var(--gold); color: #fff; border-radius: 18px; padding: 32px 30px; font-size: 30px; font-weight: 700; line-height: 1.3; max-width: 92%; text-align: center; box-shadow: 0 12px 48px rgba(0,0,0,.65); transform: scale(.96); transition: transform .16s ease; }
   #ddPop.show .bubble { transform: scale(1); }
   #ddPop .bubble.final { color: var(--gold); font-size: 32px; padding: 32px 30px; line-height: 1.25; }
+  #ddPop .bubble .popcard { display: block; height: 210px; width: auto; max-width: 70vw; margin: 18px auto 0; }
+  #ddScreen #ddReveal .revealcard { display: block; height: 160px; width: auto; max-width: 80%; margin: 14px auto 4px; }
   #ddScreen #ddGaffFlow button.off { pointer-events: none; }   /* wrong suit: looks the same, no tap/flash */
   #ddScreen #ddGaffFlow .sy { font-size: 1.7em; vertical-align: -0.12em; }
   #ddScreen #ddGaffFlow .syr { color: var(--red); }
@@ -174,6 +176,25 @@
   #ddScreen #ddGaffFlow .sy.sb { display: block; vertical-align: 0; line-height: 1; }
   /* colour step: white buttons, black/red content like real card colours */
   #ddScreen #ddGaffFlow button[data-g="color"] { background: var(--dd-btn); border-color: var(--dd-btn); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  /* ---- card spreads above the equivoque options ---- */
+  #ddScreen #ddGaffFlow.flow-cells { display: grid; gap: 8px; }
+  #ddScreen #ddGaffFlow.flow-shared { display: block; }
+  #ddScreen .optcell { background: var(--dd-btn); border: 1px solid var(--dd-btn-border); border-radius: 12px; padding: 8px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+  #ddScreen .optcell:active { border-color: var(--gold); }
+  #ddScreen .optcell .optlbl { font-size: 15px; font-weight: 700; color: var(--dd-btn-text); text-align: center; line-height: 1.15; text-transform: none; }
+  #ddScreen .optcell[data-g="suit"] .optlbl { width: 100%; }
+  #ddScreen .optcell[data-g="suit"] .cn { display: block; width: 100%; white-space: nowrap; overflow: hidden; }
+  #ddScreen .optcell[data-g="suit"] .pngcard { display: block; height: 150px; width: auto; max-width: 100%; margin: 0 auto 8px; object-fit: contain; }
+  #ddScreen .optrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  #ddScreen .mfan { width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; padding: 3px 1px; }
+  #ddScreen .mfan-in { display: flex; align-items: center; transform-origin: center center; }
+  #ddScreen .mc { position: relative; background: #fff; border: 1px solid #8a8a8a; border-radius: 5px; box-shadow: 1px 1px 3px rgba(0,0,0,.4); color: #111; flex: none; transform-origin: bottom center; overflow: hidden; }
+  #ddScreen .mc.r { color: var(--red); }
+  #ddScreen .mc .corner { position: absolute; line-height: .82; font-weight: 800; text-align: center; }
+  #ddScreen .mc .corner.tl { top: 5%; left: 8%; }
+  #ddScreen .mc .corner.br { bottom: 5%; right: 8%; transform: rotate(180deg); }
+  #ddScreen .mc .corner .r, #ddScreen .mc .corner .s { display: block; }
+  #ddScreen .mc .pip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; }
   #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
   #ddScreen .picker h2 { color: var(--dd-panel-label); text-align: center; font-size: 19px; letter-spacing: 1px; margin-bottom: 14px; }   /* bigger question labels */
   #ddScreen #ddNumEntry, #ddScreen #ddNumExample { color: var(--dd-panel-label); }
@@ -2145,7 +2166,7 @@ function rdSteps(out, card, N, coded){
   const cSubj  = { 0:"the cards", 2:"every card", 4:"all cards", 6:"each and every card" }[out.packet];
   const head = out.cut ? `Hold ${cSubj} FACE ${faceWord}.` : `${ncSubj[0]} ${ncSubj[1]} held FACE ${faceWord}.`;
   const finder = out.method === "next" ? "the next card is" : out.method === "dl" ? "the card you turn over is" : "the card you stop on is";
-  return [head, `Deal ${N} cards — ${finder} the ${F}.`];
+  return [head, `Deal ${N} cards — ${finder} the ${FN}.`];
 }
 /*RD-ENGINE-END*/
 
@@ -2191,18 +2212,43 @@ function rdCommitNum(){
 
 // ---- equivoque + suit flow (rendered in #ddGaffFlow) ----
 // elimination narrative: the binary tap is REMOVED, so we continue with the other side.
+let rdAnimating = false;
+// fade the given elements out, then run done()
+function rdVanish(els, done){
+  els = els.filter(Boolean);
+  if (!els.length) { done(); return; }
+  rdAnimating = true;
+  els.forEach(el => { el.style.transition = "transform .7s ease, opacity .7s ease"; el.style.transform = (el.style.transform || "") + " translateY(-46px) scale(.4)"; el.style.opacity = "0"; });
+  setTimeout(() => { rdAnimating = false; done(); }, 700);
+}
 $("ddGaffFlow").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b || b.classList.contains("off")) return;
+  const b = e.target.closest("[data-g]"); if (!b || b.classList.contains("off") || rdAnimating) return;
   const g = b.dataset.g, v = b.dataset.v; if (!g) return;
+  // removing mode: the tapped group vanishes. selecting mode: everything EXCEPT the tapped group vanishes.
+  const fl = $("ddGaffFlow"), all = [...fl.querySelectorAll(".mc")], valOf = c => c.dataset.code.slice(0, -1);
+  let gone = [];
+  if (g === "suit") {                                          // suit forces either way — the non-surviving card fades
+    const r = rdSuit(rd.value, rd.color, rd.num), keep = r.force ? r.suits[0] : v;
+    const cell = [...fl.querySelectorAll('[data-g="suit"]')].find(x => x.dataset.v !== keep); if (cell) gone = [cell];
+  } else if (g === "color" || g === "value") {                 // cell-based: fade whole cells (cards + labels)
+    gone = selectMode ? [...fl.querySelectorAll(`[data-g="${g}"]`)].filter(x => x.dataset.v !== v) : [b];
+  } else if (g === "kind" || g === "hl") {                     // shared spread: fade the non-surviving cards + its word
+    const grp = g === "kind" ? (c => ["J","Q","K","A"].includes(valOf(c))) : (c => ["7","8","9","10"].includes(valOf(c)));
+    const flag = g === "kind" ? (v === "pic") : (v === "high");
+    const deadBtn = [...fl.querySelectorAll(`[data-g="${g}"]`)].find(x => selectMode ? x.dataset.v !== v : x.dataset.v === v);
+    gone = [deadBtn, ...all.filter(c => grp(c) === (flag !== selectMode))];
+  }
+  rdVanish(gone, () => rdApply(g, v));
+});
+function rdApply(g, v){
   if (g === "suit") {
     const r = rdSuit(rd.value, rd.color, rd.num);
     rd.suitPicked = v;
     const forceSuit = r.force ? r.suits[0] : v;
     rd.card = rd.value + forceSuit;                            // always resolve to the force card
     rd.step = 2; rdRender();
-    const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.value + forceSuit)}`, final: true };
-    if (!selectMode && r.force && v !== forceSuit) rdPopupChain([{ msg: `${rdCardLabel(rd.value + v)} Was Removed` }, yourCard]);
-    else rdPopupChain([yourCard]);
+    const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.card)}<img class="popcard" src="cards/${rd.card}.png" alt="${rdCardLabel(rd.card)}" draggable="false">`, final: true };
+    rdPopupChain([yourCard]);                                  // (the "… Was Removed" popup is suppressed per request)
     return;
   }
   if (g === "value") {
@@ -2211,7 +2257,7 @@ $("ddGaffFlow").addEventListener("click", e => {
       rd.valElim.push(v);
       const remaining = rdOfferedValues().filter(x => !rd.valElim.includes(x));
       if (remaining.length === 1) { rd.value = remaining[0]; rdRender(); rdPopup("Final Decision"); }
-      else rdRender();                                         // no popup mid-elimination — the button just disappears
+      else rdRender();
     }
     return;
   }
@@ -2220,15 +2266,15 @@ $("ddGaffFlow").addEventListener("click", e => {
   else if (g === "hl") rd.hl = selectMode ? v : (v === "high" ? "low" : "high");
   else return;
   rdRender();
-  if (!selectMode) rdPopup(rdElimText());                      // elimination popups only in removing mode
-});
+  // "… Cards Removed" popups suppressed per request — the spread visibly vanishes instead. (re-add rdPopup(rdElimText()) to restore)
+}
 let ddPopTimer = null;
 // show one or more popups back-to-back; the backdrop stays up until the last one ends
 function rdPopupChain(steps){ const p = $("ddPop"), b = $("ddPopText"); clearTimeout(ddPopTimer);
   let i = 0;
   const next = () => { if (i >= steps.length) { p.classList.remove("show"); return; }
     const s = steps[i++]; b.innerHTML = s.msg; b.classList.toggle("final", !!s.final); p.classList.add("show");
-    ddPopTimer = setTimeout(next, s.final ? 1700 : 1400); };
+    ddPopTimer = setTimeout(next, s.final ? 2200 : 1900); };
   next();
 }
 function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!final }]); }
@@ -2258,46 +2304,87 @@ function rdElimText(){
 }
 // reveal text on the results page (always the force card)
 function rdRevealText(){ return rd.card ? `Your card is the ${rdFullName(rd.card)}.` : ""; }
+// ---- mini card + fanned spread shown above each equivoque option ----
+function rdMiniCard(code){ const r=code.slice(0,-1), s=code.slice(-1), red=(s==="H"||s==="D");
+  const ix = `<span class="r">${r}</span><span class="s">${RD_SSYM[s]}</span>`;
+  return `<div class="mc${red?" r":""}" data-code="${code}"><span class="corner tl">${ix}</span><span class="pip">${RD_SSYM[s]}</span><span class="corner br">${ix}</span></div>`; }
+function rdMiniFan(codes){ return `<div class="mfan"><div class="mfan-in">${codes.map(rdMiniCard).join("")}</div></div>`; }
+function rdSizeFan(el){ const inner=el.querySelector(".mfan-in"); if(!inner) return; const cards=[...inner.querySelectorAll(".mc")]; const n=cards.length; if(!n) return;
+  const w=60, ov=0.62, h=Math.round(w*1.45), mid=(n-1)/2, per=n>1?Math.min(5,20/(n-1)):0, step=Math.max(3,Math.round(w*(1-ov)));
+  cards.forEach((c,i)=>{ const last=i===n-1; c.style.width=w+"px"; c.style.height=h+"px"; c.style.marginLeft=i===0?"0":(step-w)+"px"; c.style.transform=`rotate(${((i-mid)*per).toFixed(2)}deg)`; c.style.zIndex=i;
+    c.querySelectorAll(".r").forEach(e=>e.style.fontSize=(w*0.36)+"px"); c.querySelectorAll(".s").forEach(e=>e.style.fontSize=(w*0.32)+"px");
+    const p=c.querySelector(".pip"); p.style.fontSize=(w*0.30)+"px"; p.style.display=last?"":"none"; const br=c.querySelector(".corner.br"); if(br)br.style.display=last?"":"none"; });
+  inner.style.transform="scale(1)"; let mnL=1e9,mxR=-1e9,mnT=1e9,mxB=-1e9;
+  cards.forEach(c=>{ const r=c.getBoundingClientRect(); mnL=Math.min(mnL,r.left); mxR=Math.max(mxR,r.right); mnT=Math.min(mnT,r.top); mxB=Math.max(mxB,r.bottom); });
+  const ew=mxR-mnL, eh=mxB-mnT, avail=el.clientWidth-6, sc=ew>avail?avail/ew:1;
+  inner.style.transform=`scale(${sc})`; el.style.height=(eh*sc+4)+"px"; }
+// candidate values at this number (no aces; 5/6/7 only when reachable)
+function rdSpreadVals(){ const must=["2","3","4","8","9","10","J","Q","K"];
+  const v = ["2","3","4","5","6","7","8","9","10","J","Q","K"].filter(x => must.includes(x) || ["S","H","C","D"].some(s=>rdResolve(x+s, rd.num)));
+  return [...v, "A"];   // aces shown in the spreads (held-out shims; never offered as a final value)
+}
+function rdRun(color, vals, interleave){ const a = color==="red"?"H":"C", b = color==="red"?"D":"S";
+  return interleave ? vals.flatMap(v=>[v+a, v+b]) : [...vals.map(v=>v+a), ...vals.map(v=>v+b)]; }
+
 function rdFlowStep(){
-  const flow = $("ddGaffFlow"); let cols = 2, html = "", freeSuit = false;
-  if (!rd.color) { html = selectMode
-      ? `<button data-g="color" data-v="black">Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr sb">♥♦</span></button>`
-      : `<button data-g="color" data-v="black">Remove Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Remove Red <span class="sy syr sb">♥♦</span></button>`; }
-  else if (!rd.kind) { html = selectMode
+  const flow = $("ddGaffFlow"); let html="", freeSuit=false, layout="cells", grid="repeat(2,minmax(0,1fr))";
+  if (!rd.color) {
+    html = ["black","red"].map(col => {
+      const lbl = (selectMode ? "" : "Remove ") + (col==="black" ? "Blacks" : "Reds");
+      return `<div class="optcell" data-g="color" data-v="${col}">${rdMiniFan(rdRun(col, rdSpreadVals()))}<div class="optlbl">${lbl}</div></div>`;
+    }).join("");
+  } else if (!rd.kind) {
+    layout="shared";
+    const btns = selectMode
       ? `<button data-g="kind" data-v="num">Number<br>Cards</button><button data-g="kind" data-v="pic">Picture<br>Cards</button>`
-      : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`; }
-  else if (rd.kind === "num" && !rd.hl) { html = selectMode
-      ? `<button data-g="hl" data-v="high">High<br>Numbers</button><button data-g="hl" data-v="low">Low<br>Numbers</button>`
-      : `<button data-g="hl" data-v="high">Remove<br>High Numbers</button><button data-g="hl" data-v="low">Remove<br>Low Numbers</button>`; }
-  else if (!rd.value) {
-    const vals = selectMode ? rdOfferedValues() : rdOfferedValues().filter(x => !rd.valElim.includes(x)); cols = vals.length;
-    html = vals.map(v => selectMode
-      ? `<button data-g="value" data-v="${v}">${rd.kind === "pic" ? RD_VNAME[v] : v}</button>`
-      : `<button data-g="value" data-v="${v}">Remove<br>${rd.kind === "pic" ? RD_VNAME[v] + "s" : v + "s"}</button>`).join("");
+      : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`;
+    html = `${rdMiniFan(rdRun(rd.color, rdSpreadVals(), true))}<div class="optrow">${btns}</div>`;
+  } else if (rd.kind === "num" && !rd.hl) {
+    layout="shared";
+    const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));   // aces are gone by the high/low step
+    const btns = selectMode
+      ? `<button data-g="hl" data-v="low">Low<br>Numbers</button><button data-g="hl" data-v="high">High<br>Numbers</button>`
+      : `<button data-g="hl" data-v="low">Remove<br>Low Numbers</button><button data-g="hl" data-v="high">Remove<br>High Numbers</button>`;
+    html = `${rdMiniFan(rdRun(rd.color, numVals, true))}<div class="optrow">${btns}</div>`;
+  } else if (!rd.value) {
+    const a = rd.color==="red"?"H":"C", b = rd.color==="red"?"D":"S";
+    const vals = selectMode ? rdOfferedValues() : rdOfferedValues().filter(x => !rd.valElim.includes(x));
+    grid = "repeat(auto-fill,minmax(150px,1fr))";
+    html = vals.map(v => {
+      const lbl = selectMode ? (rd.kind==="pic"?RD_VNAME[v]:v) : `Remove<br>${rd.kind==="pic"?RD_VNAME[v]+"s":v+"s"}`;
+      return `<div class="optcell" data-g="value" data-v="${v}">${rdMiniFan([v+a, v+b])}<div class="optlbl">${lbl}</div></div>`;
+    }).join("");
   } else {
-    const r = rdSuit(rd.value, rd.color, rd.num);
-    freeSuit = !r.force;                        // both suits reachable -> spectator may name any suit
-    html = r.suits.map(s => { const red = "HD".includes(s);
-      const name = rdCardLabel(rd.value + s);   // digit for number cards, word for faces
-      return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${name}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
+    const r = rdSuit(rd.value, rd.color, rd.num); freeSuit = !r.force;
+    html = r.suits.map(s => {
+      const name = rdCardLabel(rd.value+s);
+      return `<div class="optcell" data-g="suit" data-v="${s}"><img class="pngcard" src="cards/${rd.value+s}.png" alt="${name}" draggable="false"><div class="optlbl"><span class="cn">${name}</span></div></div>`;
+    }).join("");
   }
   if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Choose Any Card" : "Final decision";
-  else $("ddCardTitle").textContent = selectMode ? "Choose your card" : "Which card should we remove?";
-  flow.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
+  else $("ddCardTitle").textContent = selectMode ? "Choose your card" : "Which cards should we remove?";
+  flow.className = "flow-" + layout;
+  flow.style.gridTemplateColumns = layout==="cells" ? grid : "";
   flow.innerHTML = html;
-  if (rd.value != null) rdFitCardNames();   // shrink each name so the whole card fits one line
+  flow.querySelectorAll(".mfan").forEach(rdSizeFan);
+  if (rd.value != null) rdFitCardNames();
 }
 // shrink each suit-card name until it fits on a single line (longer names -> smaller font)
 function rdFitCardNames(){
-  $("ddGaffFlow").querySelectorAll('button[data-g="suit"] .cn').forEach(el => {
+  const els = [...$("ddGaffFlow").querySelectorAll('[data-g="suit"] .cn')];
+  if (!els.length) return;
+  let min = 40;
+  els.forEach(el => {                                          // size each to fit, track the smallest
     let fs = 40; el.style.fontSize = fs + "px";
     while (fs > 12 && el.scrollWidth > el.clientWidth) { fs -= 1; el.style.fontSize = fs + "px"; }
+    min = Math.min(min, fs);
   });
+  els.forEach(el => { el.style.fontSize = min + "px"; });      // apply the smallest to all so both match
 }
 
 // ---- result ----
 function rdRenderOut(coded){
-  $("ddReveal").textContent = rdRevealText();
+  $("ddReveal").innerHTML = rdRevealText() + (rd.card ? `<img class="revealcard" src="cards/${rd.card}.png" alt="" draggable="false">` : "");
   const out = rdResolve(rd.card, rd.num);
   const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, coded).map(l => `<li>${l}</li>`).join("")}</ol>`;
   if (coded) { $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`; return; }
