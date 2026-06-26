@@ -179,8 +179,9 @@
   /* ---- card spreads above the equivoque options ---- */
   #ddScreen #ddGaffFlow.flow-cells { display: grid; gap: 16px; }
   #ddScreen #ddGaffFlow.flow-shared { display: block; }
-  #ddScreen .optcell { background: var(--dd-btn); border: 2px solid var(--dd-btn-border); border-radius: 12px; padding: 10px 6px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+  #ddScreen .optcell { background: var(--dd-btn); border: 2px solid #474d5e; border-radius: 12px; padding: 10px 6px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
   #ddScreen .optcell:active { border-color: var(--gold); }
+  #ddScreen .optcell[data-g="value"] { border-color: var(--dd-btn-border); }   /* pairs keep the lighter/subtle border */
   #ddScreen .optcell .optlbl { font-size: 15px; font-weight: 700; color: var(--dd-btn-text); text-align: center; line-height: 1.15; text-transform: none; }
   #ddScreen .optcell[data-g="color"] .optlbl { font-size: 22px; }
   #ddScreen .optcell[data-g="suit"] .optlbl { width: 100%; }
