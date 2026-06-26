@@ -2293,7 +2293,7 @@ function rdPopupChain(steps){ const p = $("ddPop"), b = $("ddPopText"); clearTim
   let i = 0;
   const next = () => { if (i >= steps.length) { p.classList.remove("show"); return; }
     const s = steps[i++]; b.innerHTML = s.msg; b.classList.toggle("final", !!s.final); p.classList.add("show");
-    ddPopTimer = setTimeout(next, s.final ? 2200 : 1900); };
+    ddPopTimer = setTimeout(next, s.final ? 2200 : 1400); };
   next();
 }
 function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!final }]); }
@@ -2430,7 +2430,8 @@ function rdRenderOut(coded){
 
 // ---- chrome ----
 $("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
-$("ddChips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
+$("ddChips").addEventListener("click", e => { if (rd.step === 2) return;   // chips are not tappable on the reveal page (look unchanged)
+  const c = e.target.closest(".chip"); if (!c) return;
   const st = +c.dataset.step; if (st === 1 && rd.num == null) return; rd.step = st; rdRender(); });
 $("ddBack").addEventListener("click", () => {
   if (rd.step === 2) { rd.card = null; rd.suitPicked = null; rd.step = 1; return rdRender(); }
