@@ -121,6 +121,10 @@
   /* settings */
   #settings { display: none; }
   .set-group { background: var(--panel); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .seg { display: flex; gap: 6px; background: #14161d; border: 1px solid var(--dd-btn-border, #2b2f3b); border-radius: 11px; padding: 5px; margin-top: 8px; }
+  .seg .segopt { flex: 1; background: transparent; border: none; color: var(--dim); border-radius: 8px; padding: 9px 6px; font-size: 15px; font-weight: 800; line-height: 1.15; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .seg .segopt small { font-weight: 500; font-size: 11px; opacity: .8; text-transform: none; letter-spacing: 0; }
+  .seg .segopt.active { background: var(--gold); color: #000; }
   .set-group h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; }
   .set-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 14px; }
   .set-row input[type=number] { width: 64px; background: var(--panel2); border: 1px solid var(--line);
@@ -257,7 +261,7 @@
   #camOverlay { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0 12px calc(3vh + 54px); pointer-events: none; }
   #camOverlay .campanel { pointer-events: auto; width: 100%; max-width: 420px; background: rgba(14,15,19,.62); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 8px 10px; color: #fff; }
   #camScreen.hideui #camOverlay { display: none; }
-  #camScreen .campanel h2 { margin: 0 0 4px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #cfd3dd; text-align: center; }
+  #camScreen .campanel h2 { margin: 0 0 8px; font-size: 15px; line-height: 1.4; font-weight: 600; color: #fff; text-align: center; }
   #camNumEntry { text-align: center; font-size: 26px; font-weight: 800; min-height: 32px; }
   #camScreen .grid { display: grid; gap: 6px; }
   #camScreen .grid.pad { grid-template-columns: repeat(3,1fr); }
@@ -390,10 +394,10 @@
     <div id="camPanel" class="campanel">
       <h2 id="camTitle">Their number</h2>
       <div id="camNumEntry">&ndash;</div>
+      <div class="hint" id="camGuide" style="text-align:center; min-height:18px; margin:2px 0 6px"></div>
       <div class="grid pad" id="camKeypad"></div>
       <div class="grid" id="camFlow" style="display:none"></div>
       <div id="camOut" class="panel gold" style="display:none"></div>
-      <div class="hint" id="camGuide" style="text-align:center;margin-top:8px"></div>
       <div class="row" style="margin-top:8px"><button id="camBack" class="cambtn">&lsaquo; Back</button><button id="camRestart" class="cambtn">&#8635; Start over</button></div>
     </div>
   </div>
@@ -1851,7 +1855,14 @@ function renderSettings() {
   $("settingsBody").innerHTML =
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
-    + '<div class="set-group"><div class="set-label">Card choice</div><button id="setSelMode" class="randombtn">' + (selectMode ? "Selecting &mdash; spectator picks the value" : "Removing &mdash; eliminate down to one") + '</button></div>'
+    + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
+    +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
+    +   '<button class="segopt' + (selectMode ? ' active' : '') + '" data-v="1">Selecting<small>tap the value</small></button>'
+    + '</div></div>'
+    + '<div class="set-group"><div class="set-label">Double lifts</div><div class="seg" id="segDL">'
+    +   '<button class="segopt' + (noDL ? '' : ' active') + '" data-v="0">Allowed<small>rare double lift</small></button>'
+    +   '<button class="segopt' + (noDL ? ' active' : '') + '" data-v="1">Off<small>limit those cards</small></button>'
+    + '</div></div>'
     + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>2D&ndash;KD</b> and <b>3D&ndash;10C</b>.</div></div>'
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
   $("setExitMagician").addEventListener("click", () => {
@@ -1862,7 +1873,8 @@ function renderSettings() {
     if (ddRerender) ddRerender();
   });
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
-  $("setSelMode").addEventListener("click", () => { selectMode = !selectMode; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
+  $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
+  $("segDL").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; noDL = b.dataset.v === "1"; localStorage.setItem("rdNoDL", noDL ? "1" : "0"); renderSettings(); });
   return;
   const activeStack = stackArr(settings);
   let h = `<div class="set-group"><h3>Deck</h3>
@@ -1976,6 +1988,7 @@ let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
 let stackForSettings = null;  // the dealing stack, exposed to the settings panel
 let selectMode = localStorage.getItem("rdSelectMode") === "1";  // false = removing (eliminate), true = selecting (tap the value)
+let noDL = localStorage.getItem("rdNoDL") === "1";              // true = limit selections that would require a double lift
 
 // ---- Constrained-choice / duplicate-deck tool (magician-only, self-contained) ----
 (function () {
@@ -2137,7 +2150,11 @@ function rdResolve(card, N){
 // suit selection: color "red"|"black" -> { suits:[left,right], force, anySuit, out }. Forced (better) suit LEFT.
 function rdSuit(value, color, N){
   const suits = color === "red" ? ["H","D"] : ["S","C"];
-  const o0 = rdResolve(value + suits[0], N), o1 = rdResolve(value + suits[1], N);
+  let o0 = rdResolve(value + suits[0], N), o1 = rdResolve(value + suits[1], N);
+  if (typeof noDL !== "undefined" && noDL) {   // "no double lifts" mode: ignore dl-only outs so those cards aren't offered/forced
+    if (o0 && o0.method === "dl") o0 = null;
+    if (o1 && o1.method === "dl") o1 = null;
+  }
   const rank = o => o ? (o.tier === 1 ? 1 : 0) : 2;   // 0 clean, 1 dl, 2 none
   const r0 = rank(o0), r1 = rank(o1);
   if (r0 === r1) return { suits, force: false, anySuit: r0 < 2, out: o0 || o1 };
@@ -2237,8 +2254,19 @@ function rdVanish(els, done){
   setTimeout(() => { rdAnimating = false; done(); }, 700);
 }
 $("ddGaffFlow").addEventListener("click", e => {
-  const b = e.target.closest("[data-g]"); if (!b || b.classList.contains("off") || rdAnimating) return;
+  const b = e.target.closest("[data-g]"); if (!b || b.classList.contains("off")) return;
   const g = b.dataset.g, v = b.dataset.v; if (!g) return;
+  // value elimination (removing mode): allow rapid taps — each pair fades in place without locking the flow
+  if (g === "value" && !selectMode) {
+    b.classList.add("off"); b.style.pointerEvents = "none";
+    b.style.transition = "transform .7s ease, opacity .7s ease";
+    b.style.transform = (b.style.transform || "") + " translateY(-46px) scale(.4)"; b.style.opacity = "0";
+    rd.valElim.push(v);
+    const remaining = rdOfferedValues().filter(x => !rd.valElim.includes(x));
+    if (remaining.length === 1) { rd.value = remaining[0]; setTimeout(() => { rdRender(); rdPopup("Final Decision"); }, 450); }
+    return;
+  }
+  if (rdAnimating) return;
   // removing mode: the tapped group vanishes. selecting mode: everything EXCEPT the tapped group vanishes.
   const fl = $("ddGaffFlow"), all = [...fl.querySelectorAll(".mc")], valOf = c => c.dataset.code.slice(0, -1);
   let gone = [];
@@ -2306,7 +2334,7 @@ function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!fi
 function rdHiLoSplit(){
   const reach = v => !!rdSuit(String(v), rd.color, rd.num).out;
   const r5 = reach(5), r6 = reach(6), r7 = reach(7);
-  const low = [2,3,4], high = [8,9,10];
+  const low = [2,3,4].filter(reach), high = [8,9,10].filter(reach);   // must-covers can drop too in no-double-lift mode
   if (r5) low.push(5);
   if (r7) high.push(7);
   if (r6) { if (r5) low.push(6); else if (r7) high.push(6); }   // 6 must bridge 5 (low) or 7 (high), else dropped
@@ -2314,7 +2342,7 @@ function rdHiLoSplit(){
   return { low: low.map(String), high: high.map(String) };
 }
 function rdOfferedValues(){
-  if (rd.kind === "pic") return ["J","Q","K"];
+  if (rd.kind === "pic") return ["J","Q","K"].filter(v => !!rdSuit(v, rd.color, rd.num).out);
   const { low, high } = rdHiLoSplit();
   if (rd.hl === "high") return high;
   if (rd.hl === "low")  return low;
@@ -2547,7 +2575,7 @@ lkOpen = lkShow;
 let camStream = null, camFacing = "environment";
 let camRecorder = null, camChunks = [], camRecording = false;
 let camNumEntry = "";
-const camRd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null };
+const camRd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null };
 
 // --- camera lifecycle ---
 async function camStart() {
@@ -2588,7 +2616,7 @@ async function camSave() {
 
 // --- overlay flow (mirrors the real-deck spectator flow; reuses the engine) ---
 $("camKeypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button data-k="${d}">${d}</button>`).join("") + `<button data-k="clear">C</button><button data-k="0">0</button><button data-k="ok" class="ok">&#10003;</button>`;
-function camReset() { camRd.step=0; camRd.num=null; camRd.color=null; camRd.kind=null; camRd.hl=null; camRd.value=null; camRd.card=null; camNumEntry=""; camRender(); }
+function camReset() { camRd.step=0; camRd.num=null; camRd.color=null; camRd.kind=null; camRd.hl=null; camRd.value=null; camRd.card=null; camRd.suitPicked=null; camNumEntry=""; camRender(); }
 function camNumGuide() { const v = parseInt(camNumEntry,10); let g = "";
   if (camNumEntry && v < RD_LO) g = "make it a two-digit number"; else if (v > RD_HI) g = "too high — ask for another";
   $("camGuide").innerHTML = g ? `<span class="warn">${g}</span>` : ""; }
@@ -2609,27 +2637,46 @@ $("camFlow").addEventListener("click", e => { const b = e.target.closest("button
   const g = b.dataset.g, v = b.dataset.v; if (!g) return;
   if (g === "color") camRd.color = v; else if (g === "kind") { camRd.kind = v; camRd.hl = null; }
   else if (g === "hl") camRd.hl = v; else if (g === "value") camRd.value = v;
-  else if (g === "suit") { camRd.card = camRd.value + v; camRd.step = 2; }
+  else if (g === "suit") { const r = rdSuit(camRd.value, camRd.color, camRd.num); camRd.suitPicked = v; camRd.card = camRd.value + (r.force ? r.suits[0] : v); camRd.step = 2; }   // always resolve to the force card
   camRender();
 });
 function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title = "";
-  if (!camRd.color) { title = "Black or red?"; html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
-  else if (!camRd.kind) { title = "Number or picture card?"; html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
-  else if (camRd.kind === "num" && !camRd.hl) { title = "High or low?"; html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
-  else if (!camRd.value) { title = "Which value?"; let vals;
+  // full performance script (camera-only — the spectator never sees it)
+  const valList = (vals, pic) => { const n = vals.map(v => pic ? CAM_VN[v] : v);
+    return n.length <= 1 ? "a " + n[0] : n.length === 2 ? "a " + n[0] + " or a " + n[1] : "a " + n.slice(0,-1).join(", ") + ", or a " + n[n.length-1]; };
+  if (!camRd.color) { title = "Now for the card — would you like a red card or a black card?";
+    html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
+  else if (!camRd.kind) { const other = camRd.color === "red" ? "black" : "red";
+    title = `You want a ${camRd.color} card, so we'll remove all the ${other} cards. Do you want a number card or a picture card?`;
+    html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
+  else if (camRd.kind === "num" && !camRd.hl) {
+    title = "You want a number card, so we'll remove the picture cards. Would you like a high number card or a low number card?";
+    html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
+  else if (!camRd.value) { let vals;
     const cReach = v => !!rdSuit(v, camRd.color, camRd.num).out;
     if (camRd.kind === "pic") { vals = ["J","Q","K"]; }
     else if (camRd.hl === "high") { vals = ["7","8","9","10"].filter(v => v !== "7" || cReach("7")); }
     else { vals = ["2","3","4","5","6"].filter(v => (v === "5" || v === "6") ? cReach(v) : true); }
+    title = `Would you like ${valList(vals, camRd.kind === "pic")}?`;
     cols = vals.length;
     html = vals.map(v => `<button data-g="value" data-v="${v}">${camRd.kind === "pic" ? CAM_VN[v] : v}</button>`).join("");
-  } else { const r = rdSuit(camRd.value, camRd.color, camRd.num); title = r.force ? "Which suit?" : "Choose any suit";
+  } else { const r = rdSuit(camRd.value, camRd.color, camRd.num);
+    const vn = camRd.kind === "pic" ? CAM_VN[camRd.value] : camRd.value;
+    const su = camRd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
+    title = `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`;
     html = r.suits.map(s => { const red = "HD".includes(s);
       return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${CAM_VN[camRd.value]} of ${CAM_SN[s]}</span><span class="sy${red ? " syr" : ""} sb">${CAM_SS[s]}</span></button>`; }).join("");
   }
   $("camTitle").textContent = title; f.style.gridTemplateColumns = `repeat(${cols},1fr)`; f.innerHTML = html;
 }
 function camRenderOut() { const o = rdResolve(camRd.card, camRd.num);
+  // closing patter: free choice if they named the force card (or both suits worked), otherwise the equivoque line
+  const r = rdSuit(camRd.value, camRd.color, camRd.num);
+  const freeChoice = !r.force || camRd.suitPicked === r.suits[0];
+  const cn = (camRd.kind === "pic" ? CAM_VN[camRd.value] : camRd.value) + " of " + CAM_SN[camRd.card.slice(-1)];
+  $("camTitle").textContent = freeChoice
+    ? `And that was a free choice — you could have chosen any card, and you chose the ${cn}.`
+    : `We started with 52 cards and now you're left holding one card — the ${cn}.`;
   $("camOut").innerHTML = o
     ? `<div class="hint">${rdPretty(camRd.card)} at ${camRd.num}</div><ol class="steps">${rdSteps(o, camRd.card, camRd.num, false).map(l => `<li>${l}</li>`).join("")}</ol>`
     : `<span class="bad">No out.</span>`;
@@ -2639,7 +2686,7 @@ function camRender() {
   $("camNumEntry").style.display = camRd.step === 0 ? "" : "none";
   $("camFlow").style.display = camRd.step === 1 ? "" : "none";
   $("camOut").style.display = camRd.step === 2 ? "" : "none";
-  if (camRd.step === 0) { $("camTitle").textContent = "Their number"; $("camNumEntry").textContent = camNumEntry || "–"; camNumGuide(); }
+  if (camRd.step === 0) { $("camTitle").textContent = "Name any number between 1 and 52."; $("camNumEntry").textContent = camNumEntry || "–"; camNumGuide(); }
   else $("camGuide").innerHTML = "";
   if (camRd.step === 1) camFlowStep();
   if (camRd.step === 2) camRenderOut();
