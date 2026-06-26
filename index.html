@@ -2394,7 +2394,7 @@ function rdFlowStep(){
       return `<div class="optcell" data-g="suit" data-v="${s}"><img class="pngcard" src="cards/${rd.value+s}.png" alt="${name}" draggable="false"><div class="optlbl"><span class="cn">${name}</span></div></div>`;
     }).join("");
   }
-  if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Choose Any Card" : "Final Decision";
+  if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Tap the card you want" : "Final Decision";
   else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : !rd.kind ? "Number or picture cards?" : "Which value?";
   else $("ddCardTitle").textContent = "Which cards should we remove?";
   flow.className = "flow-" + layout;
