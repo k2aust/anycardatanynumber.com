@@ -186,13 +186,14 @@
   #ddScreen .optcell[data-g="suit"] .optlbl { width: 100%; }
   #ddScreen .optcell[data-g="suit"] .cn { display: block; width: 100%; white-space: nowrap; overflow: hidden; }
   #ddScreen .optcell[data-g="suit"] .pngcard { display: block; height: 150px; width: auto; max-width: 100%; margin: 0 auto 8px; object-fit: contain; }
-  #ddScreen .pngpair { display: flex; justify-content: center; align-items: flex-start; margin-bottom: 4px; }
-  #ddScreen .pngpair img { width: 84px; height: auto; display: block; filter: drop-shadow(1px 1px 2px rgba(0,0,0,.55)); }
-  #ddScreen .pngpair img + img { margin-left: -52px; }
+  #ddScreen .pngpair { display: flex; justify-content: center; align-items: center; margin-bottom: 4px; }
+  #ddScreen .pngpair img { width: 84px; height: auto; display: block; filter: drop-shadow(1px 1px 2px rgba(0,0,0,.55)); transform-origin: bottom center; }
+  #ddScreen .pngpair img:first-child { transform: rotate(-5deg); }
+  #ddScreen .pngpair img + img { margin-left: -52px; transform: rotate(5deg); }
   #ddScreen .optrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
   #ddScreen .mfan { width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; padding: 3px 1px; }
   #ddScreen .mfan-in { display: flex; align-items: center; transform-origin: center center; }
-  #ddScreen .mc { position: relative; background: #fff; border: 1px solid #8a8a8a; border-radius: 5px; box-shadow: 1px 1px 3px rgba(0,0,0,.4); color: #111; flex: none; transform-origin: bottom center; overflow: hidden; }
+  #ddScreen .mc { display: block; flex: none; transform-origin: bottom center; filter: drop-shadow(1px 1px 2px rgba(0,0,0,.5)); }
   #ddScreen .mc.r { color: var(--red); }
   #ddScreen .mc .corner { position: absolute; line-height: .82; font-weight: 800; text-align: center; }
   #ddScreen .mc .corner.tl { top: 5%; left: 8%; }
@@ -2243,10 +2244,10 @@ $("ddGaffFlow").addEventListener("click", e => {
   if (g === "suit") {                                          // suit forces either way — the non-surviving card fades
     const r = rdSuit(rd.value, rd.color, rd.num), keep = r.force ? r.suits[0] : v;
     const cell = [...fl.querySelectorAll('[data-g="suit"]')].find(x => x.dataset.v !== keep); if (cell) gone = [cell];
-  } else if (g === "color" || g === "value") {                 // cell-based: fade whole cells (cards + labels)
+  } else if (b.classList.contains("optcell")) {                // cell-based (colour, value, and 2-image kind/high-low): fade whole cells
     gone = selectMode ? [...fl.querySelectorAll(`[data-g="${g}"]`)].filter(x => x.dataset.v !== v) : [b];
   } else if (g === "kind") {                                  // shared spread: fade pictures+aces or numbers
-    const isPic = c => ["J","Q","K","A"].includes(valOf(c));
+    const isPic = c => ["J","Q","K"].includes(valOf(c));   // aces fade with the NUMBERS (not pictures); they just drop off on the next page when pictures are removed
     const deadBtn = [...fl.querySelectorAll('[data-g="kind"]')].find(x => selectMode ? x.dataset.v !== v : x.dataset.v === v);
     gone = [deadBtn, ...all.filter(c => isPic(c) === ((v === "pic") !== selectMode))];
   } else if (g === "hl") {                                     // keep only the surviving low/high group; everything else (incl. unavailable 5/6/7) fades
@@ -2275,7 +2276,7 @@ function rdApply(g, v){
       rd.valElim.push(v);
       const remaining = rdOfferedValues().filter(x => !rd.valElim.includes(x));
       if (remaining.length === 1) { rd.value = remaining[0]; rdRender(); rdPopup("Final Decision"); }
-      else rdRender();
+      else { const cell = $("ddGaffFlow").querySelector(`[data-g="value"][data-v="${v}"]`); if (cell) { cell.classList.add("off"); cell.style.pointerEvents = "none"; } }   // leave the faded pair as a blank slot — no reflow
     }
     return;
   }
@@ -2336,22 +2337,21 @@ function rdElimText(){
 }
 // reveal text on the results page (always the force card)
 function rdRevealText(){ return rd.card ? `Your card is the ${rdFullName(rd.card)}.` : ""; }
-// ---- mini card + fanned spread shown above each equivoque option ----
-function rdMiniCard(code){ const r=code.slice(0,-1), s=code.slice(-1), red=(s==="H"||s==="D");
-  const ix = `<span class="r">${r}</span><span class="s">${RD_SSYM[s]}</span>`;
-  return `<div class="mc${red?" r":""}" data-code="${code}"><span class="corner tl">${ix}</span><span class="pip">${RD_SSYM[s]}</span><span class="corner br">${ix}</span></div>`; }
+// ---- fanned spread (real card-face PNGs) shown above each equivoque option ----
+function rdMiniCard(code){ return `<img class="mc" data-code="${code}" src="cards/${code}.png" alt="" draggable="false">`; }
 function rdMiniFan(codes){ return `<div class="mfan"><div class="mfan-in">${codes.map(rdMiniCard).join("")}</div></div>`; }
 // overlapping real card-face PNGs (used for the value pairs)
 function rdPngPair(codes){ return `<div class="pngpair">${codes.map(c => `<img src="cards/${c}.png" alt="" draggable="false">`).join("")}</div>`; }
 function rdSizeFan(el){ const inner=el.querySelector(".mfan-in"); if(!inner) return; const cards=[...inner.querySelectorAll(".mc")]; const n=cards.length; if(!n) return;
-  const w=60, ov=0.62, h=Math.round(w*1.45), mid=(n-1)/2, per=n>1?Math.min(5,20/(n-1)):0, step=Math.max(3,Math.round(w*(1-ov)));
-  cards.forEach((c,i)=>{ const last=i===n-1; c.style.width=w+"px"; c.style.height=h+"px"; c.style.marginLeft=i===0?"0":(step-w)+"px"; c.style.transform=`rotate(${((i-mid)*per).toFixed(2)}deg)`; c.style.zIndex=i;
-    c.querySelectorAll(".r").forEach(e=>e.style.fontSize=(w*0.36)+"px"); c.querySelectorAll(".s").forEach(e=>e.style.fontSize=(w*0.32)+"px");
-    const p=c.querySelector(".pip"); p.style.fontSize=(w*0.30)+"px"; p.style.display=last?"":"none"; const br=c.querySelector(".corner.br"); if(br)br.style.display=last?"":"none"; });
+  const w=60, ov=0.62, h=Math.round(w*1.405), mid=(n-1)/2, per=n>1?Math.min(5,20/(n-1)):0, step=Math.max(3,Math.round(w*(1-ov)));
+  const curve = Math.round(w * Math.min(0.5, n*0.025));   // gentler arc on smaller spreads
+  cards.forEach((c,i)=>{ c.style.width=w+"px"; c.style.height=h+"px"; c.style.marginLeft=i===0?"0":(step-w)+"px";
+    const t = mid>0 ? (i-mid)/mid : 0, dy = Math.round(curve*(t*t - 0.5));   // rainbow arc, vertically centred
+    c.style.transform=`translateY(${dy}px) rotate(${((i-mid)*per).toFixed(2)}deg)`; c.style.zIndex=i; });
   inner.style.transform="scale(1)"; let mnL=1e9,mxR=-1e9,mnT=1e9,mxB=-1e9;
   cards.forEach(c=>{ const r=c.getBoundingClientRect(); mnL=Math.min(mnL,r.left); mxR=Math.max(mxR,r.right); mnT=Math.min(mnT,r.top); mxB=Math.max(mxB,r.bottom); });
   const ew=mxR-mnL, eh=mxB-mnT, avail=el.clientWidth-6, sc=ew>avail?avail/ew:1;
-  inner.style.transform=`scale(${sc})`; el.style.height=(eh*sc+4)+"px"; }
+  inner.style.transform=`scale(${sc})`; el.style.height=(eh*sc+10)+"px"; }
 // candidate values at this number (no aces; 5/6/7 only when reachable)
 function rdSpreadVals(){
   // spreads always show the full deck (2–A); unreachable 5/6/7 stay visible and just fade out at the high/low step
@@ -2366,20 +2366,18 @@ function rdFlowStep(){
     grid = "minmax(0,1fr)";                                    // stack Blacks over Reds, full width (min 0 so the fan scales to fit, not overflow)
     html = ["black","red"].map(col => {
       const lbl = (selectMode ? "" : "Remove ") + (col==="black" ? "Black Cards" : "Red Cards");
-      return `<div class="optcell" data-g="color" data-v="${col}">${rdMiniFan(rdRun(col, rdSpreadVals()))}<div class="optlbl">${lbl}</div></div>`;
+      return `<div class="optcell" data-g="color" data-v="${col}">${rdMiniFan(rdRun(col, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optlbl">${lbl}</div></div>`;
     }).join("");
-  } else if (!rd.kind) {
+  } else if (!rd.kind) {                                      // same full spread (aces included), two buttons below
     layout="shared";
     const btns = selectMode
       ? `<button data-g="kind" data-v="num">Number<br>Cards</button><button data-g="kind" data-v="pic">Picture<br>Cards</button>`
       : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`;
-    html = `${rdMiniFan(rdRun(rd.color, rdSpreadVals(), true))}<div class="optrow">${btns}</div>`;
-  } else if (!selectMode && rd.kind === "num" && !rd.hl) {   // removing mode only — selecting picks the value directly
+    html = `${rdMiniFan(rdRun(rd.color, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optrow">${btns}</div>`;
+  } else if (!selectMode && rd.kind === "num" && !rd.hl) {   // removing mode only — one numbers spread, two buttons below
     layout="shared";
-    const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));   // aces are gone by the high/low step
-    const btns = selectMode
-      ? `<button data-g="hl" data-v="low">Low<br>Numbers</button><button data-g="hl" data-v="high">High<br>Numbers</button>`
-      : `<button data-g="hl" data-v="low">Remove<br>Low Numbers</button><button data-g="hl" data-v="high">Remove<br>High Numbers</button>`;
+    const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
+    const btns = `<button data-g="hl" data-v="low">Remove<br>Low Numbers</button><button data-g="hl" data-v="high">Remove<br>High Numbers</button>`;
     html = `${rdMiniFan(rdRun(rd.color, numVals, true))}<div class="optrow">${btns}</div>`;
   } else if (!rd.value) {
     const a = rd.color==="red"?"H":"C", b = rd.color==="red"?"D":"S";
