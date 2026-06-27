@@ -41,8 +41,10 @@
   #ddScreen #ddNumberPicker, #ddScreen #ddCardPicker, #ddScreen #ddResults { margin-top: auto; margin-bottom: auto; width: 100%; }
   #ddScreen #ddNumberPicker { transform: translateY(7vh); }   /* nudge the numpad down a touch */
 
-  header { position: relative; display: flex; align-items: center; justify-content: flex-end; padding: 4px 2px 10px; min-height: 40px; }
+  header { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 10px; min-height: 40px; }
   header h1 { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; font-size: clamp(15px, 5.2vw, 22px); letter-spacing: 1px; color: var(--dd-title); font-weight: 600; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
+  header.mag h1 { position: static; flex: 1; font-size: 15px; letter-spacing: .5px; }   /* magician: title flows between the buttons */
+  #magExit { flex: none; background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 6px 11px; font-size: 13px; font-weight: 700; cursor: pointer; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
   #tapZone { width: 72px; height: 34px; flex: none; }   /* invisible unlock target, right of the title */
 
@@ -207,6 +209,7 @@
   #ddScreen .mc .pip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; }
   #ddScreen .picker { background: var(--dd-panel); }               /* panel behind the buttons (baby blue / deep slate) */
   #ddScreen .picker h2 { color: var(--dd-panel-label); text-align: center; font-size: 19px; letter-spacing: 1px; margin-bottom: 14px; }   /* bigger question labels */
+  #ddScreen .picker h2.patter { text-transform: none; font-size: 16px; line-height: 1.4; letter-spacing: 0; font-weight: 600; color: #fff; }   /* magician teleprompter patter */
   #ddScreen #ddNumEntry, #ddScreen #ddNumExample { color: var(--dd-panel-label); }
   #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); text-transform: capitalize; }
   /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
@@ -284,8 +287,9 @@
 <body>
 
 <header>
-  <h1 id="title">Any Card At Any Number</h1>
   <div id="tapZone" aria-hidden="true"></div>
+  <button id="magExit" style="display:none">&lsaquo; Spectator</button>
+  <h1 id="title">Any Card At Any Number</h1>
   <button id="gearBtn" aria-label="Settings" style="display:none">&#9881;</button>
 </header>
 
@@ -1865,13 +1869,7 @@ function renderSettings() {
     + '</div></div>'
     + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>2D&ndash;KD</b> and <b>3D&ndash;10C</b>.</div></div>'
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
-  $("setExitMagician").addEventListener("click", () => {
-    magicianMode = false;
-    $("gearBtn").style.display = "none";
-    $("settings").style.display = "none";
-    $("ddScreen").style.display = "flex";
-    if (ddRerender) ddRerender();
-  });
+  $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
   $("segDL").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; noDL = b.dataset.v === "1"; localStorage.setItem("rdNoDL", noDL ? "1" : "0"); renderSettings(); });
@@ -1969,18 +1967,22 @@ document.querySelectorAll(".chip").forEach(ch => ch.addEventListener("click", ()
 
 // Secret unlock: tap the blank space just right of the title 5 times in a row
 // (within 2.5s) to toggle the magician view. Re-locks on every page load.
+function setMagician(on){
+  magicianMode = on;
+  $("gearBtn").style.display = on ? "" : "none";              // settings gear (magician only)
+  $("magExit").style.display = on ? "" : "none";             // quick "back to spectator" button
+  $("tapZone").style.display = on ? "none" : "";             // 5-tap unlock area (spectator only)
+  $("title").parentElement.classList.toggle("mag", on);
+  if (!on) { $("settings").style.display = "none"; $("ddScreen").style.display = "flex"; }
+  if (ddRerender) ddRerender();                              // flip explicit/coded patter
+}
+$("magExit").addEventListener("click", () => setMagician(false));
 let tapCount = 0, tapTimer = null;
 $("tapZone").addEventListener("click", () => {
   tapCount++;
   clearTimeout(tapTimer);
   tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
-  if (tapCount >= 5) {
-    tapCount = 0;
-    magicianMode = !magicianMode;
-    $("gearBtn").style.display = magicianMode ? "" : "none";   // reveal/hide the settings gear
-    if (!magicianMode) { $("settings").style.display = "none"; $("ddScreen").style.display = "flex"; }
-    if (ddRerender) ddRerender();                              // flip explicit/coded patter
-  }
+  if (tapCount >= 5) { tapCount = 0; setMagician(!magicianMode); }
 });
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
@@ -2173,7 +2175,7 @@ function rdSteps(out, card, N, coded){
   const grp = { 2: "the JOKERS", 4: "the ACES", 6: "the JOKERS and ACES" }[out.packet];
   if (!coded) {
     const s = [];
-    s.push(out.cut ? "CUT the deck in half." : "Leave the deck as is.");
+    s.push(out.cut ? "CUT the bottom half to the top." : "REPLACE the top half to the top.");
     if (grp) s.push(`Add ${grp} to the ${endWord}.`);
     if (out.end === "face") s.push("Hold the deck FACE UP.");
     // last 2 steps match the other modes
@@ -2256,6 +2258,16 @@ function rdVanish(els, done){
 $("ddGaffFlow").addEventListener("click", e => {
   const b = e.target.closest("[data-g]"); if (!b || b.classList.contains("off")) return;
   const g = b.dataset.g, v = b.dataset.v; if (!g) return;
+  // magician view: direct selection (tap what they named), no animation/images
+  if (magicianMode) {
+    if (g === "color") rd.color = v;
+    else if (g === "kind") { rd.kind = v; rd.hl = null; }
+    else if (g === "hl") rd.hl = v;
+    else if (g === "value") rd.value = v;
+    else if (g === "suit") { const r = rdSuit(rd.value, rd.color, rd.num); rd.suitPicked = v; rd.card = rd.value + (r.force ? r.suits[0] : v); rd.step = 2; }
+    rdRender();
+    return;
+  }
   // value elimination (removing mode): allow rapid taps — each pair fades in place without locking the flow
   if (g === "value" && !selectMode) {
     b.classList.add("off"); b.style.pointerEvents = "none";
@@ -2389,7 +2401,38 @@ function rdSpreadVals(){
 function rdRun(color, vals, interleave){ const a = color==="red"?"H":"C", b = color==="red"?"D":"S";
   return interleave ? vals.flatMap(v=>[v+a, v+b]) : [...vals.map(v=>v+a), ...vals.map(v=>v+b)]; }
 
+// magician view: camera-style patter teleprompter — plain text buttons, full script, no card images
+function rdMagStep(){
+  const flow = $("ddGaffFlow"); let cols = 2, html = "", title = "";
+  const valList = (vals, pic) => { const n = vals.map(v => pic ? RD_VNAME_FULL[v] : v);
+    return n.length <= 1 ? "a " + n[0] : n.length === 2 ? "a " + n[0] + " or a " + n[1] : "a " + n.slice(0,-1).join(", ") + ", or a " + n[n.length-1]; };
+  if (!rd.color) { title = "Now for the card — would you like a red card or a black card?";
+    html = `<button data-g="color" data-v="black">Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr sb">♥♦</span></button>`; }
+  else if (!rd.kind) { const other = rd.color === "red" ? "black" : "red";
+    title = `You want a ${rd.color} card, so we'll remove all the ${other} cards. Do you want a number card or a picture card?`;
+    html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
+  else if (rd.kind === "num" && !rd.hl) {
+    title = "You want a number card, so we'll remove the picture cards. Would you like a high number card or a low number card?";
+    html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
+  else if (!rd.value) { const vals = rdOfferedValues();
+    title = `Would you like ${valList(vals, rd.kind === "pic")}?`;
+    cols = vals.length;
+    html = vals.map(v => `<button data-g="value" data-v="${v}">${rd.kind === "pic" ? RD_VNAME_FULL[v] : v}</button>`).join("");
+  } else { const r = rdSuit(rd.value, rd.color, rd.num);
+    const vn = rd.kind === "pic" ? RD_VNAME_FULL[rd.value] : rd.value;
+    const su = rd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
+    title = `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`;
+    html = r.suits.map(s => { const red = "HD".includes(s);
+      return `<button data-g="suit" data-v="${s}"><span class="cn">${rdCardLabel(rd.value+s)}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
+  }
+  $("ddCardTitle").innerHTML = title; $("ddCardTitle").className = "patter";
+  flow.className = "flow-cells magflow";
+  flow.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
+  flow.innerHTML = html;
+  if (rd.value != null) rdFitCardNames();
+}
 function rdFlowStep(){
+  if (magicianMode) return rdMagStep();
   const flow = $("ddGaffFlow"); let html="", freeSuit=false, layout="cells", grid="repeat(2,minmax(0,1fr))";
   if (!rd.color) {
     grid = "minmax(0,1fr)";                                    // stack Blacks over Reds, full width (min 0 so the fan scales to fit, not overflow)
@@ -2423,6 +2466,7 @@ function rdFlowStep(){
       return `<div class="optcell" data-g="suit" data-v="${s}"><img class="pngcard" src="cards/${rd.value+s}.png" alt="${name}" draggable="false"><div class="optlbl"><span class="cn">${name}</span></div></div>`;
     }).join("");
   }
+  $("ddCardTitle").className = "";
   if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Tap the card you want" : "Final Decision";
   else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : !rd.kind ? "Number or picture cards?" : "Which value?";
   else $("ddCardTitle").textContent = "Which cards should we remove?";
@@ -2447,6 +2491,13 @@ function rdFitCardNames(){
 
 // ---- result ----
 function rdRenderOut(coded){
+  if (magicianMode) {   // closing patter, no card image
+    const r = rdSuit(rd.value, rd.color, rd.num), freeChoice = !r.force || rd.suitPicked === r.suits[0];
+    const cn = (rd.kind === "pic" ? RD_VNAME_FULL[rd.value] : rd.value) + " of " + RD_SNAME[rd.card.slice(-1)];
+    $("ddReveal").innerHTML = freeChoice
+      ? `And that was a free choice — you could have chosen any card, and you chose the ${cn}.`
+      : `We started with 52 cards and now you're left holding one card — the ${cn}.`;
+  } else
   $("ddReveal").innerHTML = rdRevealText() + (rd.card ? `<img class="revealcard" src="cards/${rd.card}.png" alt="" draggable="false">` : "");
   const out = rdResolve(rd.card, rd.num);
   const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, coded).map(l => `<li>${l}</li>`).join("")}</ol>`;
@@ -2496,7 +2547,7 @@ function rdRender(){
   $("ddCardRoll").style.display = "none"; $("ddNumRoll").style.display = "none";
   $("ddNumExample").textContent = "";
   rdSetCoded(coded);
-  if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; $("ddNumTitle").textContent = coded ? "Enter any number (1–52)" : "Their number"; rdNumGuide(); }
+  if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; $("ddNumTitle").textContent = coded ? "Enter any number (1–52)" : "Name any number between 1 and 52."; rdNumGuide(); }
   if (rd.step === 1) rdFlowStep();
   if (rd.step === 2) rdRenderOut(coded);
 }
