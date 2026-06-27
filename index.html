@@ -1867,7 +1867,7 @@ function renderSettings() {
     +   '<button class="segopt' + (noDL ? '' : ' active') + '" data-v="0">Allowed<small>rare double lift</small></button>'
     +   '<button class="segopt' + (noDL ? ' active' : '') + '" data-v="1">Off<small>limit those cards</small></button>'
     + '</div></div>'
-    + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>2H&ndash;9D</b> and <b>KC&ndash;JS</b>.</div></div>'
+    + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>QH&ndash;2S</b> and <b>9S&ndash;JC</b>.</div></div>'
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
@@ -2114,7 +2114,7 @@ function encodeOut(out) {
 // stay in the deck as spacers (never offered). Full coverage of values 2,3,4,8,9,10,J,Q,K
 // (5,6,7 are steered away from). Packets 0/2/4/6 added to the deal end (top or face);
 // optional half-cut; reveal by deal/next/double-lift (top) or deal/next (face). 6 double-lifts.
-const RD_STACK = ["2H","QH","JD","8D","7C","5H","5D","9H","4S","10D","JH","KD","3S","QS","8C","JC","6D","7H","7S","3C","KH","8S","4C","9D","KC","10H","2S","10C","6H","5S","6C","KS","2D","8H","2C","3H","10S","9S","4D","QD","6S","7D","5C","QC","3D","9C","4H","JS"];
+const RD_STACK = ["QH","8S","4C","10H","5C","5D","6S","QD","JS","KS","10S","10D","3D","QS","3S","9C","7D","7C","7S","JD","3H","2H","4D","2S","9S","KC","10C","QC","6H","5H","7H","8H","KD","4H","2D","JH","9D","4S","8C","2C","5S","6C","6D","9H","3C","8D","KH","JC"];
 const RD_PACKETS = [0,2,4,6], RD_LO = 10, RD_HI = 45, RD_L0 = RD_STACK.length, RD_HALF = Math.floor(RD_L0/2);
 const RD_POS = {}; RD_STACK.forEach((c,i) => RD_POS[c] = i+1);   // 1-based base position
 stackForSettings = RD_STACK;
@@ -2285,6 +2285,8 @@ $("ddGaffFlow").addEventListener("click", e => {
   if (g === "suit") {                                          // suit forces either way — the non-surviving card fades
     const r = rdSuit(rd.value, rd.color, rd.num), keep = r.force ? r.suits[0] : v;
     const cell = [...fl.querySelectorAll('[data-g="suit"]')].find(x => x.dataset.v !== keep); if (cell) gone = [cell];
+  } else if (g === "color" && rdForceColor()) {                // no-DL: force the covering colour at a conflict number, fade the other regardless of tap
+    const fc = rdForceColor(); const cell = [...fl.querySelectorAll('[data-g="color"]')].find(x => x.dataset.v !== fc); if (cell) gone = [cell];
   } else if (b.classList.contains("optcell")) {                // cell-based (colour, value, and 2-image kind/high-low): fade whole cells
     gone = selectMode ? [...fl.querySelectorAll(`[data-g="${g}"]`)].filter(x => x.dataset.v !== v) : [b];
   } else if (g === "kind") {                                  // shared spread: fade pictures+aces or numbers
@@ -2321,7 +2323,7 @@ function rdApply(g, v){
     }
     return;
   }
-  if (g === "color") rd.color = selectMode ? v : (v === "black" ? "red" : "black");
+  if (g === "color") rd.color = rdForceColor() || (selectMode ? v : (v === "black" ? "red" : "black"));
   else if (g === "kind") { rd.kind = selectMode ? v : (v === "num" ? "pic" : "num"); rd.hl = null; }
   else if (g === "hl") rd.hl = selectMode ? v : (v === "high" ? "low" : "high");
   else return;
@@ -2355,6 +2357,15 @@ function rdHiLoSplit(){
 }
 function rdAllMid(){ return ["5","6","7"].every(v => !!rdSuit(v, rd.color, rd.num).out); }   // no 5/6/7 needs eliminating (this colour)
 function rdAllMidBoth(){ return ["red","black"].every(c => ["5","6","7"].every(v => !!rdSuit(v, c, rd.num).out)); }   // ...for both colours
+// no-double-lift mode: at the 3 conflict numbers (15/27/39 on this stack) only one colour cleanly
+// covers all must-cover values, so force it; everywhere else both colours cover, so colour stays free.
+function rdForceColor(){
+  if (!noDL || rd.num == null) return null;
+  const must = ["2","3","4","8","9","10","J","Q","K"];
+  const uncov = col => must.filter(v => !rdSuit(v, col, rd.num).out).length;
+  const r = uncov("red"), b = uncov("black");
+  return r < b ? "red" : b < r ? "black" : null;
+}
 function rdOfferedValues(){
   if (rd.kind === "pic") return ["J","Q","K"].filter(v => !!rdSuit(v, rd.color, rd.num).out);
   const { low, high } = rdHiLoSplit();
