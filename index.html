@@ -2353,6 +2353,7 @@ function rdHiLoSplit(){
   low.sort((a,b)=>a-b); high.sort((a,b)=>a-b);
   return { low: low.map(String), high: high.map(String) };
 }
+function rdAllMid(){ return ["5","6","7"].every(v => !!rdSuit(v, rd.color, rd.num).out); }   // no 5/6/7 needs eliminating
 function rdOfferedValues(){
   if (rd.kind === "pic") return ["J","Q","K"].filter(v => !!rdSuit(v, rd.color, rd.num).out);
   const { low, high } = rdHiLoSplit();
@@ -2446,11 +2447,20 @@ function rdFlowStep(){
       ? `<button data-g="kind" data-v="num">Number<br>Cards</button><button data-g="kind" data-v="pic">Picture<br>Cards</button>`
       : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`;
     html = `${rdMiniFan(rdRun(rd.color, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optrow">${btns}</div>`;
-  } else if (!selectMode && rd.kind === "num" && !rd.hl) {   // removing mode only — one numbers spread, two buttons below
-    layout="shared";
-    const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
-    const btns = `<button data-g="hl" data-v="low">Remove<br>Low Numbers</button><button data-g="hl" data-v="high">Remove<br>High Numbers</button>`;
-    html = `${rdMiniFan(rdRun(rd.color, numVals, true))}<div class="optrow">${btns}</div>`;
+  } else if (rd.kind === "num" && !rd.hl) {                    // high/low always shown
+    if (rdAllMid()) {                                          // no 5/6/7 to eliminate -> two separate spreads
+      grid = "minmax(0,1fr)";
+      const lo = (selectMode ? "" : "Remove ") + "Low Numbers", hi = (selectMode ? "" : "Remove ") + "High Numbers";
+      html = `<div class="optcell" data-g="hl" data-v="low">${rdMiniFan(rdRun(rd.color, ["2","3","4","5","6"], true))}<div class="optlbl">${lo}</div></div>`
+           + `<div class="optcell" data-g="hl" data-v="high">${rdMiniFan(rdRun(rd.color, ["7","8","9","10"], true))}<div class="optlbl">${hi}</div></div>`;
+    } else {                                                   // a 5/6/7 must be eliminated -> one shared spread (duds fade on tap)
+      layout="shared";
+      const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
+      const btns = selectMode
+        ? `<button data-g="hl" data-v="low">Low<br>Numbers</button><button data-g="hl" data-v="high">High<br>Numbers</button>`
+        : `<button data-g="hl" data-v="low">Remove<br>Low Numbers</button><button data-g="hl" data-v="high">Remove<br>High Numbers</button>`;
+      html = `${rdMiniFan(rdRun(rd.color, numVals, true))}<div class="optrow">${btns}</div>`;
+    }
   } else if (!rd.value) {
     const a = rd.color==="red"?"H":"C", b = rd.color==="red"?"D":"S";
     const vals = selectMode ? rdOfferedValues() : rdOfferedValues().filter(x => !rd.valElim.includes(x));
@@ -2468,7 +2478,7 @@ function rdFlowStep(){
   }
   $("ddCardTitle").className = "";
   if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Tap the card you want" : "Final Decision";
-  else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : !rd.kind ? "Number or picture cards?" : "Which value?";
+  else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : !rd.kind ? "Number or picture cards?" : (rd.kind === "num" && !rd.hl) ? "High or low cards?" : "Which value?";
   else $("ddCardTitle").textContent = "Which cards should we remove?";
   flow.className = "flow-" + layout;
   flow.style.gridTemplateColumns = layout==="cells" ? grid : "";
