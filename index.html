@@ -54,6 +54,8 @@
   #magPw .magpw-title { font-weight: 700; font-size: 17px; text-align: center; color: var(--gold,#d8b25a); margin-bottom: 14px; }
   #magPw input { width: 100%; box-sizing: border-box; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid var(--line,#333); background: #000; color: #fff; text-align: center; }
   #magPw .magpw-err { color: var(--red,#e0544f); font-size: 13px; min-height: 18px; text-align: center; margin-top: 8px; }
+  #magPw .magpw-remember { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 10px; font-size: 13px; color: var(--dim,#9aa0ac); cursor: pointer; }
+  #magPw .magpw-remember input { width: 16px; height: 16px; accent-color: var(--gold,#d8b25a); }
   #magPw .magpw-row { display: flex; gap: 10px; margin-top: 12px; }
   #magPw .magpw-row button { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--line,#333); background: var(--panel2,#222); color: #fff; font-weight: 600; }
   #magPw .magpw-row #magPwOk { background: var(--gold,#d8b25a); color: #000; border-color: var(--gold,#d8b25a); }
@@ -361,6 +363,7 @@
     <div class="magpw-title">Magician access</div>
     <input id="magPwInput" type="password" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Password">
     <div id="magPwErr" class="magpw-err"></div>
+    <label class="magpw-remember"><input type="checkbox" id="magPwRemember" checked> Remember on this device</label>
     <div class="magpw-row"><button id="magPwCancel">Cancel</button><button id="magPwOk">Unlock</button></div>
   </div>
 </div>
@@ -1917,6 +1920,7 @@ function renderSettings() {
   $("settingsBody").innerHTML =
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
+    + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
     +   '<button class="segopt' + (selectMode ? ' active' : '') + '" data-v="1">Selecting<small>tap the value</small></button>'
@@ -1931,6 +1935,7 @@ function renderSettings() {
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
+  { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
   return;
   const activeStack = stackArr(settings);
@@ -2041,7 +2046,7 @@ $("tapZone").addEventListener("click", () => {
   tapCount++;
   clearTimeout(tapTimer);
   tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
-  if (tapCount >= 5) { tapCount = 0; if (!magicianMode) magPwOpen(); }   // 5 taps -> ask for the password
+  if (tapCount >= 5) { tapCount = 0; if (!magicianMode) { if (localStorage.getItem("rdMagTrusted") === "1") setMagician(true); else magPwOpen(); } }   // 5 taps -> remembered device unlocks, else ask for the password
 });
 // magician-access password gate — the password is never stored in the source; we compare a salted SHA-256.
 const MAG_PW_HASH = "c38c5085dde2cc581321396203410b43602214b3ba9502cc2b4e2bf536108236";
@@ -2052,7 +2057,10 @@ async function magPwDigest(s){
 function magPwOpen(){ $("magPwInput").value = ""; $("magPwErr").textContent = ""; $("magPw").classList.add("show"); setTimeout(() => $("magPwInput").focus(), 60); }
 function magPwClose(){ $("magPw").classList.remove("show"); }
 async function magPwTry(){
-  if (await magPwDigest($("magPwInput").value) === MAG_PW_HASH) { magPwClose(); setMagician(true); }
+  if (await magPwDigest($("magPwInput").value) === MAG_PW_HASH) {
+    if ($("magPwRemember").checked) localStorage.setItem("rdMagTrusted", "1"); else localStorage.removeItem("rdMagTrusted");
+    magPwClose(); setMagician(true);
+  }
   else { $("magPwErr").textContent = "Incorrect password"; $("magPwInput").value = ""; $("magPwInput").focus(); }
 }
 $("magPwOk").addEventListener("click", magPwTry);
