@@ -2571,7 +2571,9 @@ function rdMagStep(){
   } else { const r = rdSuit(rd.value, rd.color, rd.num);
     const vn = "JQK".includes(rd.value) ? RD_VNAME_FULL[rd.value] : rd.value;
     const su = rd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
-    title = `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`;
+    title = r.force
+      ? `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`
+      : `Final Decision — do you want the ${vn} of ${su[0]} or the ${vn} of ${su[1]}?`;
     html = r.suits.map(s => { const red = "HD".includes(s);
       return `<button data-g="suit" data-v="${s}"><span class="cn">${rdCardLabel(rd.value+s)}</span><span class="sy${red ? " syr" : ""} sb">${RD_SSYM[s]}</span></button>`; }).join("");
   }
@@ -2901,7 +2903,9 @@ function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title 
   } else { const r = rdSuit(camRd.value, camRd.color, camRd.num);
     const vn = "JQK".includes(camRd.value) ? CAM_VN[camRd.value] : camRd.value;
     const su = camRd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
-    title = `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`;
+    title = r.force
+      ? `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`
+      : `Final Decision — do you want the ${vn} of ${su[0]} or the ${vn} of ${su[1]}?`;
     html = r.suits.map(s => { const red = "HD".includes(s);
       return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${CAM_VN[camRd.value]} of ${CAM_SN[s]}</span><span class="sy${red ? " syr" : ""} sb">${CAM_SS[s]}</span></button>`; }).join("");
   }
