@@ -163,6 +163,19 @@
   .switch input:checked + .slider { background: var(--gold); border-color: var(--gold); }
   .switch input:checked + .slider:before { transform: translateX(19px); background: #000; }
   .hint { font-size: 11px; color: var(--dim); margin: 2px 0 0; line-height: 1.4; }
+  .instr summary { list-style: none; cursor: pointer; outline: none; }
+  .instr summary::-webkit-details-marker { display: none; }
+  .instr summary::after { content: "  \25B8"; color: var(--dim); font-weight: 400; }
+  .instr[open] summary::after { content: "  \25BE"; }
+  .instr-body { font-size: 12px; line-height: 1.5; color: #cdd1da; margin-top: 8px; }
+  .instr-body p { margin: 6px 0; }
+  .instr-body .instr-h { font-weight: 700; color: var(--gold); margin: 12px 0 2px; }
+  .instr-body ol, .instr-body ul { margin: 4px 0 8px; padding-left: 20px; }
+  .instr-body ul { list-style: disc; }
+  .instr-body li { margin: 5px 0; }
+  .ts-head { font-size: 15px; font-weight: 700; color: var(--gold); text-align: center; margin: 2px 0 12px; letter-spacing: .3px; line-height: 1.3; }
+  .ts-steps { margin: 0; padding-left: 26px; color: #f1f2f5; font-size: 18px; font-weight: 800; line-height: 1.9; letter-spacing: .4px; }
+  .ts-steps li { margin: 3px 0; }
 
   /* ---- constrained-choice magician tool (#ddScreen) — reuses the app's shared .picker/.grid/.chip/.steps styles ---- */
   #ddScreen > h1 { font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin:8px 0; }
@@ -224,9 +237,8 @@
   #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); text-transform: capitalize; }
   /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
   #ddScreen #out { background: var(--dd-surface); color: var(--dd-surface-text); border-color: var(--dd-reveal-border); }
-  /* deadman's switch hold targets: zone below "Start over" + the title (both must be held) */
-  #ddPeekZone { min-height: 200px; touch-action: none; -webkit-user-select: none; user-select: none; }
-  #title { touch-action: none; -webkit-user-select: none; user-select: none; }
+  /* deadman's switch: hold the title (the header receives it; the h1 is pointer-events:none) to spell out the reveal procedure */
+  header { touch-action: none; -webkit-user-select: none; user-select: none; }
   #ddScreen .chip { background: var(--dd-surface); border-color: var(--dd-surface-border); }
   #ddScreen .chip .lbl { color: var(--dd-chip-label); }
   #ddScreen .chip .val { color: var(--dd-surface-text); }
@@ -396,9 +408,7 @@
   <section id="ddResults" style="display:none">
     <div class="reveal" id="ddReveal"></div>
     <div class="panel gold" id="out"></div>
-    <div id="ddProcPad" aria-hidden="true"></div>
     <div class="btnrow" style="margin-top:12px"><button id="ddReset">&#10227; Start over</button></div>
-    <div id="ddPeekZone" aria-hidden="true"></div>
   </section>
 
 </section>
@@ -1881,6 +1891,25 @@ function renderSettings() {
   const grid = sg.map(c => {
     const red = /[HD]$/.test(c); return `<span class="cd" style="${red ? "color:var(--red)" : ""}">${c}</span>`;
   }).join("");
+  const instr = '<div class="set-group"><details class="instr"><summary class="set-label">Instructions</summary><div class="instr-body">'
+    + '<p><b>Setup:</b> Cards are in stack order (listed below); the jokers and aces are set aside. This works perfectly if you just performed a trick with the jokers, or you can remove them to demonstrate how to hold the cards.</p>'
+    + '<p class="instr-h">Procedure</p><ol>'
+    + '<li>Hand the top half of the deck to Spectator 1 and the bottom half to Spectator 2.</li>'
+    + '<li>Using one of the three methods, have Spectator 1 enter or name any number from 1&ndash;52 &mdash; it&rsquo;s really from 4&ndash;50, but just say 1&ndash;52.</li>'
+    + '<li>Spectator 2 chooses a card using the app.<ul>'
+    +   '<li><b>In the removing mode</b> the spectator taps to remove cards until the last 2 cards, when it says &ldquo;final decision&rdquo; &mdash; that is when the suit is forced. If they tap the wrong card it fades away as it has been, but if they choose the force card the other card fades away, forcing them to choose the right card.</li>'
+    +   '<li><b>In the selection mode</b> you show the screen and tap the screen for them. When you get to the last page the left card is the force card; you can use any force you like. I like to say we started with 52 cards and removed all except these 2 cards, this is your last choice &mdash; tell them to imagine holding both cards and hand me one. They&rsquo;ll either hand you the force card and you go with it, or they hand you the other card and you say we started with 52 cards and you&rsquo;re left holding one card, the&hellip;</li>'
+    + '</ul></li>'
+    + '<li>The first line of the reveal page tells you everything you need to do for the effect to work:<ol>'
+    +   '<li>If the first word is &ldquo;hold&rdquo; then you say &ldquo;hand Spectator 1 the cards,&rdquo; otherwise you say &ldquo;hand Spectator 2 the cards.&rdquo; This essentially brings the bottom half to the top, or replaces the top half on the top.</li>'
+    +   '<li>Next it will say face up or face down. You instruct them to hold the cards as described.</li>'
+    +   '<li>Then determine if any cards need to be added: if held face down they get added to the top, but if held face up they get added to the face. &ldquo;Every card&rdquo; = add the jokers; &ldquo;All the cards&rdquo; = add the aces; &ldquo;Each and every card&rdquo; = add the jokers and aces; just &ldquo;Cards are held&rdquo; or &ldquo;Hold the cards&rdquo; = add nothing.</li>'
+    +   '<li>Finally, at the end it will either say &ldquo;in your hands&rdquo; (their card will be the next card after they deal their number) or &ldquo;in dealing position&rdquo; (they deal into your hands and you perform a double lift). If it doesn&rsquo;t say either thing at the end, it&rsquo;s a direct hit.</li>'
+    +   '<li>Deal their number and reveal their card. To maintain the order of the stack, deal into a face-up pile when the cards are held face down, and a face-down pile when held face up.</li>'
+    + '</ol></li></ol>'
+    + '<p class="instr-h">Coded Language Key</p>'
+    + '<ol><li>Hold = Cut</li><li>Every card = add jokers</li><li>All the cards = add aces</li><li>Each and every card = add jokers and aces</li><li>In the hands = Their card will be the next card</li></ol>'
+    + '</div></details></div>';
   $("settingsBody").innerHTML =
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
@@ -1888,11 +1917,17 @@ function renderSettings() {
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
     +   '<button class="segopt' + (selectMode ? ' active' : '') + '" data-v="1">Selecting<small>tap the value</small></button>'
     + '</div></div>'
+    + '<div class="set-group"><div class="set-label">Reveal chime</div><div class="seg" id="segChime">'
+    +   '<button class="segopt' + (chimeEnabled ? ' active' : '') + '" data-v="1">On<small>bell on reveal</small></button>'
+    +   '<button class="segopt' + (chimeEnabled ? '' : ' active') + '" data-v="0">Off</button>'
+    + '</div></div>'
     + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
+    + instr
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
+  $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
   return;
   const activeStack = stackArr(settings);
   let h = `<div class="set-group"><h3>Deck</h3>
@@ -2026,6 +2061,8 @@ let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
 let rdScheme = "highlow";  // single steering scheme (shared with the tool IIFE)
 let rdSetScheme = null; // set by the tool's IIFE; switches scheme + resets the flow
+let chimeEnabled = localStorage.getItem("rdChime") !== "0";   // reveal bell (elimination mode), on by default
+let rdChime = null;     // set by the tool's IIFE; plays the reveal bell (used for the settings preview)
 let stackForSettings = null;  // the dealing stack, exposed to the settings panel
 let selectMode = localStorage.getItem("rdSelectMode") === "1";  // false = removing (eliminate), true = selecting (tap the value)
 let noDL = localStorage.getItem("rdNoDL") === "1";              // true = limit selections that would require a double lift
@@ -2291,6 +2328,16 @@ function rdSteps(out, card, N, coded){
   else                            { step2 = `Deal ${N-1} cards then stop on the ${ord}.`; step3 = `The ${ord} card is the ${FN}!`; }
   return [head, step2, step3];
 }
+// Magician view (reveal-page hold + camera): "The Four of Clubs at position 23" + 3 concise steps.
+function rdThreeStep(out, card, N){
+  if (!out) return `<span class="bad">No out for ${rdPretty(card)} at ${N}.</span>`;
+  const cut = out.cut ? "CUT" : "DON’T CUT";
+  const orient = out.end === "face" ? "FACE UP" : "FACE DOWN";
+  const add = { 0: "add NOTHING", 2: "add JOKERS", 4: "add ACES", 6: "add JOKERS and ACES" }[out.packet];
+  const reveal = out.method === "next" ? "NEXT CARD" : out.method === "dl" ? "DOUBLE LIFT" : "DIRECT HIT";
+  return `<div class="ts-head">The ${rdFullName(card)} at position ${N}</div>`
+    + `<ol class="ts-steps"><li>${cut}</li><li>${orient} &mdash; ${add}</li><li>${reveal}</li></ol>`;
+}
 /*RD-ENGINE-END*/
 
 /* ---- UI (scoped to #ddScreen) — stepped flow mirroring the main app ---- */
@@ -2389,6 +2436,24 @@ $("ddGaffFlow").addEventListener("click", e => {
   }
   rdVanish(gone, () => rdApply(g, v));
 });
+// reveal bell — synthesized (no audio asset). The context is unlocked on taps so it can fire from the popup timeout.
+let rdAudioCtx = null;
+function rdAudio(){ try { if (!rdAudioCtx) rdAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (rdAudioCtx.state === "suspended") rdAudioCtx.resume(); } catch (_) {} return rdAudioCtx; }
+window.addEventListener("pointerdown", () => { if (chimeEnabled) rdAudio(); }, true);
+function rdChimePlay(){
+  if (!chimeEnabled) return;
+  const ctx = rdAudio(); if (!ctx) return;
+  const t = ctx.currentTime;
+  [[1318.5, 0.34], [1975.5, 0.17], [2637, 0.09]].forEach(([f, vol]) => {   // E6 + B6 + E7 — a soft bell
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    o.start(t); o.stop(t + 1.85);
+  });
+}
+rdChime = rdChimePlay;   // expose for the settings preview
 function rdApply(g, v){
   if (g === "suit") {
     const r = rdSuit(rd.value, rd.color, rd.num);
@@ -2398,6 +2463,7 @@ function rdApply(g, v){
     rd.step = 2; rdRender();
     const yourCard = { msg: `Your Card is the<br>${rdCardLabel(rd.card)}!<img class="popcard" src="cards/${rd.card}.png" alt="${rdCardLabel(rd.card)}" draggable="false">`, final: true };
     rdPopupChain([yourCard]);                                  // (the "… Was Removed" popup is suppressed per request)
+    if (!selectMode) rdChimePlay();                            // elimination mode: ring the reveal bell
     return;
   }
   if (g === "value") {
@@ -2576,7 +2642,7 @@ function rdFlowStep(){
   $("ddCardTitle").className = "";
   if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Tap the card you want" : "Final Decision";
   else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : (rdHasKind() && !rd.kind) ? "Number or picture cards?" : (rdNumMode(rd) && !rd.hl) ? "High or low cards?" : "Which value?";
-  else $("ddCardTitle").textContent = "Which cards should we remove?";
+  else $("ddCardTitle").textContent = (rd.color && rd.hl) ? "Tap to remove" : "Which cards should we remove?";   // value-elimination step
   flow.className = "flow-" + layout;
   flow.style.gridTemplateColumns = layout==="cells" ? grid : "";
   flow.innerHTML = html;
@@ -2606,47 +2672,31 @@ function rdRenderOut(coded){
       : `We started with 52 cards and now you're left holding one card — the ${cn}.`;
   } else
   $("ddReveal").innerHTML = rdRevealText() + (rd.card ? `<img class="revealcard" src="cards/${rd.card}.png" alt="" draggable="false">` : "");
-  // measure the taller (spelled-out) wording so the invisible pad can hold "Start over" stationary on hold
-  rdProcMax = 0;
-  rdRenderProcedure(false);
-  rdProcMax = $("out").offsetHeight;
   rdRenderProcedure(coded);
 }
-let rdProcMax = 0;
 // renders only the #out procedure panel for a given wording: coded=true is the natural (default) version,
 // coded=false is the spelled-out magician version (packet/cut tag + explicit handling). Used by the hold-zone.
-// The gold panel stays snug to its text; #ddProcPad absorbs the height difference so the button never moves.
 function rdRenderProcedure(coded){
   const out = rdResolve(rd.card, rd.num);
-  const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, coded).map(l => `<li>${l}</li>`).join("")}</ol>`;
-  if (coded) $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`;
-  else if (!out) $("out").innerHTML = `<span class="bad">No out for ${rdPretty(rd.card)} at ${rd.num}.</span>`;
-  else {
-    const e = rdEncode(out);
-    const tag = `${rdPretty(rd.card)} at ${rd.num} · ${out.method === "dl" ? "double-lift" : "clean deal"} · add ${e.packet}${e.cut ? " · cut" : ""}`;
-    $("out").innerHTML = `<div class="hint">${tag}</div>${stepsHtml(out)}`;
-  }
-  $("ddProcPad").style.height = Math.max(0, rdProcMax - $("out").offsetHeight) + "px";
+  if (!coded) { $("out").innerHTML = rdThreeStep(out, rd.card, rd.num); return; }   // magician view: concise 3-step
+  const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, true).map(l => `<li>${l}</li>`).join("")}</ol>`;
+  $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`;
 }
 
 // ---- chrome ----
 $("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
-// deadman's switch: the procedure spells out only while BOTH the title (top) and the zone below
-// "Start over" (bottom) are held at once — a deliberate two-handed grip, so it can't trigger by accident.
-// Releasing either one reverts to the natural wording. The rest of the reveal is untouched.
+// deadman's switch: hold the title to spell out the magician's procedure; release to revert. "Start over"
+// is free to move as the wording grows/shrinks.
 {
-  let padHeld = false, titleHeld = false;
-  const update = () => { if (rd.step === 2) rdRenderProcedure(padHeld && titleHeld ? false : !magicianMode); };
-  const bind = (el, set) => {
-    el.addEventListener("pointerdown", e => { set(true); if (e.pointerId != null) { try { el.setPointerCapture(e.pointerId); } catch (_) {} } update(); });
-    const off = () => { set(false); update(); };
-    el.addEventListener("pointerup", off);
-    el.addEventListener("pointercancel", off);
-    el.addEventListener("pointerleave", off);
-    el.addEventListener("contextmenu", e => e.preventDefault());   // long-press menu would interrupt the hold
-  };
-  bind($("ddPeekZone"), v => padHeld = v);
-  bind($("title"), v => titleHeld = v);
+  const holdEl = $("title").parentElement;   // the <header> — the h1 title itself is pointer-events:none
+  const update = held => { if (rd.step === 2) rdRenderProcedure(held ? false : !magicianMode); };
+  holdEl.addEventListener("pointerdown", e => { if (e.target !== holdEl) return;   // ignore the 5-tap unlock zone / buttons inside the header
+    update(true); if (e.pointerId != null) { try { holdEl.setPointerCapture(e.pointerId); } catch (_) {} } });
+  const off = () => update(false);
+  holdEl.addEventListener("pointerup", off);
+  holdEl.addEventListener("pointercancel", off);
+  holdEl.addEventListener("pointerleave", off);
+  holdEl.addEventListener("contextmenu", e => e.preventDefault());   // long-press menu would interrupt the hold
 }
 $("ddChips").addEventListener("click", e => { if (rd.step === 2) return;   // chips are not tappable on the reveal page (look unchanged)
   const c = e.target.closest(".chip"); if (!c) return;
@@ -2865,9 +2915,7 @@ function camRenderOut() { const o = rdResolve(camRd.card, camRd.num);
   $("camTitle").textContent = freeChoice
     ? `And that was a free choice — you could have chosen any card, and you chose the ${cn}.`
     : `We started with 52 cards and now you're left holding one card — the ${cn}.`;
-  $("camOut").innerHTML = o
-    ? `<div class="hint">${rdPretty(camRd.card)} at ${camRd.num}</div><ol class="steps">${rdSteps(o, camRd.card, camRd.num, false).map(l => `<li>${l}</li>`).join("")}</ol>`
-    : `<span class="bad">No out.</span>`;
+  $("camOut").innerHTML = rdThreeStep(o, camRd.card, camRd.num);   // concise 3-step magician view
 }
 function camRender() {
   $("camKeypad").style.display = camRd.step === 0 ? "" : "none";
