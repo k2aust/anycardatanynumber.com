@@ -224,8 +224,9 @@
   #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); text-transform: capitalize; }
   /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
   #ddScreen #out { background: var(--dd-surface); color: var(--dd-surface-text); border-color: var(--dd-reveal-border); }
-  /* hold-zone below "Start over": press & hold to spell out the procedure wording */
+  /* deadman's switch hold targets: zone below "Start over" + the title (both must be held) */
   #ddPeekZone { min-height: 200px; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #title { touch-action: none; -webkit-user-select: none; user-select: none; }
   #ddScreen .chip { background: var(--dd-surface); border-color: var(--dd-surface-border); }
   #ddScreen .chip .lbl { color: var(--dd-chip-label); }
   #ddScreen .chip .val { color: var(--dd-surface-text); }
@@ -2630,17 +2631,22 @@ function rdRenderProcedure(coded){
 
 // ---- chrome ----
 $("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
-// deadman's switch: press & hold the empty zone below "Start over" to spell out the procedure wording;
-// releasing reverts to the natural (default) wording. The rest of the reveal is untouched.
+// deadman's switch: the procedure spells out only while BOTH the title (top) and the zone below
+// "Start over" (bottom) are held at once — a deliberate two-handed grip, so it can't trigger by accident.
+// Releasing either one reverts to the natural wording. The rest of the reveal is untouched.
 {
-  const zone = $("ddPeekZone");
-  const swap = spelled => e => { rdRenderProcedure(spelled ? false : !magicianMode);
-    if (spelled && e.pointerId != null) { try { zone.setPointerCapture(e.pointerId); } catch (_) {} } };
-  zone.addEventListener("pointerdown", swap(true));
-  zone.addEventListener("pointerup", swap(false));
-  zone.addEventListener("pointercancel", swap(false));
-  zone.addEventListener("pointerleave", swap(false));
-  zone.addEventListener("contextmenu", e => e.preventDefault());   // long-press menu would interrupt the hold
+  let padHeld = false, titleHeld = false;
+  const update = () => { if (rd.step === 2) rdRenderProcedure(padHeld && titleHeld ? false : !magicianMode); };
+  const bind = (el, set) => {
+    el.addEventListener("pointerdown", e => { set(true); if (e.pointerId != null) { try { el.setPointerCapture(e.pointerId); } catch (_) {} } update(); });
+    const off = () => { set(false); update(); };
+    el.addEventListener("pointerup", off);
+    el.addEventListener("pointercancel", off);
+    el.addEventListener("pointerleave", off);
+    el.addEventListener("contextmenu", e => e.preventDefault());   // long-press menu would interrupt the hold
+  };
+  bind($("ddPeekZone"), v => padHeld = v);
+  bind($("title"), v => titleHeld = v);
 }
 $("ddChips").addEventListener("click", e => { if (rd.step === 2) return;   // chips are not tappable on the reveal page (look unchanged)
   const c = e.target.closest(".chip"); if (!c) return;
