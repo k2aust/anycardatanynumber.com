@@ -47,6 +47,16 @@
   #magExit { flex: none; background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 6px 11px; font-size: 13px; font-weight: 700; cursor: pointer; }
   #gearBtn { background: none; border: none; color: var(--dim); font-size: 22px; padding: 4px 8px; cursor: pointer; }
   #tapZone { width: 72px; height: 34px; flex: none; }   /* invisible unlock target, right of the title */
+  /* magician-access password gate (shown after the 5-tap unlock) */
+  #magPw { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.74); align-items: center; justify-content: center; }
+  #magPw.show { display: flex; }
+  #magPw .magpw-box { background: var(--panel2,#16161e); border: 1px solid var(--line,#333); border-radius: 16px; padding: 22px; width: min(86vw,320px); box-shadow: 0 14px 44px rgba(0,0,0,.6); }
+  #magPw .magpw-title { font-weight: 700; font-size: 17px; text-align: center; color: var(--gold,#d8b25a); margin-bottom: 14px; }
+  #magPw input { width: 100%; box-sizing: border-box; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid var(--line,#333); background: #000; color: #fff; text-align: center; }
+  #magPw .magpw-err { color: var(--red,#e0544f); font-size: 13px; min-height: 18px; text-align: center; margin-top: 8px; }
+  #magPw .magpw-row { display: flex; gap: 10px; margin-top: 12px; }
+  #magPw .magpw-row button { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--line,#333); background: var(--panel2,#222); color: #fff; font-weight: 600; }
+  #magPw .magpw-row #magPwOk { background: var(--gold,#d8b25a); color: #000; border-color: var(--gold,#d8b25a); }
 
   /* step chips */
   #chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
@@ -214,6 +224,8 @@
   #ddScreen button { background: var(--dd-btn); color: var(--dd-btn-text); border-color: var(--dd-btn-border); text-transform: capitalize; }
   /* reveal (results) on the surface theme; the green "keep the stack" step survives via its own class rule */
   #ddScreen #out { background: var(--dd-surface); color: var(--dd-surface-text); border-color: var(--dd-reveal-border); }
+  /* hold-zone below "Start over": press & hold to spell out the procedure wording */
+  #ddPeekZone { min-height: 200px; touch-action: none; -webkit-user-select: none; user-select: none; }
   #ddScreen .chip { background: var(--dd-surface); border-color: var(--dd-surface-border); }
   #ddScreen .chip .lbl { color: var(--dd-chip-label); }
   #ddScreen .chip .val { color: var(--dd-surface-text); }
@@ -331,6 +343,15 @@
   </section>
 </main>
 
+<div id="magPw" aria-hidden="true">
+  <div class="magpw-box">
+    <div class="magpw-title">Magician access</div>
+    <input id="magPwInput" type="password" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Password">
+    <div id="magPwErr" class="magpw-err"></div>
+    <div class="magpw-row"><button id="magPwCancel">Cancel</button><button id="magPwOk">Unlock</button></div>
+  </div>
+</div>
+
 <section id="settings">
   <div class="btnrow"><button id="closeSettings">&#10094; Back</button><button id="resetSettings">Reset defaults</button></div>
   <div id="settingsBody"></div>
@@ -374,7 +395,9 @@
   <section id="ddResults" style="display:none">
     <div class="reveal" id="ddReveal"></div>
     <div class="panel gold" id="out"></div>
+    <div id="ddProcPad" aria-hidden="true"></div>
     <div class="btnrow" style="margin-top:12px"><button id="ddReset">&#10227; Start over</button></div>
+    <div id="ddPeekZone" aria-hidden="true"></div>
   </section>
 
 </section>
@@ -1853,7 +1876,8 @@ function moveMethod(k, dir) {
 
 function renderSettings() {
   // v2: only the camera view + the new-stack setup/reference are exposed.
-  const grid = (stackForSettings || []).map(c => {
+  const sg = stackForSettings || [], sgH = Math.floor(sg.length / 2);
+  const grid = sg.map(c => {
     const red = /[HD]$/.test(c); return `<span class="cd" style="${red ? "color:var(--red)" : ""}">${c}</span>`;
   }).join("");
   $("settingsBody").innerHTML =
@@ -1863,16 +1887,11 @@ function renderSettings() {
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
     +   '<button class="segopt' + (selectMode ? ' active' : '') + '" data-v="1">Selecting<small>tap the value</small></button>'
     + '</div></div>'
-    + '<div class="set-group"><div class="set-label">Double lifts</div><div class="seg" id="segDL">'
-    +   '<button class="segopt' + (noDL ? '' : ' active') + '" data-v="0">Allowed<small>rare double lift</small></button>'
-    +   '<button class="segopt' + (noDL ? ' active' : '') + '" data-v="1">Off<small>limit those cards</small></button>'
-    + '</div></div>'
-    + '<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>2D&ndash;KD</b> and <b>3D&ndash;10C</b>.</div></div>'
+    + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
     + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); renderSettings(); });
-  $("segDL").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; noDL = b.dataset.v === "1"; localStorage.setItem("rdNoDL", noDL ? "1" : "0"); renderSettings(); });
   return;
   const activeStack = stackArr(settings);
   let h = `<div class="set-group"><h3>Deck</h3>
@@ -1982,12 +2001,26 @@ $("tapZone").addEventListener("click", () => {
   tapCount++;
   clearTimeout(tapTimer);
   tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
-  if (tapCount >= 5) { tapCount = 0; setMagician(!magicianMode); }
+  if (tapCount >= 5) { tapCount = 0; if (!magicianMode) magPwOpen(); }   // 5 taps -> ask for the password
 });
+// magician-access password gate
+const MAG_PW = "berglas";
+function magPwOpen(){ $("magPwInput").value = ""; $("magPwErr").textContent = ""; $("magPw").classList.add("show"); setTimeout(() => $("magPwInput").focus(), 60); }
+function magPwClose(){ $("magPw").classList.remove("show"); }
+function magPwTry(){
+  if ($("magPwInput").value === MAG_PW) { magPwClose(); setMagician(true); }
+  else { $("magPwErr").textContent = "Incorrect password"; $("magPwInput").value = ""; $("magPwInput").focus(); }
+}
+$("magPwOk").addEventListener("click", magPwTry);
+$("magPwCancel").addEventListener("click", magPwClose);
+$("magPwInput").addEventListener("keydown", e => { if (e.key === "Enter") magPwTry(); else if (e.key === "Escape") magPwClose(); });
+$("magPw").addEventListener("click", e => { if (e.target === $("magPw")) magPwClose(); });   // tap backdrop to dismiss
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
 let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
+let rdScheme = "highlow";  // single steering scheme (shared with the tool IIFE)
+let rdSetScheme = null; // set by the tool's IIFE; switches scheme + resets the flow
 let stackForSettings = null;  // the dealing stack, exposed to the settings panel
 let selectMode = localStorage.getItem("rdSelectMode") === "1";  // false = removing (eliminate), true = selecting (tap the value)
 let noDL = localStorage.getItem("rdNoDL") === "1";              // true = limit selections that would require a double lift
@@ -2114,10 +2147,61 @@ function encodeOut(out) {
 // stay in the deck as spacers (never offered). Full coverage of values 2,3,4,8,9,10,J,Q,K
 // (5,6,7 are steered away from). Packets 0/2/4/6 added to the deal end (top or face);
 // optional half-cut; reveal by deal/next/double-lift (top) or deal/next (face). 6 double-lifts.
-const RD_STACK = ["2D","JC","3C","9D","6D","6H","7S","2H","10S","KS","4H","4S","QC","3S","QH","KH","5D","5C","6C","8H","4D","QD","JD","KD","3D","2C","9C","4C","7H","7D","5S","9H","3H","JH","10H","8D","8C","9S","2S","JS","7C","5H","6S","8S","QS","10D","KC","10C"];
-const RD_PACKETS = [0,2,4,6], RD_LO = 10, RD_HI = 45, RD_L0 = RD_STACK.length, RD_HALF = Math.floor(RD_L0/2);
-const RD_POS = {}; RD_STACK.forEach((c,i) => RD_POS[c] = i+1);   // 1-based base position
-stackForSettings = RD_STACK;
+// Single steering scheme: the engine-validated zero-double-lift "High/Low" scheme.
+// Anchors 2-5 / 10-K, flexible middle 6/7/8/9, no number/picture step (pictures fold into "high"), range 4-50.
+const RD_SCHEMES = {
+  highlow: {
+    stack: ["KH","4D","JC","4C","7H","7C","9D","7S","10H","4H","5S","QS","2D","2S","QH","10S","8S","8H","8D","9H","2H","5C","3S","10D","10C","KS","3H","5H","6H","9S","7D","9C","JH","3C","3D","5D","4S","JS","KC","KD","6C","6D","8C","6S","QC","2C","QD","JD"],
+    lo: 4, hi: 50, kindStep: false,
+    low: ["2","3","4","5"], lowMid: ["6","7"], high: ["10","J","Q","K"], highMid: ["9","8"],
+    mid: ["6","7","8","9"],
+    lowFan: ["2","3","4","5","6","7"], highFan: ["8","9","10","J","Q","K"],
+  },
+};
+// rdScheme is declared in the outer scope (shared with renderSettings); we just read/write it here.
+const RD_PACKETS = [0,2,4,6];
+let RD_STACK, RD_LO, RD_HI, RD_L0, RD_HALF, RD_POS = {};
+function rdApplyScheme(name){
+  if (RD_SCHEMES[name]) rdScheme = name;
+  const c = RD_SCHEMES[rdScheme];
+  RD_STACK = c.stack; RD_LO = c.lo; RD_HI = c.hi;
+  RD_L0 = RD_STACK.length; RD_HALF = Math.floor(RD_L0/2);
+  RD_POS = {}; RD_STACK.forEach((cc,i) => RD_POS[cc] = i+1);   // 1-based base position
+  stackForSettings = RD_STACK;
+}
+rdApplyScheme(rdScheme);
+rdSetScheme = name => { rdApplyScheme(name); rdResetState(); rdRender(); };   // bridge for the settings toggle (outer scope)
+// ---- scheme-aware helpers ----
+const RD_VORDER = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+const rdValCmp = (a,b) => RD_VORDER.indexOf(String(a)) - RD_VORDER.indexOf(String(b));
+const rdHasKind = () => RD_SCHEMES[rdScheme].kindStep;
+const rdNumMode = st => rdScheme === "highlow" ? true : st.kind === "num";   // "number-card" (high/low) mode reached?
+const rdMidSet = () => RD_SCHEMES[rdScheme].mid;
+function rdReach(v, color, N){ const r = rdSuit(String(v), color, N);
+  if (!r.out) return false;
+  if (rdScheme === "highlow") return r.out.method !== "dl";   // highlow never offers a double-lift card
+  return true;
+}
+// scheme-aware low/high grouping (pure: takes color+number). Pictures fold into "high" for highlow.
+function rdGroups(color, num){
+  const reach = v => rdReach(v, color, num);
+  const S = RD_SCHEMES[rdScheme];
+  if (rdScheme === "highlow"){
+    const low = S.low.filter(reach);
+    for (const v of S.lowMid){ if (reach(v)) low.push(v); else break; }     // extend up from 5: 6 then 7
+    const high = S.high.filter(reach);
+    for (const v of S.highMid){ if (reach(v)) high.push(v); else break; }   // extend down from 10: 9 then 8
+    low.sort(rdValCmp); high.sort(rdValCmp);
+    return { low, high };
+  }
+  const r5 = reach(5), r6 = reach(6), r7 = reach(7);
+  const low = [2,3,4].filter(reach), high = [8,9,10].filter(reach);
+  if (r5) low.push(5);
+  if (r7) high.push(7);
+  if (r6) { if (r5) low.push(6); else if (r7) high.push(6); }
+  low.sort((a,b)=>a-b); high.sort((a,b)=>a-b);
+  return { low: low.map(String), high: high.map(String) };
+}
 const RD_SUIT_SYM = { C:"♣", H:"♥", S:"♠", D:"♦" };
 function rdPretty(c){ return c === "JK" ? "🃏" : c.slice(0,-1) + RD_SUIT_SYM[c.slice(-1)]; }
 function rdOrdinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
@@ -2343,20 +2427,11 @@ function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!fi
 // the middles 5,6,7 join only if they bridge contiguously to their anchor (5→low, 7→high). 6 goes low if
 // 5 is reachable, else high if 7 is reachable, else it's an orphan and is dropped (e.g. 5 & 7 both dud →
 // low 2-4 / high 8-10 even though 6 is available). all reachable → low 2-6 / high 7-10.
-function rdHiLoSplit(){
-  const reach = v => !!rdSuit(String(v), rd.color, rd.num).out;
-  const r5 = reach(5), r6 = reach(6), r7 = reach(7);
-  const low = [2,3,4].filter(reach), high = [8,9,10].filter(reach);   // must-covers can drop too in no-double-lift mode
-  if (r5) low.push(5);
-  if (r7) high.push(7);
-  if (r6) { if (r5) low.push(6); else if (r7) high.push(6); }   // 6 must bridge 5 (low) or 7 (high), else dropped
-  low.sort((a,b)=>a-b); high.sort((a,b)=>a-b);
-  return { low: low.map(String), high: high.map(String) };
-}
-function rdAllMid(){ return ["5","6","7"].every(v => !!rdSuit(v, rd.color, rd.num).out); }   // no 5/6/7 needs eliminating (this colour)
-function rdAllMidBoth(){ return ["red","black"].every(c => ["5","6","7"].every(v => !!rdSuit(v, c, rd.num).out)); }   // ...for both colours
+function rdHiLoSplit(){ return rdGroups(rd.color, rd.num); }   // scheme-aware (see rdGroups)
+function rdAllMid(){ return rdMidSet().every(v => rdReach(v, rd.color, rd.num)); }   // no middle needs eliminating (this colour)
+function rdAllMidBoth(){ return ["red","black"].every(c => rdMidSet().every(v => rdReach(v, c, rd.num))); }   // ...for both colours
 function rdOfferedValues(){
-  if (rd.kind === "pic") return ["J","Q","K"].filter(v => !!rdSuit(v, rd.color, rd.num).out);
+  if (rdHasKind() && rd.kind === "pic") return ["J","Q","K"].filter(v => rdReach(v, rd.color, rd.num));
   const { low, high } = rdHiLoSplit();
   if (rd.hl === "high") return high;
   if (rd.hl === "low")  return low;
@@ -2406,22 +2481,24 @@ function rdRun(color, vals, interleave){ const a = color==="red"?"H":"C", b = co
 // magician view: camera-style patter teleprompter — plain text buttons, full script, no card images
 function rdMagStep(){
   const flow = $("ddGaffFlow"); let cols = 2, html = "", title = "";
-  const valList = (vals, pic) => { const n = vals.map(v => pic ? RD_VNAME_FULL[v] : v);
+  const valList = (vals) => { const n = vals.map(v => "JQK".includes(v) ? RD_VNAME_FULL[v] : v);
     return n.length <= 1 ? "a " + n[0] : n.length === 2 ? "a " + n[0] + " or a " + n[1] : "a " + n.slice(0,-1).join(", ") + ", or a " + n[n.length-1]; };
   if (!rd.color) { title = "Now for the card — would you like a red card or a black card?";
     html = `<button data-g="color" data-v="black">Black <span class="sy sb">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr sb">♥♦</span></button>`; }
-  else if (!rd.kind) { const other = rd.color === "red" ? "black" : "red";
+  else if (rdHasKind() && !rd.kind) { const other = rd.color === "red" ? "black" : "red";
     title = `You want a ${rd.color} card, so we'll remove all the ${other} cards. Do you want a number card or a picture card?`;
     html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
-  else if (rd.kind === "num" && !rd.hl) {
-    title = "You want a number card, so we'll remove the picture cards. Would you like a high number card or a low number card?";
+  else if (rdNumMode(rd) && !rd.hl) {
+    const other = rd.color === "red" ? "black" : "red";
+    title = `You want a ${rd.color} card, so we'll remove the ${other} cards. Would you like a high card or a low card?`;
     html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
   else if (!rd.value) { const vals = rdOfferedValues();
-    title = `Would you like ${valList(vals, rd.kind === "pic")}?`;
+    const otherHL = rd.hl === "high" ? "low" : "high";
+    title = `You want a ${rd.hl} card, so we'll remove the ${otherHL} cards. Would you like ${valList(vals)}?`;
     cols = vals.length;
-    html = vals.map(v => `<button data-g="value" data-v="${v}">${rd.kind === "pic" ? RD_VNAME_FULL[v] : v}</button>`).join("");
+    html = vals.map(v => `<button data-g="value" data-v="${v}">${"JQK".includes(v) ? RD_VNAME_FULL[v] : v}</button>`).join("");
   } else { const r = rdSuit(rd.value, rd.color, rd.num);
-    const vn = rd.kind === "pic" ? RD_VNAME_FULL[rd.value] : rd.value;
+    const vn = "JQK".includes(rd.value) ? RD_VNAME_FULL[rd.value] : rd.value;
     const su = rd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
     title = `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`;
     html = r.suits.map(s => { const red = "HD".includes(s);
@@ -2442,7 +2519,7 @@ function rdFlowStep(){
       const lbl = (selectMode ? "" : "Remove ") + (col==="black" ? "Black Cards" : "Red Cards");
       return `<div class="optcell" data-g="color" data-v="${col}">${rdMiniFan(rdRun(col, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optlbl">${lbl}</div></div>`;
     }).join("");
-  } else if (!rd.kind) {
+  } else if (rdHasKind() && !rd.kind) {
     if (rdAllMidBoth()) {                                     // clean number for both colours -> separate number / picture spreads
       grid = "minmax(0,1fr)";
       const nL = (selectMode ? "" : "Remove ") + "Number Cards", pL = (selectMode ? "" : "Remove ") + "Picture Cards";
@@ -2455,18 +2532,25 @@ function rdFlowStep(){
         : `<button data-g="kind" data-v="num">Remove<br>Number Cards</button><button data-g="kind" data-v="pic">Remove<br>Picture Cards</button>`;
       html = `${rdMiniFan(rdRun(rd.color, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optrow">${btns}</div>`;
     }
-  } else if (rd.kind === "num" && !rd.hl) {                    // high/low always shown
-    if (rdAllMidBoth()) {                                      // clean number for both colours -> two separate spreads
+  } else if (rdNumMode(rd) && !rd.hl) {                        // high/low always shown
+    const NW = rdScheme === "highlow" ? "Cards" : "Numbers";
+    const S = RD_SCHEMES[rdScheme];
+    // highlow: split into two spreads whenever this colour drops at most one middle value — the lone
+    // dud (e.g. the 8) rides inside its own group's fan and just isn't offered on the next page.
+    const splitClean = rdScheme === "highlow"
+      ? rdMidSet().filter(v => !rdReach(v, rd.color, rd.num)).length <= 1
+      : rdAllMidBoth();
+    if (splitClean) {                                         // clean (or one dud) -> two separate spreads
       grid = "minmax(0,1fr)";
-      const lo = (selectMode ? "" : "Remove ") + "Low Numbers", hi = (selectMode ? "" : "Remove ") + "High Numbers";
-      html = `<div class="optcell" data-g="hl" data-v="low">${rdMiniFan(rdRun(rd.color, ["2","3","4","5","6"], true))}<div class="optlbl">${lo}</div></div>`
-           + `<div class="optcell" data-g="hl" data-v="high">${rdMiniFan(rdRun(rd.color, ["7","8","9","10"], true))}<div class="optlbl">${hi}</div></div>`;
-    } else {                                                   // a 5/6/7 must be eliminated -> one shared spread (duds fade on tap)
+      const lo = (selectMode ? "" : "Remove ") + "Low " + NW, hi = (selectMode ? "" : "Remove ") + "High " + NW;
+      html = `<div class="optcell" data-g="hl" data-v="low">${rdMiniFan(rdRun(rd.color, S.lowFan, true))}<div class="optlbl">${lo}</div></div>`
+           + `<div class="optcell" data-g="hl" data-v="high">${rdMiniFan(rdRun(rd.color, S.highFan, true))}<div class="optlbl">${hi}</div></div>`;
+    } else {                                                   // a middle must be eliminated -> one shared spread (duds fade on tap)
       layout="shared";
-      const numVals = rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
+      const numVals = rdScheme === "highlow" ? rdSpreadVals().filter(v => v !== "A") : rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
       const btns = selectMode
-        ? `<button data-g="hl" data-v="low">Low<br>Numbers</button><button data-g="hl" data-v="high">High<br>Numbers</button>`
-        : `<button data-g="hl" data-v="low">Remove<br>Low Numbers</button><button data-g="hl" data-v="high">Remove<br>High Numbers</button>`;
+        ? `<button data-g="hl" data-v="low">Low<br>${NW}</button><button data-g="hl" data-v="high">High<br>${NW}</button>`
+        : `<button data-g="hl" data-v="low">Remove<br>Low ${NW}</button><button data-g="hl" data-v="high">Remove<br>High ${NW}</button>`;
       html = `${rdMiniFan(rdRun(rd.color, numVals, true))}<div class="optrow">${btns}</div>`;
     }
   } else if (!rd.value) {
@@ -2486,7 +2570,7 @@ function rdFlowStep(){
   }
   $("ddCardTitle").className = "";
   if (rd.value != null) $("ddCardTitle").innerHTML = freeSuit ? "Final Decision<br>Tap the card you want" : "Final Decision";
-  else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : !rd.kind ? "Number or picture cards?" : (rd.kind === "num" && !rd.hl) ? "High or low cards?" : "Which value?";
+  else if (selectMode) $("ddCardTitle").textContent = !rd.color ? "Black or red?" : (rdHasKind() && !rd.kind) ? "Number or picture cards?" : (rdNumMode(rd) && !rd.hl) ? "High or low cards?" : "Which value?";
   else $("ddCardTitle").textContent = "Which cards should we remove?";
   flow.className = "flow-" + layout;
   flow.style.gridTemplateColumns = layout==="cells" ? grid : "";
@@ -2511,23 +2595,49 @@ function rdFitCardNames(){
 function rdRenderOut(coded){
   if (magicianMode) {   // closing patter, no card image
     const r = rdSuit(rd.value, rd.color, rd.num), freeChoice = !r.force || rd.suitPicked === r.suits[0];
-    const cn = (rd.kind === "pic" ? RD_VNAME_FULL[rd.value] : rd.value) + " of " + RD_SNAME[rd.card.slice(-1)];
+    const cn = ("JQK".includes(rd.value) ? RD_VNAME_FULL[rd.value] : rd.value) + " of " + RD_SNAME[rd.card.slice(-1)];
     $("ddReveal").innerHTML = freeChoice
       ? `And that was a free choice — you could have chosen any card, and you chose the ${cn}.`
       : `We started with 52 cards and now you're left holding one card — the ${cn}.`;
   } else
   $("ddReveal").innerHTML = rdRevealText() + (rd.card ? `<img class="revealcard" src="cards/${rd.card}.png" alt="" draggable="false">` : "");
+  // measure the taller (spelled-out) wording so the invisible pad can hold "Start over" stationary on hold
+  rdProcMax = 0;
+  rdRenderProcedure(false);
+  rdProcMax = $("out").offsetHeight;
+  rdRenderProcedure(coded);
+}
+let rdProcMax = 0;
+// renders only the #out procedure panel for a given wording: coded=true is the natural (default) version,
+// coded=false is the spelled-out magician version (packet/cut tag + explicit handling). Used by the hold-zone.
+// The gold panel stays snug to its text; #ddProcPad absorbs the height difference so the button never moves.
+function rdRenderProcedure(coded){
   const out = rdResolve(rd.card, rd.num);
   const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, coded).map(l => `<li>${l}</li>`).join("")}</ol>`;
-  if (coded) { $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`; return; }
-  if (!out) { $("out").innerHTML = `<span class="bad">No out for ${rdPretty(rd.card)} at ${rd.num}.</span>`; return; }
-  const e = rdEncode(out);
-  const tag = `${rdPretty(rd.card)} at ${rd.num} · ${out.method === "dl" ? "double-lift" : "clean deal"} · add ${e.packet}${e.cut ? " · cut" : ""}`;
-  $("out").innerHTML = `<div class="hint">${tag}</div>${stepsHtml(out)}`;
+  if (coded) $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`;
+  else if (!out) $("out").innerHTML = `<span class="bad">No out for ${rdPretty(rd.card)} at ${rd.num}.</span>`;
+  else {
+    const e = rdEncode(out);
+    const tag = `${rdPretty(rd.card)} at ${rd.num} · ${out.method === "dl" ? "double-lift" : "clean deal"} · add ${e.packet}${e.cut ? " · cut" : ""}`;
+    $("out").innerHTML = `<div class="hint">${tag}</div>${stepsHtml(out)}`;
+  }
+  $("ddProcPad").style.height = Math.max(0, rdProcMax - $("out").offsetHeight) + "px";
 }
 
 // ---- chrome ----
 $("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
+// deadman's switch: press & hold the empty zone below "Start over" to spell out the procedure wording;
+// releasing reverts to the natural (default) wording. The rest of the reveal is untouched.
+{
+  const zone = $("ddPeekZone");
+  const swap = spelled => e => { rdRenderProcedure(spelled ? false : !magicianMode);
+    if (spelled && e.pointerId != null) { try { zone.setPointerCapture(e.pointerId); } catch (_) {} } };
+  zone.addEventListener("pointerdown", swap(true));
+  zone.addEventListener("pointerup", swap(false));
+  zone.addEventListener("pointercancel", swap(false));
+  zone.addEventListener("pointerleave", swap(false));
+  zone.addEventListener("contextmenu", e => e.preventDefault());   // long-press menu would interrupt the hold
+}
 $("ddChips").addEventListener("click", e => { if (rd.step === 2) return;   // chips are not tappable on the reveal page (look unchanged)
   const c = e.target.closest(".chip"); if (!c) return;
   const st = +c.dataset.step; if (st === 1 && rd.num == null) return; rd.step = st; rdRender(); });
@@ -2711,26 +2821,25 @@ $("camFlow").addEventListener("click", e => { const b = e.target.closest("button
 });
 function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title = "";
   // full performance script (camera-only — the spectator never sees it)
-  const valList = (vals, pic) => { const n = vals.map(v => pic ? CAM_VN[v] : v);
+  const valList = (vals) => { const n = vals.map(v => "JQK".includes(v) ? CAM_VN[v] : v);
     return n.length <= 1 ? "a " + n[0] : n.length === 2 ? "a " + n[0] + " or a " + n[1] : "a " + n.slice(0,-1).join(", ") + ", or a " + n[n.length-1]; };
   if (!camRd.color) { title = "Now for the card — would you like a red card or a black card?";
     html = `<button data-g="color" data-v="black">Black <span class="sy">♠♣</span></button><button data-g="color" data-v="red">Red <span class="sy syr">♥♦</span></button>`; }
-  else if (!camRd.kind) { const other = camRd.color === "red" ? "black" : "red";
+  else if (rdHasKind() && !camRd.kind) { const other = camRd.color === "red" ? "black" : "red";
     title = `You want a ${camRd.color} card, so we'll remove all the ${other} cards. Do you want a number card or a picture card?`;
     html = `<button data-g="kind" data-v="num">Number card</button><button data-g="kind" data-v="pic">Picture card</button>`; }
-  else if (camRd.kind === "num" && !camRd.hl) {
-    title = "You want a number card, so we'll remove the picture cards. Would you like a high number card or a low number card?";
+  else if (rdNumMode(camRd) && !camRd.hl) {
+    const other = camRd.color === "red" ? "black" : "red";
+    title = `You want a ${camRd.color} card, so we'll remove the ${other} cards. Would you like a high card or a low card?`;
     html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
-  else if (!camRd.value) { let vals;
-    const cReach = v => !!rdSuit(v, camRd.color, camRd.num).out;
-    if (camRd.kind === "pic") { vals = ["J","Q","K"]; }
-    else if (camRd.hl === "high") { vals = ["7","8","9","10"].filter(v => v !== "7" || cReach("7")); }
-    else { vals = ["2","3","4","5","6"].filter(v => (v === "5" || v === "6") ? cReach(v) : true); }
-    title = `Would you like ${valList(vals, camRd.kind === "pic")}?`;
+  else if (!camRd.value) {
+    const g = rdGroups(camRd.color, camRd.num), vals = camRd.hl === "high" ? g.high : g.low;
+    const otherHL = camRd.hl === "high" ? "low" : "high";
+    title = `You want a ${camRd.hl} card, so we'll remove the ${otherHL} cards. Would you like ${valList(vals)}?`;
     cols = vals.length;
-    html = vals.map(v => `<button data-g="value" data-v="${v}">${camRd.kind === "pic" ? CAM_VN[v] : v}</button>`).join("");
+    html = vals.map(v => `<button data-g="value" data-v="${v}">${"JQK".includes(v) ? CAM_VN[v] : v}</button>`).join("");
   } else { const r = rdSuit(camRd.value, camRd.color, camRd.num);
-    const vn = camRd.kind === "pic" ? CAM_VN[camRd.value] : camRd.value;
+    const vn = "JQK".includes(camRd.value) ? CAM_VN[camRd.value] : camRd.value;
     const su = camRd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
     title = `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`;
     html = r.suits.map(s => { const red = "HD".includes(s);
@@ -2742,7 +2851,7 @@ function camRenderOut() { const o = rdResolve(camRd.card, camRd.num);
   // closing patter: free choice if they named the force card (or both suits worked), otherwise the equivoque line
   const r = rdSuit(camRd.value, camRd.color, camRd.num);
   const freeChoice = !r.force || camRd.suitPicked === r.suits[0];
-  const cn = (camRd.kind === "pic" ? CAM_VN[camRd.value] : camRd.value) + " of " + CAM_SN[camRd.card.slice(-1)];
+  const cn = ("JQK".includes(camRd.value) ? CAM_VN[camRd.value] : camRd.value) + " of " + CAM_SN[camRd.card.slice(-1)];
   $("camTitle").textContent = freeChoice
     ? `And that was a free choice — you could have chosen any card, and you chose the ${cn}.`
     : `We started with 52 cards and now you're left holding one card — the ${cn}.`;
