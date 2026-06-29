@@ -2368,9 +2368,8 @@ function rdThreeStep(out, card, N, namesCard){
   const orient = out.end === "face" ? "FACE UP" : "FACE DOWN";
   const add = { 0: "add NOTHING", 2: "add JOKERS", 4: "add ACES", 6: "add JOKERS and ACES" }[out.packet];
   const reveal = out.method === "next" ? "NEXT CARD" : out.method === "dl" ? "DOUBLE LIFT" : "DIRECT HIT";
-  const head = namesCard === false ? `Position ${N}` : `The ${rdFullName(card)} at position ${N}`;
-  return `<div class="ts-head">${head}</div>`
-    + `<ol class="ts-steps"><li>${cut}</li><li>${orient} &mdash; ${add}</li><li>${reveal}</li></ol>`;
+  const head = namesCard === false ? "" : `<div class="ts-head">The ${rdFullName(card)} at position ${N}</div>`;
+  return head + `<ol class="ts-steps"><li>${cut}</li><li>${orient} &mdash; ${add}</li><li>${reveal}</li></ol>`;
 }
 /*RD-ENGINE-END*/
 
