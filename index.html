@@ -179,7 +179,6 @@
   .ts-head { font-size: 15px; font-weight: 700; color: var(--gold); text-align: center; margin: 2px 0 12px; letter-spacing: .3px; line-height: 1.3; }
   .ts-steps { margin: 0; padding-left: 26px; color: #f1f2f5; font-size: 18px; font-weight: 800; line-height: 1.9; letter-spacing: .4px; }
   .ts-steps li { margin: 3px 0; }
-  #ddResults.magview .reveal-line { display: none; }   /* hide "Your card is the…" while the 3-step magician view is held */
 
   /* ---- constrained-choice magician tool (#ddScreen) — reuses the app's shared .picker/.grid/.chip/.steps styles ---- */
   #ddScreen > h1 { font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin:8px 0; }
@@ -2361,14 +2360,16 @@ function rdSteps(out, card, N, coded){
   else                            { step2 = `Deal ${N-1} cards then stop on the ${ord}.`; step3 = `The ${ord} card is the ${FN}!`; }
   return [head, step2, step3];
 }
-// Magician view (reveal-page hold + camera): "The Four of Clubs at position 23" + 3 concise steps.
-function rdThreeStep(out, card, N){
+// Magician view + 3 concise steps. namesCard=true (camera) shows "The Four of Clubs at position 23";
+// false (reveal page) shows just "Position 23" since the reveal already names the card above.
+function rdThreeStep(out, card, N, namesCard){
   if (!out) return `<span class="bad">No out for ${rdPretty(card)} at ${N}.</span>`;
   const cut = out.cut ? "CUT" : "DON’T CUT";
   const orient = out.end === "face" ? "FACE UP" : "FACE DOWN";
   const add = { 0: "add NOTHING", 2: "add JOKERS", 4: "add ACES", 6: "add JOKERS and ACES" }[out.packet];
   const reveal = out.method === "next" ? "NEXT CARD" : out.method === "dl" ? "DOUBLE LIFT" : "DIRECT HIT";
-  return `<div class="ts-head">The ${rdFullName(card)} at position ${N}</div>`
+  const head = namesCard === false ? `Position ${N}` : `The ${rdFullName(card)} at position ${N}`;
+  return `<div class="ts-head">${head}</div>`
     + `<ol class="ts-steps"><li>${cut}</li><li>${orient} &mdash; ${add}</li><li>${reveal}</li></ol>`;
 }
 /*RD-ENGINE-END*/
@@ -2713,7 +2714,7 @@ function rdRenderOut(coded){
 // coded=false is the spelled-out magician version (packet/cut tag + explicit handling). Used by the hold-zone.
 function rdRenderProcedure(coded){
   const out = rdResolve(rd.card, rd.num);
-  if (!coded) { $("out").innerHTML = rdThreeStep(out, rd.card, rd.num); return; }   // magician view: concise 3-step
+  if (!coded) { $("out").innerHTML = rdThreeStep(out, rd.card, rd.num, false); return; }   // magician view: concise 3-step (card named by the reveal line above)
   const stepsHtml = o => `<ol class="steps">${rdSteps(o, rd.card, rd.num, true).map(l => `<li>${l}</li>`).join("")}</ol>`;
   $("out").innerHTML = out ? stepsHtml(out) : `<span class="hint">—</span>`;
 }
@@ -2724,7 +2725,7 @@ $("ddReset").addEventListener("click", () => { rdResetState(); rdRender(); });
 // is free to move as the wording grows/shrinks.
 {
   const holdEl = $("title").parentElement;   // the <header> — the h1 title itself is pointer-events:none
-  const update = held => { if (rd.step !== 2) return; rdRenderProcedure(held ? false : !magicianMode); $("ddResults").classList.toggle("magview", held); };
+  const update = held => { if (rd.step === 2) rdRenderProcedure(held ? false : !magicianMode); };
   holdEl.addEventListener("pointerdown", e => { if (e.target !== holdEl) return;   // ignore the 5-tap unlock zone / buttons inside the header
     update(true); if (e.pointerId != null) { try { holdEl.setPointerCapture(e.pointerId); } catch (_) {} } });
   const off = () => update(false);
@@ -2764,7 +2765,6 @@ function rdRender(){
   $("ddNumberPicker").style.display = rd.step === 0 ? "" : "none";
   $("ddCardPicker").style.display = rd.step === 1 ? "" : "none";
   $("ddResults").style.display = rd.step === 2 ? "" : "none";
-  $("ddResults").classList.remove("magview");
   // legacy gaff pickers stay hidden; the flow uses #ddGaffFlow
   $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
   $("ddRandomCard").style.display = "none"; $("ddRandomNum").style.display = "none";
