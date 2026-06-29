@@ -177,8 +177,6 @@
   .instr-body ul { list-style: disc; }
   .instr-body li { margin: 5px 0; }
   .ts-head { font-size: 15px; font-weight: 700; color: var(--gold); text-align: center; margin: 2px 0 12px; letter-spacing: .3px; line-height: 1.3; }
-  .ts-steps { margin: 0; padding-left: 26px; color: #f1f2f5; font-size: 18px; font-weight: 800; line-height: 1.9; letter-spacing: .4px; }
-  .ts-steps li { margin: 3px 0; }
 
   /* ---- constrained-choice magician tool (#ddScreen) — reuses the app's shared .picker/.grid/.chip/.steps styles ---- */
   #ddScreen > h1 { font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; margin:8px 0; }
@@ -2369,7 +2367,7 @@ function rdThreeStep(out, card, N, namesCard){
   const add = { 0: "add NOTHING", 2: "add JOKERS", 4: "add ACES", 6: "add JOKERS and ACES" }[out.packet];
   const reveal = out.method === "next" ? "NEXT CARD" : out.method === "dl" ? "DOUBLE LIFT" : "DIRECT HIT";
   const head = namesCard === false ? "" : `<div class="ts-head">The ${rdFullName(card)} at position ${N}</div>`;
-  return head + `<ol class="ts-steps"><li>${cut}</li><li>${orient} &mdash; ${add}</li><li>${reveal}</li></ol>`;
+  return head + `<ol class="steps"><li>${cut}</li><li>${orient} &mdash; ${add}</li><li>${reveal}</li></ol>`;
 }
 /*RD-ENGINE-END*/
 
