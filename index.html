@@ -34,6 +34,7 @@
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; background: var(--dd-page); color: var(--text);
+    overscroll-behavior-y: contain;   /* disable pull-to-refresh so the 2-finger swipe-down gesture works */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; box-sizing: border-box; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
   /* Back + number/card display pinned to the top; the active picker centered below */
@@ -2086,7 +2087,7 @@ updateModeTitle();
   let g = null;
   const avg = ts => ({ x: (ts[0].clientX + ts[1].clientX) / 2, y: (ts[0].clientY + ts[1].clientY) / 2 });
   window.addEventListener("touchstart", e => { if (e.touches.length === 2) { const a = avg(e.touches); g = { sx: a.x, sy: a.y, x: a.x, y: a.y, ok: true }; } else g = null; }, { passive: true });
-  window.addEventListener("touchmove", e => { if (!g) return; if (e.touches.length === 2) { const a = avg(e.touches); g.x = a.x; g.y = a.y; } else g.ok = false; }, { passive: true });
+  window.addEventListener("touchmove", e => { if (!g) return; if (e.touches.length === 2) { const a = avg(e.touches); g.x = a.x; g.y = a.y; if (e.cancelable) e.preventDefault(); } else g.ok = false; }, { passive: false });
   window.addEventListener("touchend", () => {
     if (g && g.ok && (g.y - g.sy) > 70 && Math.abs(g.x - g.sx) < 90) {
       selectMode = !selectMode;
