@@ -2397,8 +2397,8 @@ function rdNumGuide(){
   if (magicianMode) {
     const v = parseInt(numEntry, 10);
     let g = "";
-    if (numEntry && v < RD_LO) g = `<span class="warn">Too low, enter a 2 digit number</span>`;
-    else if (v > RD_HI) g = `<span class="warn">Too high, enter a lower 2 digit number</span>`;
+    if (numEntry && v < RD_LO) g = `<span class="warn">Too low, enter a number from 4-50</span>`;
+    else if (v > RD_HI) g = `<span class="warn">Too high, enter a number from 4-50</span>`;
     else if (numEntry) g = `<span class="ok">ok</span>`;
     $("numGuide").innerHTML = g;
   } else $("numGuide").innerHTML = "";
@@ -2406,8 +2406,8 @@ function rdNumGuide(){
 function rdCommitNum(){
   const v = parseInt(numEntry, 10);
   if (!(v >= 1)) return;
-  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low, enter a 2 digit number</span>`; return; }
-  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high, enter a lower 2 digit number</span>`; return; }
+  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low, enter a number from 4-50</span>`; return; }
+  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high, enter a number from 4-50</span>`; return; }
   rd.num = v; rd.step = 1; rdRender();
 }
 
