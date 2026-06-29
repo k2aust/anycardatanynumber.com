@@ -2081,14 +2081,14 @@ let noDL = localStorage.getItem("rdNoDL") === "1";              // true = limit 
 // Title shows a trailing "." in Selection mode so you can tell the mode at a glance.
 function updateModeTitle(){ const t = $("title"); if (t) t.textContent = "Any Card At Any Number" + (selectMode ? "." : ""); }
 updateModeTitle();
-// 2-finger swipe up toggles Elimination <-> Selection mode.
+// 2-finger swipe down toggles Elimination <-> Selection mode.
 (function(){
   let g = null;
   const avg = ts => ({ x: (ts[0].clientX + ts[1].clientX) / 2, y: (ts[0].clientY + ts[1].clientY) / 2 });
   window.addEventListener("touchstart", e => { if (e.touches.length === 2) { const a = avg(e.touches); g = { sx: a.x, sy: a.y, x: a.x, y: a.y, ok: true }; } else g = null; }, { passive: true });
   window.addEventListener("touchmove", e => { if (!g) return; if (e.touches.length === 2) { const a = avg(e.touches); g.x = a.x; g.y = a.y; } else g.ok = false; }, { passive: true });
   window.addEventListener("touchend", () => {
-    if (g && g.ok && (g.sy - g.y) > 70 && Math.abs(g.x - g.sx) < 90) {
+    if (g && g.ok && (g.y - g.sy) > 70 && Math.abs(g.x - g.sx) < 90) {
       selectMode = !selectMode;
       localStorage.setItem("rdSelectMode", selectMode ? "1" : "0");
       updateModeTitle();
