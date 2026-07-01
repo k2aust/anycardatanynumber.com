@@ -475,7 +475,7 @@
   <div class="sp-wrap">
     <div class="btnrow"><button id="spellBack">&#10094; Back</button></div>
     <div class="sp-h1">Spell to Any Card</div>
-    <p class="hint" style="margin:0">Demo: spell <b>THE NINE OF DIAMONDS</b> face-up into piles <b>3&middot;4&middot;2&middot;8</b> (THE / value / OF / suit). Then tap the card they named.</p>
+    <p class="hint" style="margin:0">Demo: spell <b>THE FOUR OF DIAMONDS</b> face-up into piles <b>3&middot;4&middot;2&middot;8</b> (THE / value / OF / suit) &mdash; the last card of the suit pile is the real <b>4&diams;</b> (position 17, a genuine hit). Then tap the card they named.</p>
     <div class="sp-lbl">Value</div>
     <div class="sp-grid" id="spVals"></div>
     <div class="sp-lbl">Suit</div>
@@ -1928,10 +1928,10 @@ function moveMethod(k, dir) {
 
 /* ---- Spelling-trick crib + magician spelling mode (RD_CRIB shared with settings) ---- */
 const RD_CRIB = {
-  "A":["1F","23F","2T","24F"], "2":["-T","-F","3T","42T"], "3":["14F","31T","23T","-T"], "4":["4F","2T","31F","31T"],
-  "5":["4T","4F","-F","42T"], "6":["1T","-T","1T","42F"], "7":["-T","-T","1T","23T"], "8":["1T","41T","13T","31F"],
-  "9":["43F","13T","42F","-T"], "10":["31F","1F","41F","4T"], "J":["12F","4T","31T","12F"], "Q":["1F","-F","2T","32F"],
-  "K":["32T","24T","3T","-F"],
+  "A":["-F","3T","-F","4T"], "2":["-T","43T","4T","12F"], "3":["13F","31T","24T","-T"], "4":["3F","24T","31F","4T"],
+  "5":["2T","14T","-F","13F"], "6":["34T","-T","13F","2F"], "7":["-T","-T","41T","12T"], "8":["2T","12T","3T","21F"],
+  "9":["34F","3T","34F","-T"], "10":["31F","12F","2F","1T"], "J":["12T","3F","1T","1T"], "Q":["2F","-F","32F","32F"],
+  "K":["24T","21T","4T","-F"],
 };
 const RD_SP_SUITS = ["C","H","S","D"];
 const RD_SP_SYM = { C:"&#9827;", H:"&#9829;", S:"&#9824;", D:"&#9830;" };
@@ -1948,11 +1948,11 @@ function rdSpellHandling(val, suit){
     steps.push("Set the four dealt piles aside &mdash; hand over just the <b>remainder</b> (the 35 undealt cards).");
   } else if (entry.length === 1) {
     const seq = rdCyc(+entry);
-    steps.push(`Gather all four piles in the order <b>${seq.join("&middot;")}</b>, then drop the whole packet on the <b>${dealFrom}</b> of the remainder.`);
+    steps.push(`Collect the four piles in order <b>${seq.join("&middot;")}</b>, <b>turn the packet face-down</b>, and drop it on the <b>${dealFrom}</b> of the remainder.`);
   } else {
     const seq = rdCyc(+entry[0]), i = seq.indexOf(+entry[1]), top = seq.slice(0, i), fc = seq.slice(i);
-    steps.push(`Place pile${top.length>1?"s":""} <b>${top.join("&middot;")}</b> on the <b>TOP</b> of the remainder.`);
-    steps.push(`Then pick up pile${fc.length>1?"s":""} <b>${fc.join("&middot;")}</b> and set the deck on top (they end on the <b>FACE</b>).`);
+    steps.push(`Collect pile${top.length>1?"s":""} <b>${top.join("&middot;")}</b>, <b>turn face-down</b>, and place on the <b>TOP</b> of the remainder.`);
+    steps.push(`Then collect pile${fc.length>1?"s":""} <b>${fc.join("&middot;")}</b>, <b>turn face-down</b>, and place on the <b>FACE</b>.`);
   }
   steps.push(`Hand it over &mdash; they spell <b>THE ${val==="10"?"TEN":RD_SP_VN[val].toUpperCase()} OF ${RD_SP_SN[suit].toUpperCase()}</b> (${L} cards) dealing from the <b>${dealFrom}</b>. Their card is the last one.`);
   return { code: entry === "-" ? "&ndash;" : entry, face, steps };
@@ -2025,11 +2025,11 @@ function renderSettings() {
   const spellSection =
       '<div class="set-group"><details class="instr"><summary class="set-label">Spelling trick + crib</summary><div class="instr-body">'
     + '<p><b>Effect:</b> a spectator names any card, spells &ldquo;THE&nbsp;<i>value</i>&nbsp;OF&nbsp;<i>suit</i>&rdquo; one card per letter, and their card lands on the last letter.</p>'
-    + '<p><b>Demo:</b> spell THE&nbsp;NINE&nbsp;OF&nbsp;DIAMONDS face-up into four word-piles &mdash; <b>1</b>&nbsp;THE (3), <b>2</b>&nbsp;value (4), <b>3</b>&nbsp;OF (2), <b>4</b>&nbsp;suit (8). 17 dealt, 35 remain in hand. (Any 4-letter value works if you pad the suit pile to 8.)</p>'
+    + '<p><b>Demo:</b> spell THE&nbsp;FOUR&nbsp;OF&nbsp;DIAMONDS face-up into four word-piles &mdash; <b>1</b>&nbsp;THE (3), <b>2</b>&nbsp;FOUR (4), <b>3</b>&nbsp;OF (2), <b>4</b>&nbsp;DIAMONDS (8). The last card of the suit pile is the real <b>4&diams;</b> (position 17 &mdash; a genuine hit, no padding). 17 dealt, 35 remain in hand.</p>'
     + '<p><b>Reading the crib:</b> the cell colour is the deal direction &mdash; <b>white = spectator deals from the TOP</b>, <b>black = from the FACE</b>.</p>'
     + '<ol><li><b>&ndash;</b> &mdash; hand over the 35-card remainder (no pickup).</li>'
-    + '<li><b>One number X</b> &mdash; gather all four piles in the cycle 4&middot;3&middot;2&middot;1 starting at X, then drop the whole packet on <b>top</b> (white) or the <b>face</b> (black).</li>'
-    + '<li><b>Two numbers XY</b> &mdash; cycle from X, then split <b>before Y</b>: piles before Y go on <b>top</b>, Y and everything after go on the <b>face</b>.</li></ol>'
+    + '<li><b>One number X</b> &mdash; collect all four piles in the cycle 4&middot;3&middot;2&middot;1 starting at X, <b>turn the packet face-down</b>, then place it on <b>top</b> (white) or the <b>face</b> (black).</li>'
+    + '<li><b>Two numbers XY</b> &mdash; cycle from X, split <b>before Y</b>: collect the piles before Y (turn face-down) onto the <b>top</b>; collect Y and everything after (turn face-down) onto the <b>face</b>.</li></ol>'
     + '<p class="instr-h">Crib &mdash; value &times; suit</p>'
     + cribTable
     + '</div></details></div>';
@@ -2347,12 +2347,12 @@ function encodeOut(out) {
 // Anchors 2-5 / 10-K, flexible middle 6/7/8/9, no number/picture step (pictures fold into "high"), range 4-50.
 const RD_SCHEMES = {
   highlow: {
-    // Combined ACAAN + Spelling stack (2026-07-01): this ace-removed 48 also lets any named card be spelled to. Doc: ~/AI Stuff/COMBINED-STACK.md
-    stack: ["QC","10D","JH","5C","7S","8C","6S","6C","QS","4H","KS","2S","4C","5H","10H","3S","8H","7D","9H","8S","2D","5D","KH","JS","3H","4D","KC","2C","6H","7C","7H","9D","3D","KD","QH","5S","2H","JD","10S","JC","6D","9S","8D","9C","4S","QD","10C","3C"],
-    // FALLBACK — previous live stack (restore by pasting this array into `stack:` above if the new one misbehaves):
+    // Combined ACAAN + Spelling stack (2026-07, no-concession): anchors 0/0, middle steers 320 (=LIVE), spells any named card, demo card 4D at position 17. Doc: ~/AI Stuff/COMBINED-STACK.md
+    stack: ["JS","10D","JD","5C","8C","9H","8S","6D","QC","10S","JH","4C","2S","KS","4D","JC","7S","8H","6C","7D","2H","KC","4H","3S","3H","KH","5H","2C","6H","7C","7H","9D","3D","KD","QH","5S","2D","5D","10H","3C","6S","9S","9C","8D","4S","QD","10C","QS"],
+    // FALLBACK — original proven live stack (restore by pasting this array into `stack:` above if the new one misbehaves):
     // ["KH","4D","JC","4C","7H","7C","9D","7S","10H","4H","5S","QS","2D","2S","QH","10S","8S","8H","8D","9H","2H","5C","3S","10D","10C","KS","3H","5H","6H","9S","7D","9C","JH","3C","3D","5D","4S","JS","KC","KD","6C","6D","8C","6S","QC","2C","QD","JD"],
-    // Full 52-card order WITH the 4 aces in place (spelling order). Display/reference only — the ACAAN engine uses `stack` (aces removed). Remove the aces before performing the ACAAN. Aces sit at positions 11, 16, 41, 47.
-    full: ["QC","10D","JH","5C","7S","8C","6S","6C","QS","4H","AS","KS","2S","4C","5H","AC","10H","3S","8H","7D","9H","8S","2D","5D","KH","JS","3H","4D","KC","2C","6H","7C","7H","9D","3D","KD","QH","5S","2H","JD","AH","10S","JC","6D","9S","8D","AD","9C","4S","QD","10C","3C"],
+    // Full 52-card order WITH the 4 aces in place (spelling order). Display/reference only — the ACAAN engine uses `stack` (aces removed). Remove the aces before performing the ACAAN. Aces sit at positions 6, 16, 39, 40.
+    full: ["JS","10D","JD","5C","8C","AH","9H","8S","6D","QC","10S","JH","4C","2S","KS","AD","4D","JC","7S","8H","6C","7D","2H","KC","4H","3S","3H","KH","5H","2C","6H","7C","7H","9D","3D","KD","QH","5S","AS","AC","2D","5D","10H","3C","6S","9S","9C","8D","4S","QD","10C","QS"],
     lo: 4, hi: 50, kindStep: false,
     low: ["2","3","4","5"], lowMid: ["6","7"], high: ["10","J","Q","K"], highMid: ["9","8"],
     mid: ["6","7","8","9"],
