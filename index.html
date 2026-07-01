@@ -2223,7 +2223,10 @@ function encodeOut(out) {
 // Anchors 2-5 / 10-K, flexible middle 6/7/8/9, no number/picture step (pictures fold into "high"), range 4-50.
 const RD_SCHEMES = {
   highlow: {
-    stack: ["KH","4D","JC","4C","7H","7C","9D","7S","10H","4H","5S","QS","2D","2S","QH","10S","8S","8H","8D","9H","2H","5C","3S","10D","10C","KS","3H","5H","6H","9S","7D","9C","JH","3C","3D","5D","4S","JS","KC","KD","6C","6D","8C","6S","QC","2C","QD","JD"],
+    // Combined ACAAN + Spelling stack (2026-07-01): this ace-removed 48 also lets any named card be spelled to. Doc: ~/AI Stuff/COMBINED-STACK.md
+    stack: ["QC","10D","JH","5C","7S","8C","6S","6C","QS","4H","KS","2S","4C","5H","10H","3S","8H","7D","9H","8S","2D","5D","KH","JS","3H","4D","KC","2C","6H","7C","7H","9D","3D","KD","QH","5S","2H","JD","10S","JC","6D","9S","8D","9C","4S","QD","10C","3C"],
+    // FALLBACK — previous live stack (restore by pasting this array into `stack:` above if the new one misbehaves):
+    // ["KH","4D","JC","4C","7H","7C","9D","7S","10H","4H","5S","QS","2D","2S","QH","10S","8S","8H","8D","9H","2H","5C","3S","10D","10C","KS","3H","5H","6H","9S","7D","9C","JH","3C","3D","5D","4S","JS","KC","KD","6C","6D","8C","6S","QC","2C","QD","JD"],
     lo: 4, hi: 50, kindStep: false,
     low: ["2","3","4","5"], lowMid: ["6","7"], high: ["10","J","Q","K"], highMid: ["9","8"],
     mid: ["6","7","8","9"],
