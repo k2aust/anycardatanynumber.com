@@ -1924,6 +1924,32 @@ function renderSettings() {
     + '<p class="instr-h">Coded Language Key</p>'
     + '<ol><li>Hold = Cut</li><li>Every card = add jokers</li><li>All the cards = add aces</li><li>Each and every card = add jokers and aces</li><li>In the hands = Their card will be the next card</li></ol>'
     + '</div></details></div>';
+  // ---- Spelling trick reference + crib (for the upcoming spelling mode) ----
+  const RD_CRIB = {
+    "A":["1F","23F","2T","24F"], "2":["-T","-F","3T","42T"], "3":["14F","31T","23T","-T"], "4":["4F","2T","31F","31T"],
+    "5":["4T","4F","-F","42T"], "6":["1T","-T","1T","42F"], "7":["-T","-T","1T","23T"], "8":["1T","41T","13T","31F"],
+    "9":["43F","13T","42F","-T"], "10":["31F","1F","41F","4T"], "J":["12F","4T","31T","12F"], "Q":["1F","-F","2T","32F"],
+    "K":["32T","24T","3T","-F"],
+  };
+  const cribBody = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"].map(v =>
+    `<tr><th style="background:var(--panel2);text-align:center;font-weight:800;padding:3px 5px">${v}</th>` +
+    RD_CRIB[v].map(code => { const face = code.slice(-1) === "F", e = code.slice(0, -1);
+      return `<td style="background:${face ? "#111" : "#fff"};color:${face ? "#fff" : "#000"};border:1px solid #555;text-align:center;font-weight:800;padding:4px 0">${e === "-" ? "&ndash;" : e}</td>`;
+    }).join("") + `</tr>`).join("");
+  const cribTable = `<table style="border-collapse:collapse;width:100%;table-layout:fixed;font-size:15px;margin-top:8px">`
+    + `<thead><tr><th></th><th style="font-size:17px;padding:2px 0">&#9827;</th><th style="font-size:17px;color:var(--red)">&#9829;</th><th style="font-size:17px">&#9824;</th><th style="font-size:17px;color:var(--red)">&#9830;</th></tr></thead>`
+    + `<tbody>${cribBody}</tbody></table>`;
+  const spellSection =
+      '<div class="set-group"><details class="instr"><summary class="set-label">Spelling trick + crib</summary><div class="instr-body">'
+    + '<p><b>Effect:</b> a spectator names any card, spells &ldquo;THE&nbsp;<i>value</i>&nbsp;OF&nbsp;<i>suit</i>&rdquo; one card per letter, and their card lands on the last letter.</p>'
+    + '<p><b>Demo:</b> spell THE&nbsp;NINE&nbsp;OF&nbsp;DIAMONDS face-up into four word-piles &mdash; <b>1</b>&nbsp;THE (3), <b>2</b>&nbsp;value (4), <b>3</b>&nbsp;OF (2), <b>4</b>&nbsp;suit (8). 17 dealt, 35 remain in hand. (Any 4-letter value works if you pad the suit pile to 8.)</p>'
+    + '<p><b>Reading the crib:</b> the cell colour is the deal direction &mdash; <b>white = spectator deals from the TOP</b>, <b>black = from the FACE</b>.</p>'
+    + '<ol><li><b>&ndash;</b> &mdash; hand over the 35-card remainder (no pickup).</li>'
+    + '<li><b>One number X</b> &mdash; gather all four piles in the cycle 4&middot;3&middot;2&middot;1 starting at X, then drop the whole packet on <b>top</b> (white) or the <b>face</b> (black).</li>'
+    + '<li><b>Two numbers XY</b> &mdash; cycle from X, then split <b>before Y</b>: piles before Y go on <b>top</b>, Y and everything after go on the <b>face</b>.</li></ol>'
+    + '<p class="instr-h">Crib &mdash; value &times; suit</p>'
+    + cribTable
+    + '</div></details></div>';
   $("settingsBody").innerHTML =
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
@@ -1938,7 +1964,8 @@ function renderSettings() {
     + '</div></div>'
     + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The full 52-card stack is listed below. Set aside the <b>2 jokers</b> and the <b>4 aces</b> (highlighted) in two face-up piles, leaving the 48-card ACAAN stack &mdash; which is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
     + instr
-    + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers). The aces are placed here for an upcoming spelling mode.</div></div>`;
+    + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers). The aces are placed here for an upcoming spelling mode.</div></div>`
+    + spellSection;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
