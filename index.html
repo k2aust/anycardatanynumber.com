@@ -449,6 +449,41 @@
   <div id="camExit"></div>
 </section>
 
+<style>
+#spellScreen{ display:none; }
+#spellScreen .sp-wrap{ max-width:480px; margin:0 auto; padding:12px 14px 60px; width:100%; box-sizing:border-box; }
+#spellScreen .btnrow{ margin-bottom:4px; }
+.sp-h1{ font-size:14px; letter-spacing:1.5px; color:var(--gold); text-transform:uppercase; margin:6px 0 4px; text-align:center; }
+.sp-lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:13px 0 5px; }
+.sp-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+.sp-suits{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.sp-btn{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:10px; padding:13px 0; font-size:18px; font-weight:800; cursor:pointer; }
+.sp-btn.red{ color:var(--red); }
+.sp-btn.active{ background:var(--gold); color:#000; border-color:var(--gold); }
+.sp-out{ margin-top:16px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+.sp-name{ font-size:15px; font-weight:700; color:var(--gold); margin-bottom:9px; }
+.sp-badge{ display:inline-block; font-size:11px; font-weight:800; padding:2px 7px; border-radius:6px; vertical-align:1px; margin-left:2px; }
+.sp-badge.t{ background:#fff; color:#000; }
+.sp-badge.f{ background:#111; color:#fff; border:1px solid #666; }
+.sp-steps{ margin:12px 0 0; padding:0; list-style:none; counter-reset:sp; }
+.sp-steps li{ counter-increment:sp; position:relative; padding:8px 0 8px 26px; border-bottom:1px solid var(--line); font-size:14px; line-height:1.45; color:var(--dim); }
+.sp-steps li:last-child{ border-bottom:none; }
+.sp-steps li::before{ content:counter(sp); position:absolute; left:0; top:8px; color:var(--gold); font-weight:800; }
+.sp-steps b{ color:var(--text); }
+</style>
+<section id="spellScreen" style="display:none">
+  <div class="sp-wrap">
+    <div class="btnrow"><button id="spellBack">&#10094; Back</button></div>
+    <div class="sp-h1">Spell to Any Card</div>
+    <p class="hint" style="margin:0">Demo: spell <b>THE NINE OF DIAMONDS</b> face-up into piles <b>3&middot;4&middot;2&middot;8</b> (THE / value / OF / suit). Then tap the card they named.</p>
+    <div class="sp-lbl">Value</div>
+    <div class="sp-grid" id="spVals"></div>
+    <div class="sp-lbl">Suit</div>
+    <div class="sp-suits" id="spSuits"></div>
+    <div id="spOut" class="sp-out" style="display:none"></div>
+  </div>
+</section>
+
 <script>
 /*ENGINE-START*/
 const STACKS = {
@@ -1891,6 +1926,61 @@ function moveMethod(k, dir) {
   saveSettings(); renderSettings();
 }
 
+/* ---- Spelling-trick crib + magician spelling mode (RD_CRIB shared with settings) ---- */
+const RD_CRIB = {
+  "A":["1F","23F","2T","24F"], "2":["-T","-F","3T","42T"], "3":["14F","31T","23T","-T"], "4":["4F","2T","31F","31T"],
+  "5":["4T","4F","-F","42T"], "6":["1T","-T","1T","42F"], "7":["-T","-T","1T","23T"], "8":["1T","41T","13T","31F"],
+  "9":["43F","13T","42F","-T"], "10":["31F","1F","41F","4T"], "J":["12F","4T","31T","12F"], "Q":["1F","-F","2T","32F"],
+  "K":["32T","24T","3T","-F"],
+};
+const RD_SP_SUITS = ["C","H","S","D"];
+const RD_SP_SYM = { C:"&#9827;", H:"&#9829;", S:"&#9824;", D:"&#9830;" };
+const RD_SP_VL = { A:3,"2":3,"3":5,"4":4,"5":4,"6":3,"7":5,"8":5,"9":4,"10":3,J:4,Q:5,K:4 };
+const RD_SP_SL = { C:5,H:6,S:6,D:8 };
+const RD_SP_VN = { A:"Ace","2":"Two","3":"Three","4":"Four","5":"Five","6":"Six","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
+const RD_SP_SN = { C:"Clubs",H:"Hearts",S:"Spades",D:"Diamonds" };
+function rdCyc(X){ const b=[4,3,2,1], i=b.indexOf(X); return b.slice(i).concat(b.slice(0,i)); }
+function rdSpellHandling(val, suit){
+  const idx = RD_SP_SUITS.indexOf(suit);
+  const code = RD_CRIB[val][idx], face = code.slice(-1) === "F", entry = code.slice(0, -1);
+  const L = 3 + RD_SP_VL[val] + 2 + RD_SP_SL[suit], dealFrom = face ? "FACE" : "TOP", steps = [];
+  if (entry === "-") {
+    steps.push("Set the four dealt piles aside &mdash; hand over just the <b>remainder</b> (the 35 undealt cards).");
+  } else if (entry.length === 1) {
+    const seq = rdCyc(+entry);
+    steps.push(`Gather all four piles in the order <b>${seq.join("&middot;")}</b>, then drop the whole packet on the <b>${dealFrom}</b> of the remainder.`);
+  } else {
+    const seq = rdCyc(+entry[0]), i = seq.indexOf(+entry[1]), top = seq.slice(0, i), fc = seq.slice(i);
+    steps.push(`Place pile${top.length>1?"s":""} <b>${top.join("&middot;")}</b> on the <b>TOP</b> of the remainder.`);
+    steps.push(`Then pick up pile${fc.length>1?"s":""} <b>${fc.join("&middot;")}</b> and set the deck on top (they end on the <b>FACE</b>).`);
+  }
+  steps.push(`Hand it over &mdash; they spell <b>THE ${val==="10"?"TEN":RD_SP_VN[val].toUpperCase()} OF ${RD_SP_SN[suit].toUpperCase()}</b> (${L} cards) dealing from the <b>${dealFrom}</b>. Their card is the last one.`);
+  return { code: entry === "-" ? "&ndash;" : entry, face, steps };
+}
+let spVal = null, spSuit = null;
+function spellRender(){
+  const vg = $("spVals"); if (!vg) return;
+  const VALS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+  vg.innerHTML = VALS.map(v => `<button class="sp-btn${v===spVal?" active":""}" data-v="${v}">${v}</button>`).join("");
+  $("spSuits").innerHTML = RD_SP_SUITS.map(s => { const red = s==="H"||s==="D";
+    return `<button class="sp-btn${red?" red":""}${s===spSuit?" active":""}" data-s="${s}">${RD_SP_SYM[s]}</button>`; }).join("");
+  const out = $("spOut");
+  if (spVal && spSuit) {
+    const h = rdSpellHandling(spVal, spSuit);
+    const badge = h.face ? '<span class="sp-badge f">DEAL FROM FACE</span>' : '<span class="sp-badge t">DEAL FROM TOP</span>';
+    out.innerHTML = `<div class="sp-name">The ${RD_SP_VN[spVal]} of ${RD_SP_SN[spSuit]} &nbsp;&middot;&nbsp; crib <b>${h.code}</b> ${badge}</div>`
+      + `<ol class="sp-steps">${h.steps.map(s => `<li>${s}</li>`).join("")}</ol>`;
+    out.style.display = "block";
+  } else out.style.display = "none";
+}
+function spellOpen(){
+  $("settings").style.display = "none"; $("ddScreen").style.display = "none";
+  const cs = $("camScreen"); if (cs) cs.style.display = "none";
+  const ls = $("lockScreen"); if (ls) ls.style.display = "none";
+  const ap = $("app"); if (ap) ap.style.display = "none";
+  $("spellScreen").style.display = "block";
+  spVal = null; spSuit = null; spellRender();
+}
 function renderSettings() {
   // v2: only the camera view + the new-stack setup/reference are exposed.
   const sg = stackForSettings || [], sgH = Math.floor(sg.length / 2);
@@ -1924,13 +2014,6 @@ function renderSettings() {
     + '<p class="instr-h">Coded Language Key</p>'
     + '<ol><li>Hold = Cut</li><li>Every card = add jokers</li><li>All the cards = add aces</li><li>Each and every card = add jokers and aces</li><li>In the hands = Their card will be the next card</li></ol>'
     + '</div></details></div>';
-  // ---- Spelling trick reference + crib (for the upcoming spelling mode) ----
-  const RD_CRIB = {
-    "A":["1F","23F","2T","24F"], "2":["-T","-F","3T","42T"], "3":["14F","31T","23T","-T"], "4":["4F","2T","31F","31T"],
-    "5":["4T","4F","-F","42T"], "6":["1T","-T","1T","42F"], "7":["-T","-T","1T","23T"], "8":["1T","41T","13T","31F"],
-    "9":["43F","13T","42F","-T"], "10":["31F","1F","41F","4T"], "J":["12F","4T","31T","12F"], "Q":["1F","-F","2T","32F"],
-    "K":["32T","24T","3T","-F"],
-  };
   const cribBody = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"].map(v =>
     `<tr><th style="background:var(--panel2);text-align:center;font-weight:800;padding:3px 5px">${v}</th>` +
     RD_CRIB[v].map(code => { const face = code.slice(-1) === "F", e = code.slice(0, -1);
@@ -1953,6 +2036,7 @@ function renderSettings() {
   $("settingsBody").innerHTML =
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
+    + '<button id="setOpenSpell" class="randombtn" style="margin:0 0 12px">&#128172; Spelling mode</button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -1968,6 +2052,7 @@ function renderSettings() {
     + spellSection;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
+  $("setOpenSpell").addEventListener("click", () => { $("settings").style.display = "none"; spellOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
@@ -2058,6 +2143,9 @@ function renderSettings() {
 
 $("gearBtn").addEventListener("click", () => { renderSettings(); $("ddScreen").style.display = "none"; $("camScreen").style.display = "none"; $("settings").style.display = "block"; });
 $("closeSettings").addEventListener("click", () => { $("settings").style.display = "none"; $("ddScreen").style.display = "flex"; if (ddRerender) ddRerender(); });
+$("spVals").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; spVal = b.dataset.v; spellRender(); });
+$("spSuits").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; spSuit = b.dataset.s; spellRender(); });
+$("spellBack").addEventListener("click", () => { $("spellScreen").style.display = "none"; renderSettings(); $("settings").style.display = "block"; });
 $("resetSettings").addEventListener("click", () => { settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); });
 $("editBtn").addEventListener("click", () => { state.step = 0; render(); });
 $("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null }; fumble = null; render(); });
