@@ -1897,6 +1897,14 @@ function renderSettings() {
   const grid = sg.map(c => {
     const red = /[HD]$/.test(c); return `<span class="cd" style="${red ? "color:var(--red)" : ""}">${c}</span>`;
   }).join("");
+  // full 52-card order with aces highlighted (the cards to pull before the ACAAN)
+  const fsg = fullStackForSettings || sg;
+  const fgrid = fsg.map(c => {
+    const red = /[HD]$/.test(c), ace = /^A[HDSC]$/.test(c);
+    const st = ace ? "background:var(--gold);color:#000;border-radius:3px;padding:0 3px;font-weight:800"
+                   : (red ? "color:var(--red)" : "");
+    return `<span class="cd" style="${st}">${c}</span>`;
+  }).join("");
   const instr = '<div class="set-group"><details class="instr"><summary class="set-label">Instructions</summary><div class="instr-body">'
     + '<p><b>Setup:</b> Cards are in stack order (listed below); the jokers and aces are set aside. This works perfectly if you just performed a trick with the jokers, or you can remove them to demonstrate how to hold the cards.</p>'
     + '<p class="instr-h">Procedure</p><ol>'
@@ -1928,9 +1936,9 @@ function renderSettings() {
     +   '<button class="segopt' + (chimeEnabled ? ' active' : '') + '" data-v="1">On<small>bell on reveal</small></button>'
     +   '<button class="segopt' + (chimeEnabled ? '' : ' active') + '" data-v="0">Off</button>'
     + '</div></div>'
-    + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The <b>2 jokers</b> and <b>4 aces</b> are set aside in two face-up piles. The rest of the deck is the pre-arranged stack listed below. The deck is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
+    + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The full 52-card stack is listed below. Set aside the <b>2 jokers</b> and the <b>4 aces</b> (highlighted) in two face-up piles, leaving the 48-card ACAAN stack &mdash; which is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
     + instr
-    + `<div class="set-group"><div class="set-label">Dealing stack &mdash; 48 cards (top &rarr; bottom)</div><div class="stackgrid">${grid}</div></div>`;
+    + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers). The aces are placed here for an upcoming spelling mode.</div></div>`;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
@@ -2074,7 +2082,8 @@ let rdScheme = "highlow";  // single steering scheme (shared with the tool IIFE)
 let rdSetScheme = null; // set by the tool's IIFE; switches scheme + resets the flow
 let chimeEnabled = localStorage.getItem("rdChime") !== "0";   // reveal bell (elimination mode), on by default
 let rdChime = null;     // set by the tool's IIFE; plays the reveal bell (used for the settings preview)
-let stackForSettings = null;  // the dealing stack, exposed to the settings panel
+let stackForSettings = null;  // the dealing stack (48, aces/jokers out), exposed to the settings panel
+let fullStackForSettings = null;  // the full 52-card order WITH aces in place (for the settings reference display)
 let selectMode = localStorage.getItem("rdSelectMode") === "1";  // false = removing (eliminate), true = selecting (tap the value)
 let noDL = localStorage.getItem("rdNoDL") === "1";              // true = limit selections that would require a double lift
 // Title shows a trailing "." in Selection mode so you can tell the mode at a glance.
@@ -2227,6 +2236,8 @@ const RD_SCHEMES = {
     stack: ["QC","10D","JH","5C","7S","8C","6S","6C","QS","4H","KS","2S","4C","5H","10H","3S","8H","7D","9H","8S","2D","5D","KH","JS","3H","4D","KC","2C","6H","7C","7H","9D","3D","KD","QH","5S","2H","JD","10S","JC","6D","9S","8D","9C","4S","QD","10C","3C"],
     // FALLBACK — previous live stack (restore by pasting this array into `stack:` above if the new one misbehaves):
     // ["KH","4D","JC","4C","7H","7C","9D","7S","10H","4H","5S","QS","2D","2S","QH","10S","8S","8H","8D","9H","2H","5C","3S","10D","10C","KS","3H","5H","6H","9S","7D","9C","JH","3C","3D","5D","4S","JS","KC","KD","6C","6D","8C","6S","QC","2C","QD","JD"],
+    // Full 52-card order WITH the 4 aces in place (spelling order). Display/reference only — the ACAAN engine uses `stack` (aces removed). Remove the aces before performing the ACAAN. Aces sit at positions 11, 16, 41, 47.
+    full: ["QC","10D","JH","5C","7S","8C","6S","6C","QS","4H","AS","KS","2S","4C","5H","AC","10H","3S","8H","7D","9H","8S","2D","5D","KH","JS","3H","4D","KC","2C","6H","7C","7H","9D","3D","KD","QH","5S","2H","JD","AH","10S","JC","6D","9S","8D","AD","9C","4S","QD","10C","3C"],
     lo: 4, hi: 50, kindStep: false,
     low: ["2","3","4","5"], lowMid: ["6","7"], high: ["10","J","Q","K"], highMid: ["9","8"],
     mid: ["6","7","8","9"],
@@ -2243,6 +2254,7 @@ function rdApplyScheme(name){
   RD_L0 = RD_STACK.length; RD_HALF = Math.floor(RD_L0/2);
   RD_POS = {}; RD_STACK.forEach((cc,i) => RD_POS[cc] = i+1);   // 1-based base position
   stackForSettings = RD_STACK;
+  fullStackForSettings = c.full || RD_STACK;   // 52-card order with aces, for the settings reference
 }
 rdApplyScheme(rdScheme);
 rdSetScheme = name => { rdApplyScheme(name); rdResetState(); rdRender(); };   // bridge for the settings toggle (outer scope)
