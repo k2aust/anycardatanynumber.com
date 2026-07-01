@@ -2432,7 +2432,7 @@ function rdResolve(card, N){
     }
   }
   if (!c.length) return null;
-  c.sort((a,b) => (a.tier-b.tier) || (a.packet-b.packet) || ((a.cut?1:0)-(b.cut?1:0)) || ((a.end==="top"?0:1)-(b.end==="top"?0:1)));
+  c.sort((a,b) => (a.tier-b.tier) || (a.packet-b.packet) || ((a.end==="face"?0:1)-(b.end==="face"?0:1)) || ((a.method==="next"?0:1)-(b.method==="next"?0:1)) || ((a.cut?1:0)-(b.cut?1:0)));   // prefer: add-nothing, then FACE + NEXT-card, then no-cut
   return c[0];
 }
 // suit selection: color "red"|"black" -> { suits:[left,right], force, anySuit, out }. Forced (better) suit LEFT.
