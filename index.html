@@ -476,7 +476,7 @@
 #trainScreen .tr-wrap{ max-width:480px; margin:0 auto; padding:12px 14px 60px; width:100%; box-sizing:border-box; }
 #trainScreen .btnrow{ margin-bottom:4px; }
 .tr-h1{ font-size:14px; letter-spacing:1.5px; color:var(--gold); text-transform:uppercase; margin:6px 0 12px; text-align:center; }
-.tr-modes{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:12px; }
+.tr-modes{ display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:12px; }
 .tr-mode{ background:var(--panel2); border:1px solid var(--line); color:var(--dim); border-radius:10px; padding:10px 4px; font-size:12.5px; font-weight:700; cursor:pointer; line-height:1.2; }
 .tr-mode.active{ background:var(--gold); color:#000; border-color:var(--gold); }
 .tr-score{ display:flex; justify-content:center; gap:18px; font-size:13px; color:var(--dim); margin-bottom:10px; }
@@ -509,6 +509,12 @@
 .tr-prog .slot.now{ border-color:var(--gold); border-style:solid; }
 .tr-shake{ animation:trShake .3s; }
 @keyframes trShake{ 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
+.tr-view{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px 6px; margin-top:6px; }
+.tr-view .cell{ display:flex; flex-direction:column; align-items:center; gap:3px; }
+.tr-view .cell .pos{ font-size:12px; font-weight:800; color:var(--gold); }
+.tr-view .cell img{ width:100%; height:auto; border-radius:3px; filter:drop-shadow(1px 1px 2px rgba(0,0,0,.5)); }
+.tr-view .cell .nm{ font-size:11px; color:var(--dim); }
+.tr-view .cell .nm.red{ color:var(--red); }
 </style>
 <section id="spellScreen" style="display:none">
   <div class="sp-wrap">
@@ -531,6 +537,7 @@
       <button class="tr-mode active" data-m="c2n">Card&nbsp;&rarr;&nbsp;Number</button>
       <button class="tr-mode" data-m="n2c">Number&nbsp;&rarr;&nbsp;Card</button>
       <button class="tr-mode" data-m="order">In&nbsp;Order</button>
+      <button class="tr-mode" data-m="view">View&nbsp;Stack</button>
     </div>
     <div class="tr-score" id="trScore"></div>
     <div class="tr-stage" id="trStage"></div>
@@ -2225,7 +2232,9 @@ let trainOpen;
   };
 
   function renderScore(){
-    if (mode === "order"){
+    if (mode === "view"){
+      $("trScore").innerHTML = `<div><b>${stack().length}</b> cards &mdash; top &rarr; bottom</div>`;
+    } else if (mode === "order"){
       $("trScore").innerHTML = `<div>Position <b>${Math.min(orderIdx+1,52)}</b>/52</div><div>Streak <b>${streak}</b></div>`;
     } else {
       $("trScore").innerHTML = `<div>Streak <b>${streak}</b></div><div>Best <b>${best}</b></div>`;
@@ -2240,9 +2249,21 @@ let trainOpen;
 
   function next(){
     locked = false; entry = ""; pendVal = null; pendSuit = null;
-    if (mode === "order"){ renderOrder(); }
+    if (mode === "view"){ renderView(); }
+    else if (mode === "order"){ renderOrder(); }
     else { cur = pick(); mode === "c2n" ? renderC2N() : renderN2C(); }
     renderScore();
+  }
+
+  // ---- View Stack (reference) ----
+  function renderView(){
+    const cells = stack().map((c,i)=>
+      `<div class="cell"><span class="pos">${i+1}</span>`
+      + `<img src="cards/${c}.png" alt="${label(c)}" loading="lazy">`
+      + `<span class="nm${isRed(c)?' red':''}">${label(c)}</span></div>`).join("");
+    $("trStage").innerHTML =
+        `<div class="tr-prompt">Your full stack in order. Set the jokers &amp; aces aside to perform.</div>`
+      + `<div class="tr-view">${cells}</div>`;
   }
 
   // ---- Card -> Number ----
