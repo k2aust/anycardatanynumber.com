@@ -470,6 +470,45 @@
 .sp-steps li:last-child{ border-bottom:none; }
 .sp-steps li::before{ content:counter(sp); position:absolute; left:0; top:8px; color:var(--gold); font-weight:800; }
 .sp-steps b{ color:var(--text); }
+
+/* ---- Stack Trainer (flash cards) ---- */
+#trainScreen{ display:none; }
+#trainScreen .tr-wrap{ max-width:480px; margin:0 auto; padding:12px 14px 60px; width:100%; box-sizing:border-box; }
+#trainScreen .btnrow{ margin-bottom:4px; }
+.tr-h1{ font-size:14px; letter-spacing:1.5px; color:var(--gold); text-transform:uppercase; margin:6px 0 12px; text-align:center; }
+.tr-modes{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:12px; }
+.tr-mode{ background:var(--panel2); border:1px solid var(--line); color:var(--dim); border-radius:10px; padding:10px 4px; font-size:12.5px; font-weight:700; cursor:pointer; line-height:1.2; }
+.tr-mode.active{ background:var(--gold); color:#000; border-color:var(--gold); }
+.tr-score{ display:flex; justify-content:center; gap:18px; font-size:13px; color:var(--dim); margin-bottom:10px; }
+.tr-score b{ color:var(--gold); font-size:16px; }
+.tr-prompt{ text-align:center; font-size:13px; color:var(--dim); margin:2px 0 10px; }
+.tr-card{ display:block; height:170px; width:auto; margin:0 auto 6px; filter:drop-shadow(1px 2px 4px rgba(0,0,0,.5)); }
+.tr-num{ text-align:center; font-size:76px; font-weight:800; color:var(--text); line-height:1.1; margin:8px 0 4px; }
+.tr-entry{ text-align:center; font-size:40px; font-weight:800; letter-spacing:3px; min-height:50px; color:var(--gold); }
+.tr-entry .ph{ color:var(--line); }
+.tr-pad{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-width:300px; margin:8px auto 0; }
+.tr-key{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:12px; padding:16px 0; font-size:24px; font-weight:800; cursor:pointer; }
+.tr-key:active{ border-color:var(--gold); }
+.tr-key.go{ background:var(--gold); color:#000; border-color:var(--gold); }
+.tr-key.del{ color:var(--red); }
+.tr-lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:14px 0 5px; text-align:center; }
+.tr-vals{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+.tr-suits{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:6px; }
+.tr-btn{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:10px; padding:13px 0; font-size:18px; font-weight:800; cursor:pointer; }
+.tr-btn.red{ color:var(--red); }
+.tr-btn.active{ background:var(--gold); color:#000; border-color:var(--gold); }
+.tr-feed{ text-align:center; font-size:19px; font-weight:800; min-height:26px; margin:12px 0 2px; }
+.tr-feed.ok{ color:#37d67a; }
+.tr-feed.no{ color:var(--red); }
+.tr-feed .ans{ color:var(--text); font-weight:700; }
+.tr-actions{ display:flex; justify-content:center; gap:10px; margin-top:10px; }
+.tr-mini{ background:none; border:none; color:var(--dim); font-size:13px; text-decoration:underline; cursor:pointer; padding:6px; }
+.tr-prog{ display:flex; flex-wrap:wrap; gap:3px; justify-content:center; margin-top:12px; }
+.tr-prog img{ height:34px; width:auto; border-radius:2px; }
+.tr-prog .slot{ height:34px; width:24px; border:1px dashed var(--line); border-radius:3px; }
+.tr-prog .slot.now{ border-color:var(--gold); border-style:solid; }
+.tr-shake{ animation:trShake .3s; }
+@keyframes trShake{ 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
 </style>
 <section id="spellScreen" style="display:none">
   <div class="sp-wrap">
@@ -481,6 +520,20 @@
     <div class="sp-lbl">Suit</div>
     <div class="sp-suits" id="spSuits"></div>
     <div id="spOut" class="sp-out" style="display:none"></div>
+  </div>
+</section>
+
+<section id="trainScreen" style="display:none">
+  <div class="tr-wrap">
+    <div class="btnrow"><button id="trainBack">&#10094; Back</button></div>
+    <div class="tr-h1">Learn My Stack</div>
+    <div class="tr-modes" id="trModes">
+      <button class="tr-mode active" data-m="c2n">Card&nbsp;&rarr;&nbsp;Number</button>
+      <button class="tr-mode" data-m="n2c">Number&nbsp;&rarr;&nbsp;Card</button>
+      <button class="tr-mode" data-m="order">In&nbsp;Order</button>
+    </div>
+    <div class="tr-score" id="trScore"></div>
+    <div class="tr-stage" id="trStage"></div>
   </div>
 </section>
 
@@ -2037,6 +2090,7 @@ function renderSettings() {
       '<button id="setExitMagician" class="randombtn" style="margin:0 0 14px;background:var(--gold);color:#000;border-color:var(--gold);font-weight:700">&#10094; Return to Spectator Mode</button>'
     + '<button id="setOpenCam" class="randombtn" style="margin:8px 0 12px">&#128247; Camera ACAAN (record)</button>'
     + '<button id="setOpenSpell" class="randombtn" style="margin:0 0 12px">&#128172; Spelling mode</button>'
+    + '<button id="setOpenTrain" class="randombtn" style="margin:0 0 12px">&#127183; Learn my stack (flash cards)</button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -2053,6 +2107,7 @@ function renderSettings() {
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("setOpenSpell").addEventListener("click", () => { $("settings").style.display = "none"; spellOpen(); });
+  $("setOpenTrain").addEventListener("click", () => { $("settings").style.display = "none"; trainOpen(); });
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
@@ -2145,7 +2200,172 @@ $("gearBtn").addEventListener("click", () => { renderSettings(); $("ddScreen").s
 $("closeSettings").addEventListener("click", () => { $("settings").style.display = "none"; $("ddScreen").style.display = "flex"; if (ddRerender) ddRerender(); });
 $("spVals").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; spVal = b.dataset.v; spellRender(); });
 $("spSuits").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; spSuit = b.dataset.s; spellRender(); });
+/* ===== Stack Trainer (flash cards) — teaches the app's live 52-card stack ===== */
+let trainOpen;
+(function(){
+  const VALS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+  const SUITS = [["C","♣",0],["H","♥",1],["S","♠",0],["D","♦",1]]; // code, symbol, isRed
+  const stack = () => fullStackForSettings || (RD_SCHEMES.highlow.full);   // 52 cards, position = index+1
+  const label = code => { const m = code.match(/^(10|[2-9AJQK])([CHSD])$/); return m ? m[1] + SUITS.find(s=>s[0]===m[2])[1] : code; };
+  const isRed = code => /[HD]$/.test(code);
+
+  let mode = "c2n", streak = 0, best = 0;
+  let cur = null;          // current {pos, card}
+  let entry = "";          // numeric entry (c2n)
+  let pendVal = null, pendSuit = null; // card entry (n2c / order)
+  let orderIdx = 0;        // 0-based position pointer for order mode
+  let locked = false;      // true while showing feedback / awaiting Next
+
+  trainOpen = function(){
+    $("app").style.display = "none"; $("settings").style.display = "none";
+    $("ddScreen").style.display = "none"; $("spellScreen").style.display = "none";
+    $("trainScreen").style.display = "block";
+    streak = 0; best = 0; orderIdx = 0;
+    next(); renderScore();
+  };
+
+  function renderScore(){
+    if (mode === "order"){
+      $("trScore").innerHTML = `<div>Position <b>${Math.min(orderIdx+1,52)}</b>/52</div><div>Streak <b>${streak}</b></div>`;
+    } else {
+      $("trScore").innerHTML = `<div>Streak <b>${streak}</b></div><div>Best <b>${best}</b></div>`;
+    }
+  }
+
+  function pick(){ // random position, avoid repeating the current one
+    const n = stack().length; let p;
+    do { p = Math.floor(Math.random()*n)+1; } while (n > 1 && cur && p === cur.pos);
+    return { pos: p, card: stack()[p-1] };
+  }
+
+  function next(){
+    locked = false; entry = ""; pendVal = null; pendSuit = null;
+    if (mode === "order"){ renderOrder(); }
+    else { cur = pick(); mode === "c2n" ? renderC2N() : renderN2C(); }
+    renderScore();
+  }
+
+  // ---- Card -> Number ----
+  function renderC2N(){
+    const pad = [7,8,9,4,5,6,1,2,3].map(d=>`<button class="tr-key" data-d="${d}">${d}</button>`).join("")
+      + `<button class="tr-key del" data-act="del">&#9003;</button>`
+      + `<button class="tr-key" data-d="0">0</button>`
+      + `<button class="tr-key go" data-act="go">&#10003;</button>`;
+    $("trStage").innerHTML =
+        `<div class="tr-prompt">What is this card's stack number?</div>`
+      + `<img class="tr-card" src="cards/${cur.card}.png" alt="${label(cur.card)}">`
+      + `<div class="tr-entry" id="trEntry"><span class="ph">&ndash;&ndash;</span></div>`
+      + `<div class="tr-pad" id="trPad">${pad}</div>`
+      + `<div class="tr-feed" id="trFeed"></div>`;
+    $("trPad").addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b || locked) return;
+      if (b.dataset.act === "del"){ entry = entry.slice(0,-1); }
+      else if (b.dataset.act === "go"){ if (entry) submitNum(); return; }
+      else if (entry.length < 2){ entry += b.dataset.d; }
+      drawEntry();
+      if (entry.length === 2 || (entry.length === 1 && +entry > 5)) submitNum();
+    });
+  }
+  function drawEntry(){ const el = $("trEntry"); if (el) el.innerHTML = entry || '<span class="ph">&ndash;&ndash;</span>'; }
+  function submitNum(){
+    const guess = +entry;
+    if (guess === cur.pos) good(`Correct &mdash; ${label(cur.card)} is <span class="ans">${cur.pos}</span>`);
+    else bad(`${label(cur.card)} is <span class="ans">${cur.pos}</span>, not ${guess}`);
+  }
+
+  // ---- Number -> Card ----  &  shared card-entry grid
+  function cardGrid(){
+    const vals = VALS.map(v=>`<button class="tr-btn" data-v="${v}">${v}</button>`).join("");
+    const suits = SUITS.map(([c,sym,red])=>`<button class="tr-btn ${red?'red':''}" data-s="${c}">${sym}</button>`).join("");
+    return `<div class="tr-lbl">Value</div><div class="tr-vals" id="trVals">${vals}</div>`
+         + `<div class="tr-lbl">Suit</div><div class="tr-suits" id="trSuits">${suits}</div>`;
+  }
+  function wireCardGrid(onComplete){
+    const hi = () => {
+      $("trVals").querySelectorAll(".tr-btn").forEach(b=>b.classList.toggle("active", b.dataset.v===pendVal));
+      $("trSuits").querySelectorAll(".tr-btn").forEach(b=>b.classList.toggle("active", b.dataset.s===pendSuit));
+    };
+    $("trVals").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b||locked)return; pendVal=b.dataset.v; hi(); if(pendSuit) onComplete(pendVal+pendSuit); });
+    $("trSuits").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b||locked)return; pendSuit=b.dataset.s; hi(); if(pendVal) onComplete(pendVal+pendSuit); });
+  }
+  function renderN2C(){
+    $("trStage").innerHTML =
+        `<div class="tr-prompt">Which card is at this stack number?</div>`
+      + `<div class="tr-num">${cur.pos}</div>`
+      + cardGrid()
+      + `<div class="tr-feed" id="trFeed"></div>`;
+    wireCardGrid(guess => {
+      if (guess === cur.card) good(`Correct &mdash; <span class="ans">${label(cur.card)}</span> is ${cur.pos}`);
+      else bad(`${cur.pos} is <span class="ans">${label(cur.card)}</span>, not ${label(guess)}`);
+    });
+  }
+
+  // ---- In Order ----
+  function renderOrder(){
+    const S = stack();
+    if (orderIdx >= S.length){ renderOrderDone(); return; }
+    const placed = S.slice(0, orderIdx).map(c=>`<img src="cards/${c}.png" alt="${label(c)}">`).join("")
+      + `<div class="slot now"></div>`
+      + S.slice(orderIdx+1).map(()=>`<div class="slot"></div>`).join("");
+    $("trStage").innerHTML =
+        `<div class="tr-prompt">Enter the card at position <b style="color:var(--gold)">${orderIdx+1}</b></div>`
+      + cardGrid()
+      + `<div class="tr-feed" id="trFeed"></div>`
+      + `<div class="tr-prog">${placed}</div>`;
+    wireCardGrid(guess => {
+      const want = S[orderIdx];
+      if (guess === want){
+        streak++; orderIdx++;
+        $("trFeed").className = "tr-feed ok"; $("trFeed").innerHTML = `&#10003; ${label(want)}`;
+        locked = true; renderScore();
+        setTimeout(()=>{ locked=false; pendVal=null; pendSuit=null; renderOrder(); renderScore(); }, 260);
+      } else {
+        streak = 0; renderScore();
+        bad(`Position ${orderIdx+1} is <span class="ans">${label(want)}</span>, not ${label(guess)}`, true);
+      }
+    });
+  }
+  function renderOrderDone(){
+    $("trStage").innerHTML =
+        `<div class="tr-feed ok" style="font-size:24px">&#127881; You ran the whole stack!</div>`
+      + `<div class="tr-prompt">All 52 in order, no misses.</div>`
+      + `<div class="tr-actions"><button class="tr-key go" id="trRestart" style="max-width:200px;padding:12px 24px">Again</button></div>`;
+    $("trRestart").addEventListener("click", ()=>{ orderIdx=0; streak=0; next(); });
+  }
+
+  // ---- feedback ----
+  function good(msg){
+    streak++; if (streak > best) best = streak;
+    const f = $("trFeed"); f.className = "tr-feed ok"; f.innerHTML = "&#10003; " + msg;
+    renderScore(); afterAnswer(true);
+  }
+  function bad(msg, retrySame){
+    streak = 0;
+    const f = $("trFeed"); f.className = "tr-feed no"; f.innerHTML = "&#10007; " + msg;
+    const stage = $("trStage"); stage.classList.remove("tr-shake"); void stage.offsetWidth; stage.classList.add("tr-shake");
+    renderScore(); afterAnswer(false, retrySame);
+  }
+  function afterAnswer(ok, retrySame){
+    locked = true;
+    const delay = ok ? 750 : 1400;
+    if (retrySame){ // order mode wrong answer: let them retry the same position
+      setTimeout(()=>{ locked=false; pendVal=null; pendSuit=null; renderOrder(); renderScore(); }, delay);
+    } else {
+      setTimeout(()=>{ if ($("trainScreen").style.display !== "none") next(); }, delay);
+    }
+  }
+
+  // ---- mode switch ----
+  $("trModes").addEventListener("click", e => {
+    const b = e.target.closest(".tr-mode"); if (!b) return;
+    mode = b.dataset.m; streak = 0; best = 0; orderIdx = 0; cur = null;
+    $("trModes").querySelectorAll(".tr-mode").forEach(x=>x.classList.toggle("active", x===b));
+    next();
+  });
+})();
+
 $("spellBack").addEventListener("click", () => { $("spellScreen").style.display = "none"; renderSettings(); $("settings").style.display = "block"; });
+$("trainBack").addEventListener("click", () => { $("trainScreen").style.display = "none"; renderSettings(); $("settings").style.display = "block"; });
 $("resetSettings").addEventListener("click", () => { settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); });
 $("editBtn").addEventListener("click", () => { state.step = 0; render(); });
 $("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null }; fumble = null; render(); });
