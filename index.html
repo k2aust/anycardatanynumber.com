@@ -2801,7 +2801,8 @@ function rdFlowStep(){
     let hintSuit = null;
     if (freeSuit) {
       const o0 = rdResolve(rd.value+r.suits[0], rd.num), o1 = rdResolve(rd.value+r.suits[1], rd.num);
-      if (o0 && o1 && o0.packet !== o1.packet) hintSuit = (o0.packet < o1.packet) ? r.suits[0] : r.suits[1];
+      const z0 = o0 && o0.packet === 0, z1 = o1 && o1.packet === 0;   // only mark when exactly ONE suit is a true add-nothing
+      if (z0 !== z1) hintSuit = z0 ? r.suits[0] : r.suits[1];
     }
     html = r.suits.map(s => {
       const name = rdCardLabel(rd.value+s);
@@ -3075,7 +3076,8 @@ function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title 
     let hintSuit = null;
     if (!r.force) {
       const o0 = rdResolve(camRd.value+r.suits[0], camRd.num), o1 = rdResolve(camRd.value+r.suits[1], camRd.num);
-      if (o0 && o1 && o0.packet !== o1.packet) hintSuit = (o0.packet < o1.packet) ? r.suits[0] : r.suits[1];
+      const z0 = o0 && o0.packet === 0, z1 = o1 && o1.packet === 0;   // only mark when exactly ONE suit is a true add-nothing
+      if (z0 !== z1) hintSuit = z0 ? r.suits[0] : r.suits[1];
     }
     const cof = (fullName, suitLetter) => (suitLetter === hintSuit) ? `${vn} Of ${fullName}` : `${vn} of ${fullName}`;   // capital "Of" = steer here
     const su0L = camRd.color === "red" ? "H" : "S", su1L = camRd.color === "red" ? "D" : "C";
