@@ -2432,8 +2432,16 @@ function rdResolve(card, N){
     }
   }
   if (!c.length) return null;
-  c.sort((a,b) => (a.tier-b.tier) || (a.packet-b.packet) || ((a.end==="face"?0:1)-(b.end==="face"?0:1)) || ((a.method==="next"?0:1)-(b.method==="next"?0:1)) || ((a.cut?1:0)-(b.cut?1:0)));   // prefer: add-nothing, then FACE + NEXT-card, then no-cut
+  c.sort((a,b) => (a.tier-b.tier) || (rdLevel(a)-rdLevel(b)) || ((a.end==="top"?0:1)-(b.end==="top"?0:1)) || ((a.method==="next"?0:1)-(b.method==="next"?0:1)) || ((a.cut?1:0)-(b.cut?1:0)));   // prefer the user's L1..L6 ranking, then face-down(top), then direct, then no-cut
   return c[0];
+}
+// User's ACAAN reveal priority as a 1..6 level (lower = better). Add-order: nothing(0) < aces(4)/both(6) < jokers-only(2);
+// within each add-class the face-DOWN (deal from top) direct hit is best, everything else in that class is tied.
+function rdLevel(o){
+  if (!o) return 99;
+  const addRank = o.packet === 0 ? 0 : (o.packet === 2 ? 2 : 1);       // 0=add nothing, 1=aces or jokers+aces, 2=jokers only
+  const best = (o.end === "top" && o.method === "deal") ? 0 : 1;       // face-down direct hit tops each add-class
+  return addRank * 2 + best;                                           // 0..5  →  Levels 1..6
 }
 // suit selection: color "red"|"black" -> { suits:[left,right], force, anySuit, out }. Forced (better) suit LEFT.
 function rdSuit(value, color, N){
@@ -2445,7 +2453,12 @@ function rdSuit(value, color, N){
   }
   const rank = o => o ? (o.tier === 1 ? 1 : 0) : 2;   // 0 clean, 1 dl, 2 none
   const r0 = rank(o0), r1 = rank(o1);
-  if (r0 === r1) return { suits, force: false, anySuit: r0 < 2, out: o0 || o1 };
+  if (r0 === r1) {
+    // genuine free choice (both same availability): if both clean, steer the better card (lower level) to the LEFT
+    if (r0 === 0 && rdLevel(o1) < rdLevel(o0))
+      return { suits: [suits[1], suits[0]], force: false, anySuit: true, out: o1 };
+    return { suits, force: false, anySuit: r0 < 2, out: o0 || o1 };
+  }
   const leftFirst = r0 < r1;
   return { suits: leftFirst ? [suits[0], suits[1]] : [suits[1], suits[0]], force: true, anySuit: false, out: leftFirst ? o0 : o1 };
 }
