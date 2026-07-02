@@ -2797,9 +2797,16 @@ function rdFlowStep(){
     }).join("");
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num); freeSuit = !r.force;
+    // free choice: secretly flag the cleaner suit (lower packet) by capitalising the "of" in its name
+    let hintSuit = null;
+    if (freeSuit) {
+      const o0 = rdResolve(rd.value+r.suits[0], rd.num), o1 = rdResolve(rd.value+r.suits[1], rd.num);
+      if (o0 && o1 && o0.packet !== o1.packet) hintSuit = (o0.packet < o1.packet) ? r.suits[0] : r.suits[1];
+    }
     html = r.suits.map(s => {
       const name = rdCardLabel(rd.value+s);
-      return `<div class="optcell" data-g="suit" data-v="${s}"><img class="pngcard" src="cards/${rd.value+s}.png" alt="${name}" draggable="false"><div class="optlbl"><span class="cn">${name}</span></div></div>`;
+      const shown = (s === hintSuit) ? name.replace(" of ", " Of ") : name;   // capital "Of" = the cleaner (lower-packet) suit to steer toward
+      return `<div class="optcell" data-g="suit" data-v="${s}"><img class="pngcard" src="cards/${rd.value+s}.png" alt="${name}" draggable="false"><div class="optlbl"><span class="cn">${shown}</span></div></div>`;
     }).join("");
   }
   $("ddCardTitle").className = "";
@@ -3064,11 +3071,19 @@ function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title 
   } else { const r = rdSuit(camRd.value, camRd.color, camRd.num);
     const vn = "JQK".includes(camRd.value) ? CAM_VN[camRd.value] : camRd.value;
     const su = camRd.color === "red" ? ["Hearts","Diamonds"] : ["Spades","Clubs"];
+    // free choice: secretly flag the cleaner suit (lower packet) by capitalising the "of" in its name — same tell as the spectator flow
+    let hintSuit = null;
+    if (!r.force) {
+      const o0 = rdResolve(camRd.value+r.suits[0], camRd.num), o1 = rdResolve(camRd.value+r.suits[1], camRd.num);
+      if (o0 && o1 && o0.packet !== o1.packet) hintSuit = (o0.packet < o1.packet) ? r.suits[0] : r.suits[1];
+    }
+    const cof = (fullName, suitLetter) => (suitLetter === hintSuit) ? `${vn} Of ${fullName}` : `${vn} of ${fullName}`;   // capital "Of" = steer here
+    const su0L = camRd.color === "red" ? "H" : "S", su1L = camRd.color === "red" ? "D" : "C";
     title = r.force
       ? `The ${vn} of ${su[0]} and the ${vn} of ${su[1]}. We started with 52 cards and we're down to 2 — this is your last choice. Imagine you're holding the ${vn} of ${su[0]} and the ${vn} of ${su[1]}; hand me either one… which did you give?`
-      : `Final Decision — do you want the ${vn} of ${su[0]} or the ${vn} of ${su[1]}?`;
+      : `Final Decision — do you want the ${cof(su[0], su0L)} or the ${cof(su[1], su1L)}?`;
     html = r.suits.map(s => { const red = "HD".includes(s);
-      return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${CAM_VN[camRd.value]} of ${CAM_SN[s]}</span><span class="sy${red ? " syr" : ""} sb">${CAM_SS[s]}</span></button>`; }).join("");
+      return `<button data-g="suit" data-v="${s}" class="suit-${s.toLowerCase()}"><span class="cn">${cof(CAM_SN[s], s)}</span><span class="sy${red ? " syr" : ""} sb">${CAM_SS[s]}</span></button>`; }).join("");
   }
   $("camTitle").textContent = title; f.style.gridTemplateColumns = `repeat(${cols},1fr)`; f.innerHTML = html;
 }
