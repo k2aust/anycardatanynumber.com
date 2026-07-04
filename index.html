@@ -3233,8 +3233,50 @@ function lkFetchWeather() {
     .then(r=>r.json()).then(d=>{ lkWeatherTxt = Math.round(d.current.temperature_2m)+"°"; if(!$("lkWeather").classList.contains("u")) $("lkWeather").textContent = lkWeatherTxt; }).catch(()=>{});
   fetch("https://ipapi.co/json/").then(r=>r.json()).then(l=>put(l.latitude,l.longitude)).catch(()=>{});
 }
-function lkShow() { setDeck("gaff"); $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="block"; lkReset(); lkStartClock(); lkFetchWeather(); }
-function lkHide() { $("lockScreen").style.display="none"; lkStopClock(); $("app").style.display="block"; }
+function lkShow() { setDeck("gaff"); $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="block"; lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(false); }
+function lkHide() { $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+
+/* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
+   Feeds the SAME value->color->number pipeline as the on-screen keypad. Read via e.code so it's NumLock-independent
+   (a numpad with NumLock off still reports Numpad7, etc). Stray presses are ignored until ARMED (defeats pocket
+   bumps); auto-disarms 60s after the last press. ARM/CLEAR: numpad "/" or NumLock; gamepad map a button to Esc/Backspace.
+   Numpad: type value (J/Q/K = 11/12/13), + = red / - = black, type number, Enter. Gamepad: Up +1 / Right +2 / Down +5 /
+   Left +10, A/Enter commits; in the colour step Left = black, Right = red. */
+const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Delete"]);
+let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
+function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
+function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
+function lkbtIdleBump(){ if(lkbtIdle) clearTimeout(lkbtIdle); lkbtIdle=setTimeout(()=>lkbtArm(false),60000); }
+function lkbtArm(on){ lkbtActive=on; lkbtAcc=0; lkbtBuf=""; lkbtDone=false; if(on){ lkReset(); lkbtDotSet("armed"); lkbtIdleBump(); } else { lkbtDotSet("idle"); if(lkbtIdle){ clearTimeout(lkbtIdle); lkbtIdle=null; } } }
+function lkbtVal(n){ return n===10?"10":n===11?"J":n===12?"Q":n===13?"K":(n>=2&&n<=9?String(n):null); }
+function lkbtSetValue(n){ const v=lkbtVal(n); if(!v){ lkbtBuf=""; lkbtAcc=0; return; } lkValue=v; lkPhase="color"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
+function lkbtSetColor(c){ if(lkPhase!=="color") return; lkColor=c; lkPhase="number"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
+function lkbtSetNumber(n){ if(n<1||n>52) return; lkNum=String(n); lkbtDone=true; lkRenderDate(); lkbtDotSet("armed"); }
+function lkbtKey(e){
+  if($("lockScreen").style.display==="none") return;
+  const c=e.code;
+  if(LK_ARM_KEYS.has(c)){ e.preventDefault(); if(!lkbtActive){ lkbtArm(true); } else { lkReset(); lkbtAcc=0; lkbtBuf=""; lkbtDone=false; lkbtDotSet("armed"); lkbtIdleBump(); } return; }
+  if(!lkbtActive || lkbtDone) return;
+  lkbtIdleBump();
+  let digit=null;
+  if(/^Numpad[0-9]$/.test(c)) digit=+c.slice(6);
+  else if(/^Digit[0-9]$/.test(c)) digit=+c.slice(5);
+  const inc = c==="ArrowUp"?1 : c==="ArrowRight"?2 : c==="ArrowDown"?5 : c==="ArrowLeft"?10 : null;
+  const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
+  if(lkPhase==="value"){
+    if(digit!==null){ e.preventDefault(); lkbtBuf+=String(digit); if(lkbtBuf!=="1"){ lkbtSetValue(parseInt(lkbtBuf,10)); } lkbtDotSet("hit"); return; }   // "1" waits for a 2nd digit (10-13); 2-9 auto-commit
+    if(inc!==null){ e.preventDefault(); lkbtAcc+=inc; lkValue=lkbtVal(lkbtAcc); lkRenderDate(); lkbtDotSet("hit"); return; }
+    if(commit){ e.preventDefault(); if(lkValue){ lkPhase="color"; lkbtAcc=0; lkbtBuf=""; lkNum=""; lkRenderDate(); } lkbtDotSet("hit"); return; }
+  } else if(lkPhase==="color"){
+    if(c==="NumpadAdd"||c==="ArrowRight"){ e.preventDefault(); lkbtSetColor("red"); lkbtDotSet("hit"); return; }
+    if(c==="NumpadSubtract"||c==="ArrowLeft"){ e.preventDefault(); lkbtSetColor("black"); lkbtDotSet("hit"); return; }
+  } else {
+    if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }
+    if(inc!==null){ e.preventDefault(); lkbtAcc=Math.min(52,lkbtAcc+inc); lkNum=String(lkbtAcc); lkRenderDate(); lkbtDotSet("hit"); return; }
+    if(commit){ e.preventDefault(); const n=lkbtBuf?parseInt(lkbtBuf,10):lkbtAcc; lkbtSetNumber(n); lkbtDotSet("hit"); return; }
+  }
+}
+document.addEventListener("keydown", lkbtKey);
 lkOpen = lkShow;
 
 /* ---- Camera ACAAN (#camScreen): records video while running the real-deck flow ---- */
