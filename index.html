@@ -525,10 +525,14 @@
 .ac-tbl thead th{ border:none; font-size:17px; height:22px; }
 .ac-tbl thead th.r{ color:var(--red); }
 .ac-tbl tbody th{ width:16%; font-size:15px; background:var(--panel2); }
-.ac-tbl td{ background:var(--panel); color:var(--line); font-size:16px; }
-.ac-tbl td.on{ background:#fff; cursor:pointer; }
-.ac-tbl td.on .sy{ color:#111; } .ac-tbl td.on.r .sy{ color:#c00; }
-.ac-tbl td.sel{ outline:3px solid var(--gold); outline-offset:-3px; }
+.ac-tbl td{ background:var(--panel); color:var(--line); font-size:14px; letter-spacing:.5px; }
+.ac-tbl td.on{ cursor:pointer; }
+.ac-tbl td.on.top{ background:#fff; color:#111; }
+.ac-tbl td.on.face{ background:#111; color:#fff; border-color:#555; }
+.ac-tbl td.on.sel{ outline:3px solid var(--gold); outline-offset:-3px; }
+.ac-legend{ font-size:11.5px; color:var(--dim); line-height:1.6; margin-top:10px; text-align:center; }
+.ac-legend b{ color:var(--text); }
+.ac-legend .sw{ display:inline-block; width:11px; height:11px; border:1px solid #777; vertical-align:-1px; margin:0 1px 0 4px; }
 .ac-steps{ margin-top:14px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
 .ac-steps:empty{ display:none; }
 .ac-steps .h{ font-size:15px; font-weight:800; color:var(--gold); margin-bottom:8px; }
@@ -3465,6 +3469,8 @@ const AC_VALS = ["2","3","4","5","6","7","8","9","10","J","Q","K"];
 const AC_SUITS = [["C","&#9827;",0],["H","&#9829;",1],["S","&#9824;",0],["D","&#9830;",1]]; // code, sym, isRed
 let acN = null, acSel = null;   // entered number, selected card (for the steps panel)
 const acReach = (card, N) => { const o = rdResolve(card, N); return (o && o.method !== "dl") ? o : null; };
+// compact handling code: [C=cut] [N/J/A/B = add nothing/jokers/aces/both] [+ = next card, blank = direct hit]
+const acCode = o => (o.cut ? "C" : "") + ({0:"N",2:"J",4:"A",6:"B"}[o.packet] || "N") + (o.method === "next" ? "+" : "");
 
 function acaanShow(){
   $("app").style.display = "none"; $("settings").style.display = "none";
@@ -3503,12 +3509,13 @@ function acDrawGrid(){
   let cardCount = 0, valCount = 0;
   const rows = AC_VALS.map(v => {
     let any = false;
-    const cells = AC_SUITS.map(([s,sym,red]) => {
-      const on = acReach(v+s, N);
-      if (on){ any = true; cardCount++; }
-      return on
-        ? `<td class="on ${red?'r':''}" data-card="${v+s}"><span class="sy">${sym}</span></td>`
-        : `<td></td>`;
+    const cells = AC_SUITS.map(([s]) => {
+      const out = acReach(v+s, N);
+      if (out){ any = true; cardCount++;
+        const ori = out.end === "face" ? "face" : "top";   // top = deal face-down (white), face = deal from face (black)
+        return `<td class="on ${ori}" data-card="${v+s}">${acCode(out)}</td>`;
+      }
+      return `<td></td>`;
     }).join("");
     if (any) valCount++;
     return `<tr><th>${v}</th>${cells}</tr>`;
@@ -3516,7 +3523,8 @@ function acDrawGrid(){
   $("acResult").innerHTML =
       `<div class="ac-summary">At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards</div>`
     + `<table class="ac-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`
-    + `<div class="ac-hint">Lit cells = cards that can be at ${N}. Tap one for the exact handling.</div>`
+    + `<div class="ac-legend"><b>C</b> cut &middot; <b>N</b>/<b>J</b>/<b>A</b>/<b>B</b> add nothing/jokers/aces/both &middot; <b>+</b> next card (blank = direct) &middot; <span class="sw" style="background:#fff"></span> face&#8209;down <span class="sw" style="background:#111"></span> from face</div>`
+    + `<div class="ac-hint">Tap a cell for the full handling.</div>`
     + `<div class="ac-steps" id="acSteps"></div>`;
   $("acResult").querySelector(".ac-tbl").onclick = e => {
     const td = e.target.closest("td.on"); if (!td) return;
