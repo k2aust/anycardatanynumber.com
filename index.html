@@ -3275,6 +3275,11 @@ function lkRenderDate(t) {
 }
 function lkRenderCode(face) {
   const w = $("lkWeather"), N = parseInt(lkNum,10);
+  if (lkCribMode) {   // crib lockscreen: append the unavailable-value range next to the temperature ("-" = any value ok)
+    w.classList.remove("u");
+    w.textContent = (N >= 1 && N <= 52) ? lkWeatherTxt + "  " + acUnavailRange(N) : lkWeatherTxt;
+    return;
+  }
   if (face && N >= 1 && N <= 52) { const out = resolveOut(face, N, $("dl").checked);
     if (out) { const e = encodeOut(out); w.textContent = e.code; w.classList.toggle("u", e.faceDown); return; } }
   w.classList.remove("u"); w.textContent = lkWeatherTxt;
@@ -3509,6 +3514,11 @@ let acN = null, acSel = null;   // entered number, selected card (for the steps 
 const acReach = (card, N) => { const o = rdResolve(card, N); return (o && o.method !== "dl") ? o : null; };
 // compact handling code: [1=cut→hand spec 1 / 2=no cut→hand spec 2] [N/J/A/B = add nothing/jokers/aces/both] [+ = next card / . = direct hit]
 const acCode = o => (o.cut ? "1" : "2") + ({0:"N",2:"J",4:"A",6:"B"}[o.packet] || "N") + (o.method === "next" ? "+" : ".");
+// values with NO reachable suit at N -> "-" if every value can be chosen, else the range of unavailable values (e.g. "6-9")
+function acUnavailRange(N){
+  const un = AC_VALS.filter(v => !AC_SUITS.some(([s]) => acReach(v+s, N)));
+  return !un.length ? "-" : (un.length === 1 ? un[0] : un[0] + "-" + un[un.length-1]);
+}
 
 function acaanShow(){
   $("app").style.display = "none"; $("settings").style.display = "none";
