@@ -270,12 +270,14 @@
   #lkWeather { margin-top: 1.5vh; font-size: 5vw; color: rgba(255,255,255,.8); letter-spacing: 1px; }
   #lkWeather.u { text-decoration: underline; text-underline-offset: 3px; }
   /* vertical clock + fingerprint ARE the tap targets for 8 / 5 / 2 (middle column only, so 7/9 etc. stay tappable) */
-  #lkHrs, #lkMins { position: absolute; left: 22%; width: 56%; text-align: center; font-size: 33vw; font-weight: 200; line-height: 1; letter-spacing: -1vw; z-index: 62; cursor: pointer; }
-  #lkHrs { top: 32%; }
-  #lkMins { top: 49%; }
-  #lkFinger { position: absolute; left: 33.33%; width: 33.34%; top: 70%; text-align: center; z-index: 62; cursor: pointer; color: rgba(255,255,255,.6); }
-  #lkFinger .fp { width: 10vw; height: 10vw; display: block; margin: 0 auto; pointer-events: none; }
-  #lkFinger .lkHint { font-size: 3.4vw; margin-top: 1vh; }
+  /* clock hrs/mins/fingerprint are pinned to exactly their numpad cells (keys 8/5/2, middle column) and
+     are pointer-events:none so the invisible zone grid handles every tap — guarantees alignment + no overlap */
+  #lkHrs, #lkMins { position: absolute; left: 33.34%; width: 33.34%; height: 17%; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 13vh; font-weight: 200; line-height: 1; letter-spacing: -0.5vh; z-index: 62; pointer-events: none; }
+  #lkHrs { top: 31%; }
+  #lkMins { top: 48%; }
+  #lkFinger { position: absolute; left: 33.34%; width: 33.34%; height: 17%; top: 65%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 62; pointer-events: none; color: rgba(255,255,255,.6); }
+  #lkFinger .fp { width: 9vh; height: 9vh; display: block; margin: 0 auto; pointer-events: none; }
+  #lkFinger .lkHint { font-size: 1.7vh; margin-top: 0.6vh; }
   #lkZones { position: absolute; inset: 0; z-index: 60; pointer-events: none; }   /* only the zones capture taps */
   #lkZones .z { position: absolute; pointer-events: auto; display: flex; align-items: center; justify-content: center; }
   #lkZones .z .zl { display: none; font-size: 4.5vw; color: rgba(255,210,80,.9); }
@@ -3228,10 +3230,7 @@ $("lkZones").innerHTML = LK_KEYS.map(([k,cx,ry]) =>
 $("lkZones").addEventListener("click", e => { const z = e.target.closest(".z"); if (z) lkTap(z.dataset.k); });
 $("lkExit").addEventListener("click", lkHide);                                         // tap top-left: exit
 $("lkSetup").addEventListener("click", () => $("lkZones").classList.toggle("debug"));   // tap top-right: reveal the hidden zones
-// the clock digits & fingerprint ARE the tap targets for the keys they cover (8 / 5 / 2)
-$("lkHrs").addEventListener("click", () => lkTap("8"));
-$("lkMins").addEventListener("click", () => lkTap("5"));
-$("lkFinger").addEventListener("click", () => lkTap("2"));
+// clock digits & fingerprint are pointer-events:none (see CSS) — taps fall through to the zone grid (keys 8/5/2)
 
 function lkTap(k) {
   if (k === "clr") { lkReset(); return; }
