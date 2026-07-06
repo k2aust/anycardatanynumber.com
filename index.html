@@ -283,6 +283,10 @@
   #lkZones.debug .z .zl { display: block; }
   #lkSetup { position: absolute; top: 0; right: 0; width: 22%; height: 10%; z-index: 61; }
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
+  #lkCribHold { position: absolute; bottom: 0; left: 0; width: 28%; height: 14%; z-index: 63; }   /* deadman switch: hold to peek the crib */
+  #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #0a0d16; padding: 10px 12px; overflow-y: auto; }
+  #lkCrib.show { display: block; }
+  #lkCrib .lkc-h { text-align: center; color: var(--gold); font-weight: 800; font-size: 16px; margin: 2px 0 6px; }
 
   /* ---- Camera ACAAN (#camScreen) ---- */
   #camScreen { position: fixed; inset: 0; background: #000; z-index: 55; max-width: none; }
@@ -426,6 +430,8 @@
   <div id="lkZones"></div>
   <div id="lkSetup"></div>
   <div id="lkExit"></div>
+  <div id="lkCribHold" style="display:none"></div>
+  <div id="lkCrib"><div id="lkCribBody"></div></div>
 </section>
 
 <section id="camScreen" style="display:none">
@@ -2133,6 +2139,7 @@ function renderSettings() {
     + '<button id="setOpenSpell" class="randombtn" style="margin:0 0 12px">&#128172; Spelling mode</button>'
     + '<button id="setOpenTrain" class="randombtn" style="margin:0 0 12px">&#127183; Learn my stack (flash cards)</button>'
     + '<button id="setOpenAcaan" class="randombtn" style="margin:0 0 12px">&#128290; ACAAN crib (number &rarr; cards)</button>'
+    + '<button id="setOpenLkCrib" class="randombtn" style="margin:0 0 12px">&#128274; Lockscreen crib (covert peek)</button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -2151,6 +2158,7 @@ function renderSettings() {
   $("setOpenSpell").addEventListener("click", () => { $("settings").style.display = "none"; spellOpen(); });
   $("setOpenTrain").addEventListener("click", () => { $("settings").style.display = "none"; trainOpen(); });
   { const ba = $("setOpenAcaan"); if (ba) ba.addEventListener("click", () => { $("settings").style.display = "none"; if (acaanCribOpen) acaanCribOpen(); }); }
+  { const bl = $("setOpenLkCrib"); if (bl) bl.addEventListener("click", () => { $("settings").style.display = "none"; if (lkCribOpen) lkCribOpen(); }); }
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
@@ -2470,6 +2478,7 @@ $("magPw").addEventListener("click", e => { if (e.target === $("magPw")) magPwCl
 
 let ddRerender = null;  // set by the tool's IIFE; re-renders the tool for the current magicianMode
 let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
+let lkCribOpen = null;  // set by the tool's IIFE; shows the number-only crib lockscreen
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
 let acaanCribOpen = null; // set by the tool's IIFE; shows the ACAAN number-lookup crib
 let rdScheme = "highlow";  // single steering scheme (shared with the tool IIFE)
@@ -3208,6 +3217,7 @@ ddRerender = rdRender;
 
 /* ---- Lockscreen covert view (gaff): hidden-keypad input, disguised date/code ---- */
 let lkValue = null, lkColor = null, lkNum = "", lkPhase = "value", lkTimer = null, lkWeatherTxt = "--°";
+let lkCribMode = false;   // number-only covert lockscreen that peeks the high-low ACAAN crib (separate from the gaff lockscreen)
 // invisible numpad — calculator layout so the middle column reads 8/5/2 top→bottom under the clock:
 //   J Q K / 7 8 9 / 4 5 6 / 1 2 3 / 10 0 C
 const LK_KEYS = [["J",0,0],["Q",1,0],["K",2,0],["7",0,1],["8",1,1],["9",2,1],
@@ -3225,6 +3235,10 @@ $("lkFinger").addEventListener("click", () => lkTap("2"));
 
 function lkTap(k) {
   if (k === "clr") { lkReset(); return; }
+  if (lkCribMode) {                                  // crib lockscreen: digits build the number directly (no value/colour)
+    if (/^[0-9]$/.test(k) && lkNum.length < 2) { lkNum += k; lkRenderDate(); }
+    return;
+  }
   if (lkPhase === "value") {
     let v = null;
     if (k === "10") v = "10";
@@ -3271,8 +3285,32 @@ function lkFetchWeather() {
     .then(r=>r.json()).then(d=>{ lkWeatherTxt = Math.round(d.current.temperature_2m)+"°"; if(!$("lkWeather").classList.contains("u")) $("lkWeather").textContent = lkWeatherTxt; }).catch(()=>{});
   fetch("https://ipapi.co/json/").then(r=>r.json()).then(l=>put(l.latitude,l.longitude)).catch(()=>{});
 }
-function lkShow() { setDeck("gaff"); $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="block"; lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(false); }
-function lkHide() { $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+function lkShowCommon() {
+  $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none";
+  $("lockScreen").style.display="block";
+  $("lkCribHold").style.display = lkCribMode ? "block" : "none";   // deadman switch only on the crib lockscreen (keeps the gaff "10" key free)
+  lkCribPeekHide();
+  lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(false);
+}
+function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
+function lkCribShow() { lkCribMode = true;  lkShowCommon(); }                    // number-only crib lockscreen
+function lkHide() { lkCribPeekHide(); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+
+/* ---- Bottom-left deadman switch: hold to reveal the crib for the entered number, release to hide ---- */
+function lkCribPeekShow() {
+  if (!lkCribMode) return;
+  const N = parseInt(lkNum, 10);
+  $("lkCribBody").innerHTML = (N >= 1 && N <= 52)
+    ? `<div class="lkc-h">Number ${N}</div>` + acGridHTML(N)
+    : `<div class="lkc-h">Tap in a number (1&ndash;52) first</div>`;
+  $("lkCrib").classList.add("show");
+}
+function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
+$("lkCribHold").addEventListener("pointerdown", e => {
+  e.preventDefault(); lkCribPeekShow();
+  const up = () => { lkCribPeekHide(); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
+  window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
+});
 
 /* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
    Feeds the SAME value->color->number pipeline as the on-screen keypad. Read via e.code so it's NumLock-independent
@@ -3316,6 +3354,7 @@ function lkbtKey(e){
 }
 document.addEventListener("keydown", lkbtKey);
 lkOpen = lkShow;
+lkCribOpen = lkCribShow;
 
 /* ---- Camera ACAAN (#camScreen): records video while running the real-deck flow ---- */
 let camStream = null, camFacing = "environment";
@@ -3503,8 +3542,8 @@ function acDrawEntry(){
   const el = $("acEntry");
   el.innerHTML = (acN && acN >= 1) ? String(acN) : (acN === -1 ? '<span style="color:var(--red)">'+"?"+'</span>' : '<span class="ph">&ndash;&ndash;</span>');
 }
-function acDrawGrid(){
-  const N = acN;
+// Pure crib grid for a number N: summary + value x suit table (with codes) + legend. Reused by the crib screen and the lockscreen peek.
+function acGridHTML(N){
   const head = AC_SUITS.map(([c,sym,red]) => `<th class="${red?'r':''}">${sym}</th>`).join("");
   let cardCount = 0, valCount = 0;
   const rows = AC_VALS.map(v => {
@@ -3520,10 +3559,12 @@ function acDrawGrid(){
     if (any) valCount++;
     return `<tr><th>${v}</th>${cells}</tr>`;
   }).join("");
-  $("acResult").innerHTML =
-      `<div class="ac-summary">At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards</div>`
+  return `<div class="ac-summary">At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards</div>`
     + `<table class="ac-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`
-    + `<div class="ac-legend"><b>1</b>/<b>2</b> hand spectator 1 (cut) / 2 (no cut) &middot; <b>N</b>/<b>J</b>/<b>A</b>/<b>B</b> add nothing/jokers/aces/both &middot; <b>+</b> next card / <b>.</b> direct hit &middot; <span class="sw" style="background:#fff"></span> face&#8209;down <span class="sw" style="background:#111"></span> from face</div>`
+    + `<div class="ac-legend"><b>1</b>/<b>2</b> hand spectator 1 (cut) / 2 (no cut) &middot; <b>N</b>/<b>J</b>/<b>A</b>/<b>B</b> add nothing/jokers/aces/both &middot; <b>+</b> next card / <b>.</b> direct hit &middot; <span class="sw" style="background:#fff"></span> face&#8209;down <span class="sw" style="background:#111"></span> from face</div>`;
+}
+function acDrawGrid(){
+  $("acResult").innerHTML = acGridHTML(acN)
     + `<div class="ac-hint">Tap a cell for the full handling.</div>`
     + `<div class="ac-steps" id="acSteps"></div>`;
   $("acResult").querySelector(".ac-tbl").onclick = e => {
