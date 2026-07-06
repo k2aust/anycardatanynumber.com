@@ -3343,6 +3343,12 @@ function lkbtKey(e){
   else if(/^Digit[0-9]$/.test(c)) digit=+c.slice(5);
   const inc = c==="ArrowUp"?1 : c==="ArrowRight"?2 : c==="ArrowDown"?5 : c==="ArrowLeft"?10 : null;
   const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
+  if(lkCribMode){   // crib lockscreen: BT numpad digits or gamepad arrows enter the number directly (no value/colour)
+    if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }
+    if(inc!==null){ e.preventDefault(); lkbtAcc=Math.min(52,lkbtAcc+inc); lkNum=String(lkbtAcc); lkRenderDate(); lkbtDotSet("hit"); return; }
+    if(commit){ e.preventDefault(); lkbtDotSet("hit"); return; }   // number is already live in lkNum; clear/arm key resets it
+    return;
+  }
   if(lkPhase==="value"){
     if(digit!==null){ e.preventDefault(); lkbtBuf+=String(digit); if(lkbtBuf!=="1"){ lkbtSetValue(parseInt(lkbtBuf,10)); } lkbtDotSet("hit"); return; }   // "1" waits for a 2nd digit (10-13); 2-9 auto-commit
     if(inc!==null){ e.preventDefault(); lkbtAcc+=inc; lkValue=lkbtVal(lkbtAcc); lkRenderDate(); lkbtDotSet("hit"); return; }
