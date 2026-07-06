@@ -289,6 +289,7 @@
   #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #0a0d16; padding: 10px 12px; overflow-y: auto; }
   #lkCrib.show { display: block; }
   #lkCrib .lkc-h { text-align: center; color: var(--gold); font-weight: 800; font-size: 16px; margin: 2px 0 6px; }
+  #lkDbg { display: none; position: absolute; top: 2%; left: 0; right: 0; text-align: center; font: 700 13px monospace; color: #5f6; z-index: 80; pointer-events: none; }
 
   /* ---- Camera ACAAN (#camScreen) ---- */
   #camScreen { position: fixed; inset: 0; background: #000; z-index: 55; max-width: none; }
@@ -434,6 +435,7 @@
   <div id="lkExit"></div>
   <div id="lkCribHold" style="display:none"></div>
   <div id="lkCrib"><div id="lkCribBody"></div></div>
+  <div id="lkDbg"></div>
 </section>
 
 <section id="camScreen" style="display:none">
@@ -3229,7 +3231,7 @@ $("lkZones").innerHTML = LK_KEYS.map(([k,cx,ry]) =>
   `<div class="z" data-k="${k}" style="left:${(cx*33.34).toFixed(2)}%;top:${(14+ry*17).toFixed(1)}%;width:33.34%;height:17%"><span class="zl">${k==="clr"?"C":k}</span></div>`).join("");
 $("lkZones").addEventListener("click", e => { const z = e.target.closest(".z"); if (z) lkTap(z.dataset.k); });
 $("lkExit").addEventListener("click", lkHide);                                         // tap top-left: exit
-$("lkSetup").addEventListener("click", () => $("lkZones").classList.toggle("debug"));   // tap top-right: reveal the hidden zones
+$("lkSetup").addEventListener("click", () => { const dbg = $("lkZones").classList.toggle("debug"); $("lkDbg").style.display = dbg ? "block" : "none"; if(!dbg) $("lkDbg").textContent = ""; });   // tap top-right: reveal hidden zones + BT code readout
 // clock digits & fingerprint are pointer-events:none (see CSS) — taps fall through to the zone grid (keys 8/5/2)
 
 function lkTap(k) {
@@ -3323,6 +3325,9 @@ $("lkCribHold").addEventListener("pointerdown", e => {
    Numpad: type value (J/Q/K = 11/12/13), + = red / - = black, type number, Enter. Gamepad: Up +1 / Right +2 / Down +5 /
    Left +10, A/Enter commits; in the colour step Left = black, Right = red. */
 const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Delete"]);
+// 8BitDo Zero 2 buttons -> digit (crib lockscreen). D-pad arrows are reliable; face-button/shoulder
+// codes vary by firmware/mode — toggle debug (tap top-right) to read the real e.code off each button and adjust.
+const LK_ZERO2_DIGIT = { KeyA:1, KeyB:2, KeyX:3, KeyY:4, ArrowRight:5, ArrowDown:6, ArrowLeft:7, ArrowUp:8, KeyR:9, KeyL:0 };
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
 function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
@@ -3335,6 +3340,7 @@ function lkbtSetNumber(n){ if(n<1||n>52) return; lkNum=String(n); lkbtDone=true;
 function lkbtKey(e){
   if($("lockScreen").style.display==="none") return;
   const c=e.code;
+  if($("lkZones").classList.contains("debug")) $("lkDbg").textContent = c + (LK_ZERO2_DIGIT[c]!==undefined ? " → " + LK_ZERO2_DIGIT[c] : "");   // calibrate BT button codes
   if(LK_ARM_KEYS.has(c)){ e.preventDefault(); if(!lkbtActive){ lkbtArm(true); } else { lkReset(); lkbtAcc=0; lkbtBuf=""; lkbtDone=false; lkbtDotSet("armed"); lkbtIdleBump(); } return; }
   if(!lkbtActive || lkbtDone) return;
   lkbtIdleBump();
@@ -3343,9 +3349,10 @@ function lkbtKey(e){
   else if(/^Digit[0-9]$/.test(c)) digit=+c.slice(5);
   const inc = c==="ArrowUp"?1 : c==="ArrowRight"?2 : c==="ArrowDown"?5 : c==="ArrowLeft"?10 : null;
   const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
-  if(lkCribMode){   // crib lockscreen: BT numpad digits or gamepad arrows enter the number directly (no value/colour)
-    if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }
-    if(inc!==null){ e.preventDefault(); lkbtAcc=Math.min(52,lkbtAcc+inc); lkNum=String(lkbtAcc); lkRenderDate(); lkbtDotSet("hit"); return; }
+  if(lkCribMode){   // crib lockscreen: BT numpad digits OR Zero 2 buttons enter the number directly (no value/colour)
+    let d = digit;
+    if(d===null && LK_ZERO2_DIGIT[c]!==undefined) d = LK_ZERO2_DIGIT[c];   // Zero 2 button -> digit
+    if(d!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(d); lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }
     if(commit){ e.preventDefault(); lkbtDotSet("hit"); return; }   // number is already live in lkNum; clear/arm key resets it
     return;
   }
