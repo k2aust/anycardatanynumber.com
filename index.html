@@ -285,7 +285,7 @@
   #lkZones.debug .z .zl { display: block; }
   #lkSetup { position: absolute; top: 0; right: 0; width: 22%; height: 10%; z-index: 61; }
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
-  #lkCribHold { position: absolute; bottom: 0; left: 0; width: 28%; height: 14%; z-index: 63; }   /* deadman switch: hold to peek the crib */
+  #lkCribHold { position: absolute; bottom: 0; left: 0; width: 32%; height: 20%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }   /* deadman switch: hold to peek the crib */
   #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #0a0d16; padding: 10px 12px; overflow-y: auto; }
   #lkCrib.show { display: block; }
   #lkCrib .lkc-h { text-align: center; color: var(--gold); font-weight: 800; font-size: 16px; margin: 2px 0 6px; }
@@ -3312,11 +3312,21 @@ function lkCribPeekShow() {
   $("lkCrib").classList.add("show");
 }
 function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
-$("lkCribHold").addEventListener("pointerdown", e => {
-  e.preventDefault(); lkCribPeekShow();
-  const up = () => { lkCribPeekHide(); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
-  window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
-});
+// Robust press-and-hold: pointer capture keeps every move/up/cancel on this element even after the
+// overlay pops up over the finger, and touch-action:none (CSS) stops the browser cancelling the touch
+// as a scroll/edge gesture. Release (up/cancel/lost-capture) always hides.
+{
+  const holdEl = $("lkCribHold");
+  const release = () => lkCribPeekHide();
+  holdEl.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    try { holdEl.setPointerCapture(e.pointerId); } catch (_) {}
+    lkCribPeekShow();
+  });
+  holdEl.addEventListener("pointerup", release);
+  holdEl.addEventListener("pointercancel", release);
+  holdEl.addEventListener("lostpointercapture", release);
+}
 
 /* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
    Feeds the SAME value->color->number pipeline as the on-screen keypad. Read via e.code so it's NumLock-independent
