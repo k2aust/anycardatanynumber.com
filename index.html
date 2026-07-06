@@ -263,7 +263,7 @@
   #ddScreen .stackgrid span.r { color:var(--red); }
 
   /* ---- Lockscreen covert view (#lockScreen) — vertical clock + fingerprint sit OVER the hidden 8/5/2 keys ---- */
-  #lockScreen { position: fixed; inset: 0; background: linear-gradient(160deg,#0b1020,#05070d 60%,#000);
+  #lockScreen { position: fixed; inset: 0; background: #000;
     color: #fff; z-index: 50; font-family: -apple-system, system-ui, sans-serif; max-width: none; }
   #lkTop { position: absolute; top: 9%; left: 0; right: 0; text-align: left; padding-left: 7vw; }
   #lkDate { font-size: 5.2vw; color: rgba(255,255,255,.9); font-weight: 500; }
@@ -287,7 +287,13 @@
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
   /* deadman switch: bottom-left, but inset off the very edges so iOS edge-gesture protection doesn't eat the touch */
   #lkCribHold { position: absolute; bottom: 4%; left: 3%; width: 34%; height: 16%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #0a0d16; padding: 6px 8px; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+  #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #000; padding: 6px 8px; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+  /* toggle button directly under the fingerprint: tap to switch between the lockscreen and the crib */
+  #lkToggle { display: none; position: absolute; left: 50%; top: 84%; transform: translateX(-50%); z-index: 75;
+    width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.10);
+    align-items: center; justify-content: center; color: rgba(255,255,255,.55); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #lkToggle.on { display: flex; }
+  #lkToggle svg { width: 22px; height: 22px; }
   #lkCrib.show { display: flex; }
   #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; }
   #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 15px; margin: 0 0 3px; }
@@ -441,6 +447,7 @@
   <div id="lkExit"></div>
   <div id="lkCribHold" style="display:none"></div>
   <div id="lkCrib"><div id="lkCribBody"></div></div>
+  <div id="lkToggle"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></div>
   <div id="lkDbg"></div>
 </section>
 
@@ -3301,12 +3308,15 @@ function lkShowCommon() {
   $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none";
   $("lockScreen").style.display="block";
   $("lkCribHold").style.display = lkCribMode ? "block" : "none";   // deadman switch only on the crib lockscreen (keeps the gaff "10" key free)
+  $("lkToggle").classList.toggle("on", lkCribMode);               // tap-toggle button (crib lockscreen only)
   lkCribPeekHide();
   lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(false);
 }
 function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
 function lkCribShow() { lkCribMode = true;  lkShowCommon(); }                    // number-only crib lockscreen
-function lkHide() { lkCribPeekHide(); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+function lkHide() { lkCribPeekHide(); $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+// tap the button under the fingerprint to flip between the lockscreen and the crib (stays until tapped again)
+$("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow(); });
 
 /* ---- Bottom-left deadman switch: hold to reveal the crib for the entered number, release to hide ---- */
 function lkCribPeekShow() {
