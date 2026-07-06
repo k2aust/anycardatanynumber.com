@@ -285,10 +285,16 @@
   #lkZones.debug .z .zl { display: block; }
   #lkSetup { position: absolute; top: 0; right: 0; width: 22%; height: 10%; z-index: 61; }
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
-  #lkCribHold { position: absolute; bottom: 0; left: 0; width: 32%; height: 20%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }   /* deadman switch: hold to peek the crib */
-  #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #0a0d16; padding: 10px 12px; overflow-y: auto; }
-  #lkCrib.show { display: block; }
-  #lkCrib .lkc-h { text-align: center; color: var(--gold); font-weight: 800; font-size: 16px; margin: 2px 0 6px; }
+  /* deadman switch: bottom-left, but inset off the very edges so iOS edge-gesture protection doesn't eat the touch */
+  #lkCribHold { position: absolute; bottom: 4%; left: 3%; width: 34%; height: 16%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #0a0d16; padding: 6px 8px; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+  #lkCrib.show { display: flex; }
+  #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+  #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 15px; margin: 0 0 3px; }
+  #lkCrib .ac-summary { flex: 0 0 auto; margin: 0 0 3px; font-size: 13px; }
+  #lkCrib .ac-tbl { flex: 0 0 auto; width: 100%; }                 /* JS sets row heights so it fills the screen */
+  #lkCrib .ac-tbl td, #lkCrib .ac-tbl th { font-size: inherit; }   /* JS sets the font + per-cell height */
+  #lkCrib .ac-legend { flex: 0 0 auto; margin-top: 3px; }
   #lkDbg { display: none; position: absolute; top: 2%; left: 0; right: 0; text-align: center; font: 700 13px monospace; color: #5f6; z-index: 80; pointer-events: none; }
 
   /* ---- Camera ACAAN (#camScreen) ---- */
@@ -3310,22 +3316,35 @@ function lkCribPeekShow() {
     ? `<div class="lkc-h">Number ${N}</div>` + acGridHTML(N)
     : `<div class="lkc-h">Tap in a number (1&ndash;52) first</div>`;
   $("lkCrib").classList.add("show");
+  requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
 function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
-// Robust press-and-hold: pointer capture keeps every move/up/cancel on this element even after the
-// overlay pops up over the finger, and touch-action:none (CSS) stops the browser cancelling the touch
-// as a scroll/edge gesture. Release (up/cancel/lost-capture) always hides.
+// Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
+// set the font to the largest that fits that row height and the (fixed) column width.
+function lkCribFit() {
+  const crib = $("lkCrib"), tbl = crib.querySelector(".ac-tbl"); if (!tbl || !tbl.rows.length) return;
+  const body = $("lkCribBody");
+  const other = [".lkc-h", ".ac-summary", ".ac-legend"].reduce((s,sel) => { const e = crib.querySelector(sel); return s + (e ? e.offsetHeight : 0); }, 0);
+  const rows = tbl.rows.length;                                   // 14 (header + 13 values)
+  const rowH = Math.max(14, Math.floor((body.clientHeight - other - 8) / rows));
+  tbl.querySelectorAll("td,th").forEach(c => { c.style.height = rowH + "px"; });
+  const colW = (tbl.querySelector("td") || tbl.querySelector("th")).clientWidth || 60;
+  const fs = Math.min(rowH * 0.72, (colW - 4) / (3 * 0.6));       // 3-char codes are the widest
+  tbl.style.fontSize = Math.max(10, Math.floor(fs)) + "px";
+}
+window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("show")) lkCribFit(); });
+// Reliable press-and-hold on touch: touchstart/end fire on the element the touch STARTED on, even after the
+// overlay pops up over the finger. Mouse path covers desktop. (Pointer events were flaky at the screen edge.)
 {
   const holdEl = $("lkCribHold");
-  const release = () => lkCribPeekHide();
-  holdEl.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    try { holdEl.setPointerCapture(e.pointerId); } catch (_) {}
-    lkCribPeekShow();
-  });
-  holdEl.addEventListener("pointerup", release);
-  holdEl.addEventListener("pointercancel", release);
-  holdEl.addEventListener("lostpointercapture", release);
+  const show = e => { if (e.cancelable) e.preventDefault(); lkCribPeekShow(); };
+  const hide = () => lkCribPeekHide();
+  holdEl.addEventListener("touchstart", show, { passive: false });
+  holdEl.addEventListener("touchend", hide);
+  holdEl.addEventListener("touchcancel", hide);
+  holdEl.addEventListener("mousedown", show);
+  window.addEventListener("mouseup", hide);
+  window.addEventListener("blur", hide);
 }
 
 /* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
