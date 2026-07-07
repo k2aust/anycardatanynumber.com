@@ -3316,7 +3316,7 @@ function lkShowCommon() {
   $("lkCribHold").style.display = lkCribMode ? "block" : "none";   // deadman switch only on the crib lockscreen (keeps the gaff "10" key free)
   $("lkToggle").classList.toggle("on", lkCribMode);               // tap-toggle button (crib lockscreen only)
   lkCribPeekHide();
-  lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(false);
+  lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(lkCribMode);   // crib lockscreen auto-arms the BT remote (no arm key needed)
 }
 function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
 function lkCribShow() { lkCribMode = true;  lkShowCommon(); }                    // number-only crib lockscreen
@@ -3377,7 +3377,7 @@ const LK_ZERO2_DIGIT = { KeyA:1, KeyB:2, KeyX:3, KeyY:4, ArrowRight:5, ArrowDown
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
 function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
-function lkbtIdleBump(){ if(lkbtIdle) clearTimeout(lkbtIdle); lkbtIdle=setTimeout(()=>lkbtArm(false),60000); }
+function lkbtIdleBump(){ if(lkCribMode) return; if(lkbtIdle) clearTimeout(lkbtIdle); lkbtIdle=setTimeout(()=>lkbtArm(false),60000); }   // crib lockscreen stays armed (no 60s idle disarm)
 function lkbtArm(on){ lkbtActive=on; lkbtAcc=0; lkbtBuf=""; lkbtDone=false; if(on){ lkReset(); lkbtDotSet("armed"); lkbtIdleBump(); } else { lkbtDotSet("idle"); if(lkbtIdle){ clearTimeout(lkbtIdle); lkbtIdle=null; } } }
 function lkbtVal(n){ return n===10?"10":n===11?"J":n===12?"Q":n===13?"K":(n>=2&&n<=9?String(n):null); }
 function lkbtSetValue(n){ const v=lkbtVal(n); if(!v){ lkbtBuf=""; lkbtAcc=0; return; } lkValue=v; lkPhase="color"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
