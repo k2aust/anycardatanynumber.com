@@ -3387,6 +3387,7 @@ function lkbtKey(e){
   if($("lockScreen").style.display==="none") return;
   const c=e.code;
   if($("lkZones").classList.contains("debug")) $("lkDbg").textContent = c + (LK_ZERO2_DIGIT[c]!==undefined ? " → " + LK_ZERO2_DIGIT[c] : "");   // calibrate BT button codes
+  if(lkCribMode && (c==="Backspace"||c==="Delete")){ e.preventDefault(); lkNum=lkNum.slice(0,-1); lkbtBuf=lkNum; lkbtAcc=0; lkRenderDate(); lkbtDotSet("hit"); return; }   // Backspace deletes the last digit
   if(LK_ARM_KEYS.has(c)){ e.preventDefault(); if(!lkbtActive){ lkbtArm(true); } else { lkReset(); lkbtAcc=0; lkbtBuf=""; lkbtDone=false; lkbtDotSet("armed"); lkbtIdleBump(); } return; }
   if(!lkbtActive || lkbtDone) return;
   lkbtIdleBump();
