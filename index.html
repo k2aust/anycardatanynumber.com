@@ -3399,7 +3399,7 @@ function lkbtKey(e){
     let d = digit;
     if(d===null && LK_ZERO2_DIGIT[c]!==undefined) d = LK_ZERO2_DIGIT[c];   // Zero 2 button -> digit
     if(d!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(d); lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }
-    if(commit){ e.preventDefault(); lkbtDotSet("hit"); return; }   // number is already live in lkNum; clear/arm key resets it
+    if(commit){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // Enter toggles the crib
     return;
   }
   if(lkPhase==="value"){
