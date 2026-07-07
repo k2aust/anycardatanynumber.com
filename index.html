@@ -288,10 +288,15 @@
   /* deadman switch: bottom-left, but inset off the very edges so iOS edge-gesture protection doesn't eat the touch */
   #lkCribHold { position: absolute; bottom: 4%; left: 3%; width: 34%; height: 16%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #000; padding: 6px 8px; flex-direction: column; overflow: hidden; box-sizing: border-box; }
-  /* invisible tap zone over the date: tap the date to switch between the lockscreen and the crib */
+  /* invisible tap zone over the date: tap the date to OPEN the crib (nothing visible to a spectator) */
   #lkToggle { display: none; position: absolute; left: 0; top: 8%; width: 62%; height: 11%; z-index: 75;
     background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   #lkToggle.on { display: block; }
+  /* while the crib is showing, the same toggle becomes a VISIBLE "back to lock screen" button */
+  #lkCrib.show ~ #lkToggle.on { left: 8px; top: 8px; width: auto; height: auto; padding: 8px 15px 8px 11px;
+    border-radius: 20px; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+    color: #fff; font: 600 15px -apple-system, system-ui, sans-serif; display: flex; align-items: center; }
+  #lkCrib.show ~ #lkToggle.on::before { content: "\2039  Lock screen"; }
   #lkCrib.show { display: flex; }
   #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; }
   #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 15px; margin: 0 0 3px; }
