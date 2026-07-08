@@ -3406,7 +3406,8 @@ function lkbtKey(e){
     if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // debounce: one press = one action
       if(e.repeat){ e.preventDefault(); return; }
       const nowT = performance.now();
-      if(kc===lkbtLastKc && nowT-lkbtLastT < 90){ e.preventDefault(); return; }
+      const gap = (LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)) ? 400 : 90;   // toggle/clear get a much bigger guard so they don't double-fire
+      if(kc===lkbtLastKc && nowT-lkbtLastT < gap){ e.preventDefault(); return; }
       lkbtLastKc = kc; lkbtLastT = nowT;
     }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkbtDotSet("hit"); return; }
