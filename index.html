@@ -555,6 +555,7 @@
 .ac-tbl thead th.r{ color:var(--red); }
 .ac-tbl tbody th{ width:16%; font-size:20px; background:var(--panel2); }
 .ac-tbl td{ background:var(--panel); color:var(--line); font-size:24px; letter-spacing:.5px; }
+.ac-tbl td.dead{ color:var(--red); opacity:.85; }
 .ac-tbl td.on{ cursor:pointer; }
 .ac-tbl td.on.top{ background:#fff; color:#111; }
 .ac-tbl td.on.face{ background:#111; color:#fff; border-color:#555; }
@@ -3336,6 +3337,7 @@ function lkCribPeekShow() {
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
 function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
+function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
 // set the font to the largest that fits that row height and the (fixed) column width.
 function lkCribFit() {
@@ -3410,10 +3412,10 @@ function lkbtKey(e){
       if(kc===lkbtLastKc && nowT-lkbtLastT < gap){ e.preventDefault(); return; }
       lkbtLastKc = kc; lkbtLastT = nowT;
     }
-    if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkbtDotSet("hit"); return; }
+    if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
     if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
     if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkCribPeekHide(); lkRenderDate(); lkbtDotSet("hit"); return; }                 // L1 clear
-    if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }   // BT numpad digits (bonus)
+    if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); lkCribRefresh(); } lkbtDotSet("hit"); return; }   // BT numpad digits (bonus)
     if(c==="NumpadEnter"||c==="Enter"){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // numpad Enter also toggles
     return;
   }
@@ -3666,7 +3668,7 @@ function acGridHTML(N){
         const ori = out.end === "face" ? "face" : "top";   // top = deal face-down (white), face = deal from face (black)
         return `<td class="on ${ori}" data-card="${v+s}">${acCode(out)}</td>`;
       }
-      return `<td></td>`;
+      return `<td class="dead">&#10005;</td>`;   // card can't land at N -> red X
     }).join("");
     if (any) valCount++;
     return `<tr><th>${v}</th>${cells}</tr>`;
