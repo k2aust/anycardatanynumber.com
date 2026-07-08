@@ -3302,7 +3302,7 @@ function lkRenderDate(t) {
   const face = (lkValue && lkColor) ? faceFor(lkValue, lkColor) : null;
   // feedback: show the value as soon as it's tapped (before colour), then the full card
   let dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
-  if (lkCribMode) dayTxt = lkCribVal ? lkCribVal : String(t.getDate());   // crib lockscreen: the day-of-month is the chosen value
+  if (lkCribMode) dayTxt = lkCribVal ? lkCribVal : (lkCribPhase === "val" ? "_" : String(t.getDate()));   // crib lockscreen: day-of-month = chosen value ("_" once value entry is armed)
   const yearTxt = lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear());
   $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
   lkRenderCode(face);
