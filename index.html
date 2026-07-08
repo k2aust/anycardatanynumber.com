@@ -3373,9 +3373,9 @@ window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("sh
 const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Delete"]);
 // 8BitDo Zero 2 (Android keyboard mode) — keyed by e.keyCode (the code comes through empty).
 // A=+1 B=+2 Y=+5 X=+10, R1=toggle crib, L1=clear.  Confirmed: A=71 B=74 Y=73.  X/R1/L1 pending.
-const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5 };   // A=71(g)  B=74(j)  Y=73(i)   [X=+10 keyCode TBD]
-const LK_ZERO2_CRIB = new Set([]);            // R1 -> toggle crib   [keyCode TBD]
-const LK_ZERO2_CLR  = new Set([]);            // L1 -> clear         [keyCode TBD]
+const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5, 72:10 };   // 8BitDo Zero 2 (keyboard mode): A=71(g)+1  B=74(j)+2  Y=73(i)+5  X=72(h)+10
+const LK_ZERO2_CRIB = new Set([77]);                 // R1=77(m) -> toggle crib
+const LK_ZERO2_CLR  = new Set([75]);                 // L1=75(k) -> clear
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
 function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
