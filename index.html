@@ -301,7 +301,7 @@
   #lkCrib.show ~ #lkCribBack { display: block; }
   #lkCrib.show { display: flex; }
   #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; }
-  #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 15px; margin: 0 0 3px; }
+  #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 46px; line-height: 1; margin: 0 0 2px; }
   #lkCrib .ac-summary { flex: 0 0 auto; margin: 0 0 3px; font-size: 13px; }
   #lkCrib .ac-tbl { flex: 0 0 auto; width: 100%; }                 /* JS sets row heights so it fills the screen */
   #lkCrib .ac-tbl td, #lkCrib .ac-tbl th { font-size: inherit; }   /* JS sets the font + per-cell height */
@@ -556,6 +556,7 @@
 .ac-tbl tbody th{ width:16%; font-size:20px; background:var(--panel2); }
 .ac-tbl td{ background:var(--panel); color:var(--line); font-size:24px; letter-spacing:.5px; }
 .ac-tbl td.dead{ color:var(--red); opacity:.85; }
+.ac-tbl tbody th.dead{ color:var(--red); }
 .ac-tbl td.on{ cursor:pointer; }
 .ac-tbl td.on.top{ background:#fff; color:#111; }
 .ac-tbl td.on.face{ background:#111; color:#fff; border-color:#555; }
@@ -3331,8 +3332,8 @@ function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
   $("lkCribBody").innerHTML = (N >= 1 && N <= 52)
-    ? `<div class="lkc-h">Number ${N}</div>` + acGridHTML(N)
-    : `<div class="lkc-h">Tap in a number (1&ndash;52) first</div>`;
+    ? `<div class="lkc-h">${N}</div>` + acGridHTML(N)
+    : `<div class="lkc-h" style="font-size:20px">Tap in a number (1&ndash;52) first</div>`;
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
@@ -3661,17 +3662,18 @@ function acGridHTML(N){
   const head = AC_SUITS.map(([c,sym,red]) => `<th class="${red?'r':''}">${sym}</th>`).join("");
   let cardCount = 0, valCount = 0;
   const rows = AC_VALS.map(v => {
-    let any = false;
-    const cells = AC_SUITS.map(([s]) => {
-      const out = acReach(v+s, N);
-      if (out){ any = true; cardCount++;
-        const ori = out.end === "face" ? "face" : "top";   // top = deal face-down (white), face = deal from face (black)
-        return `<td class="on ${ori}" data-card="${v+s}">${acCode(out)}</td>`;
-      }
-      return `<td class="dead">&#10005;</td>`;   // card can't land at N -> red X
-    }).join("");
+    const outs = AC_SUITS.map(([s]) => acReach(v+s, N));
+    const any = outs.some(Boolean);
     if (any) valCount++;
-    return `<tr><th>${v}</th>${cells}</tr>`;
+    const cells = AC_SUITS.map((suit, i) => {
+      const out = outs[i];
+      if (out){ cardCount++;
+        const ori = out.end === "face" ? "face" : "top";   // top = deal face-down (white), face = deal from face (black)
+        return `<td class="on ${ori}" data-card="${v+suit[0]}">${acCode(out)}</td>`;
+      }
+      return any ? `<td></td>` : `<td class="dead">&#10005;</td>`;   // red X only when the WHOLE value is unavailable
+    }).join("");
+    return `<tr><th class="${any?'':'dead'}">${v}</th>${cells}</tr>`;
   }).join("");
   return `<div class="ac-summary">At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards</div>`
     + `<table class="ac-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`
