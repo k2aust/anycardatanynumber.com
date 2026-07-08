@@ -306,7 +306,7 @@
   #lkCrib .ac-tbl { flex: 0 0 auto; width: 100%; }                 /* JS sets row heights so it fills the screen */
   #lkCrib .ac-tbl td, #lkCrib .ac-tbl th { font-size: inherit; }   /* JS sets the font + per-cell height */
   #lkCrib .ac-legend { flex: 0 0 auto; margin-top: 3px; }
-  #lkDbg { display: none; position: absolute; top: 3%; left: 0; right: 0; text-align: center; font: 700 20px monospace; color: #5f6; z-index: 80; pointer-events: none; text-shadow: 0 0 6px #000; }
+  #lkDbg { display: none; position: absolute; top: 3%; left: 0; right: 0; text-align: center; font: 700 15px monospace; line-height: 1.5; color: #5f6; z-index: 80; pointer-events: none; text-shadow: 0 0 6px #000; }
 
   /* ---- Camera ACAAN (#camScreen) ---- */
   #camScreen { position: fixed; inset: 0; background: #000; z-index: 55; max-width: none; }
@@ -3250,7 +3250,7 @@ $("lkZones").innerHTML = LK_KEYS.map(([k,cx,ry]) =>
   `<div class="z" data-k="${k}" style="left:${(cx*33.34).toFixed(2)}%;top:${(14+ry*17).toFixed(1)}%;width:33.34%;height:17%"><span class="zl">${k==="clr"?"C":k}</span></div>`).join("");
 $("lkZones").addEventListener("click", e => { const z = e.target.closest(".z"); if (z) lkTap(z.dataset.k); });
 $("lkExit").addEventListener("click", lkHide);                                         // tap top-left: exit
-$("lkSetup").addEventListener("click", () => { const dbg = $("lkZones").classList.toggle("debug"); $("lkDbg").style.display = dbg ? "block" : "none"; $("lkDbg").textContent = dbg ? "debug on — press a button" : ""; });   // tap top-right: reveal hidden zones + input readout
+$("lkSetup").addEventListener("click", () => { const dbg = $("lkZones").classList.toggle("debug"); $("lkDbg").style.display = dbg ? "block" : "none"; lkDbgLog = []; $("lkDbg").innerHTML = dbg ? "debug on — press a button" : ""; });   // tap top-right: reveal hidden zones + input readout
 // clock digits & fingerprint are pointer-events:none (see CSS) — taps fall through to the zone grid (keys 8/5/2)
 
 function lkTap(k) {
@@ -3386,10 +3386,12 @@ function lkbtVal(n){ return n===10?"10":n===11?"J":n===12?"Q":n===13?"K":(n>=2&&
 function lkbtSetValue(n){ const v=lkbtVal(n); if(!v){ lkbtBuf=""; lkbtAcc=0; return; } lkValue=v; lkPhase="color"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
 function lkbtSetColor(c){ if(lkPhase!=="color") return; lkColor=c; lkPhase="number"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
 function lkbtSetNumber(n){ if(n<1||n>52) return; lkNum=String(n); lkbtDone=true; lkRenderDate(); lkbtDotSet("armed"); }
+let lkDbgLog = [];
+function lkDbgShow(msg){ if(!$("lkZones").classList.contains("debug")) return; lkDbgLog.unshift(msg); if(lkDbgLog.length>3) lkDbgLog.pop(); $("lkDbg").innerHTML = lkDbgLog.join("<br>"); }
 function lkbtKey(e){
   if($("lockScreen").style.display==="none") return;
   const c=e.code;
-  if($("lkZones").classList.contains("debug")) $("lkDbg").textContent = c + (LK_ZERO2_ADD[c]!==undefined ? " → +"+LK_ZERO2_ADD[c] : LK_ZERO2_CRIB.has(c) ? " → crib" : LK_ZERO2_CLR.has(c) ? " → clear" : "");   // calibrate BT button codes
+  lkDbgShow("key: " + (c || "∅") + "  key=" + (e.key || "∅") + "  #" + e.keyCode);   // calibrate: show code / key / keyCode
   if(lkCribMode && (c==="Backspace"||c==="Delete")){ e.preventDefault(); lkNum=lkNum.slice(0,-1); lkbtBuf=lkNum; lkbtAcc=0; lkRenderDate(); lkbtDotSet("hit"); return; }   // Backspace deletes the last digit
   if(LK_ARM_KEYS.has(c)){ e.preventDefault(); if(!lkbtActive){ lkbtArm(true); } else { lkReset(); lkbtAcc=0; lkbtBuf=""; lkbtDone=false; lkbtDotSet("armed"); lkbtIdleBump(); } return; }
   if(!lkbtActive || lkbtDone) return;
@@ -3429,7 +3431,7 @@ const GP_ADD = { 0:1, 1:2, 3:5, 2:10 };
 let GP_TOGGLE = 5, GP_CLEAR = 4;
 let lkGpRaf = null, lkGpPrev = {};
 function lkGpButton(i){
-  if($("lkZones").classList.contains("debug")) $("lkDbg").textContent = "gamepad btn " + i;
+  lkDbgShow("gamepad btn " + i);
   if(GP_ADD[i]!==undefined){ lkbtAcc=Math.min(52, lkbtAcc+GP_ADD[i]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkbtDotSet("hit"); }
   else if(i===GP_TOGGLE){ ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); }
   else if(i===GP_CLEAR){ lkbtAcc=0; lkbtBuf=""; lkNum=""; lkCribPeekHide(); lkRenderDate(); lkbtDotSet("hit"); }
@@ -3448,7 +3450,7 @@ function lkGpPoll(){
   lkGpRaf = requestAnimationFrame(lkGpPoll);
 }
 function lkGpStart(){ lkGpPrev={}; if(!lkGpRaf) lkGpRaf=requestAnimationFrame(lkGpPoll); }
-window.addEventListener("gamepadconnected", lkGpStart);
+window.addEventListener("gamepadconnected", e => { lkGpStart(); lkDbgShow("gamepad connected: " + (e.gamepad && e.gamepad.id ? e.gamepad.id.slice(0,24) : "?")); });
 
 lkOpen = lkShow;
 lkCribOpen = lkCribShow;
