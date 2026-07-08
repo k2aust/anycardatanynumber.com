@@ -3410,7 +3410,7 @@ function lkbtKey(e){
       const nowT = performance.now();
       const heldAt = lkHeld.get(kc);
       if(e.repeat || (heldAt !== undefined && nowT-heldAt < 1500)){ e.preventDefault(); return; }   // ignore auto-repeat / still-held (stale-recover after 1.5s)
-      if(kc===lkbtLastKc && nowT-lkbtLastT < 400){ e.preventDefault(); return; }   // 400ms bounce guard
+      if(kc===lkbtLastKc && nowT-lkbtLastT < 80){ e.preventDefault(); return; }   // tiny bounce guard (per-press held-tracking does the real work)
       lkHeld.set(kc, nowT); lkbtLastKc = kc; lkbtLastT = nowT;
     }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
