@@ -3371,12 +3371,11 @@ window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("sh
    Numpad: type value (J/Q/K = 11/12/13), + = red / - = black, type number, Enter. Gamepad: Up +1 / Right +2 / Down +5 /
    Left +10, A/Enter commits; in the colour step Left = black, Right = red. */
 const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Delete"]);
-// 8BitDo Zero 2 mapping (crib lockscreen, accumulator): A=+1 B=+2 Y=+5 X=+10, R1=toggle crib, L1=clear.
-// The e.codes below are BEST-GUESSES — toggle debug (tap top-right), press each button, read the real
-// code shown, and tell me any that differ. (Zero 2 must be in keyboard mode.)
-const LK_ZERO2_ADD  = { KeyA:1, KeyB:2, KeyY:5, KeyX:10 };   // A/B/Y/X accumulate
-const LK_ZERO2_CRIB = new Set(["KeyR", "KeyO"]);            // R1 -> toggle crib
-const LK_ZERO2_CLR  = new Set(["KeyL", "KeyU"]);            // L1 -> clear
+// 8BitDo Zero 2 (Android keyboard mode) — keyed by e.keyCode (the code comes through empty).
+// A=+1 B=+2 Y=+5 X=+10, R1=toggle crib, L1=clear.  Confirmed: A=71 B=74 Y=73.  X/R1/L1 pending.
+const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5 };   // A=71(g)  B=74(j)  Y=73(i)   [X=+10 keyCode TBD]
+const LK_ZERO2_CRIB = new Set([]);            // R1 -> toggle crib   [keyCode TBD]
+const LK_ZERO2_CLR  = new Set([]);            // L1 -> clear         [keyCode TBD]
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
 function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
@@ -3401,10 +3400,11 @@ function lkbtKey(e){
   else if(/^Digit[0-9]$/.test(c)) digit=+c.slice(5);
   const inc = c==="ArrowUp"?1 : c==="ArrowRight"?2 : c==="ArrowDown"?5 : c==="ArrowLeft"?10 : null;
   const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
-  if(lkCribMode){   // crib lockscreen — Zero 2 accumulator: A=+1 B=+2 Y=+5 X=+10, R1 toggles crib, L1 clears
-    if(LK_ZERO2_ADD[c]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[c]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkbtDotSet("hit"); return; }
-    if(LK_ZERO2_CRIB.has(c)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
-    if(LK_ZERO2_CLR.has(c)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkCribPeekHide(); lkRenderDate(); lkbtDotSet("hit"); return; }                 // L1 clear
+  if(lkCribMode){   // crib lockscreen — Zero 2 accumulator (keyed by keyCode): A=+1 B=+2 Y=+5 X=+10, R1 toggles crib, L1 clears
+    const kc = e.keyCode;
+    if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkbtDotSet("hit"); return; }
+    if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
+    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkCribPeekHide(); lkRenderDate(); lkbtDotSet("hit"); return; }                 // L1 clear
     if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); } lkbtDotSet("hit"); return; }   // BT numpad digits (bonus)
     if(c==="NumpadEnter"||c==="Enter"){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // numpad Enter also toggles
     return;
