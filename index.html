@@ -3380,10 +3380,11 @@ const LK_ZERO2_CRIB = new Set([67]);                 // c (d-pad) -> toggle crib
 const LK_ZERO2_CLR  = new Set([70]);                 // f (d-pad) -> clear
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 let lkbtLastKc=null, lkbtLastT=0;   // debounce: swallow OS key-repeat + same-key bounce
+const lkHeld = new Map();           // keyCode -> time first pressed; one count per physical press (ignore until keyup)
 function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
 function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
 function lkbtIdleBump(){ if(lkCribMode) return; if(lkbtIdle) clearTimeout(lkbtIdle); lkbtIdle=setTimeout(()=>lkbtArm(false),60000); }   // crib lockscreen stays armed (no 60s idle disarm)
-function lkbtArm(on){ lkbtActive=on; lkbtAcc=0; lkbtBuf=""; lkbtDone=false; if(on){ lkReset(); lkbtDotSet("armed"); lkbtIdleBump(); } else { lkbtDotSet("idle"); if(lkbtIdle){ clearTimeout(lkbtIdle); lkbtIdle=null; } } }
+function lkbtArm(on){ lkbtActive=on; lkbtAcc=0; lkbtBuf=""; lkbtDone=false; lkHeld.clear(); if(on){ lkReset(); lkbtDotSet("armed"); lkbtIdleBump(); } else { lkbtDotSet("idle"); if(lkbtIdle){ clearTimeout(lkbtIdle); lkbtIdle=null; } } }
 function lkbtVal(n){ return n===10?"10":n===11?"J":n===12?"Q":n===13?"K":(n>=2&&n<=9?String(n):null); }
 function lkbtSetValue(n){ const v=lkbtVal(n); if(!v){ lkbtBuf=""; lkbtAcc=0; return; } lkValue=v; lkPhase="color"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
 function lkbtSetColor(c){ if(lkPhase!=="color") return; lkColor=c; lkPhase="number"; lkbtBuf=""; lkbtAcc=0; lkNum=""; lkRenderDate(); }
@@ -3405,12 +3406,12 @@ function lkbtKey(e){
   const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
   if(lkCribMode){   // crib lockscreen — Zero 2 accumulator (keyed by keyCode): d-pad/face +1/+2/+5/+10, R1 toggles crib, L1 clears
     const kc = e.keyCode;
-    if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // debounce: one press = one action
-      if(e.repeat){ e.preventDefault(); return; }
+    if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // one press = one action
       const nowT = performance.now();
-      const gap = (LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)) ? 400 : 200;   // accumulate 200ms; toggle/clear keep a bigger guard
-      if(kc===lkbtLastKc && nowT-lkbtLastT < gap){ e.preventDefault(); return; }
-      lkbtLastKc = kc; lkbtLastT = nowT;
+      const heldAt = lkHeld.get(kc);
+      if(e.repeat || (heldAt !== undefined && nowT-heldAt < 1500)){ e.preventDefault(); return; }   // ignore auto-repeat / still-held (stale-recover after 1.5s)
+      if(kc===lkbtLastKc && nowT-lkbtLastT < 400){ e.preventDefault(); return; }   // 400ms bounce guard
+      lkHeld.set(kc, nowT); lkbtLastKc = kc; lkbtLastT = nowT;
     }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
     if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
@@ -3433,6 +3434,7 @@ function lkbtKey(e){
   }
 }
 document.addEventListener("keydown", lkbtKey);
+document.addEventListener("keyup", e => lkHeld.delete(e.keyCode));   // release lets the key count again
 
 /* ---- Gamepad API: the Zero 2 usually reports as a gamepad (not a keyboard) on iOS/Safari.
    Standard button indices: 0=A 1=B 2=X 3=Y 4=L1 5=R1 8=Select 9=Start 12-15=dpad.
