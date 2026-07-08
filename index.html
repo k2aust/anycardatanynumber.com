@@ -3243,6 +3243,9 @@ ddRerender = rdRender;
 /* ---- Lockscreen covert view (gaff): hidden-keypad input, disguised date/code ---- */
 let lkValue = null, lkColor = null, lkNum = "", lkPhase = "value", lkTimer = null, lkWeatherTxt = "--°";
 let lkCribMode = false;   // number-only covert lockscreen that peeks the high-low ACAAN crib (separate from the gaff lockscreen)
+let lkCribPhase = "num";  // crib lockscreen input target: "num" (position 1-52, shown as the year) | "val" (value 2-K, shown as the day)
+let lkCribVal = null;     // chosen value ("2".."10","J","Q","K"); shows as the day-of-month, drives the 4-suit code
+let lkbtValAcc = 0;       // accumulator for the value phase (2..13 -> 2..K)
 // invisible numpad — calculator layout so the middle column reads 8/5/2 top→bottom under the clock:
 //   J Q K / 7 8 9 / 4 5 6 / 1 2 3 / 10 0 C
 const LK_KEYS = [["J",0,0],["Q",1,0],["K",2,0],["7",0,1],["8",1,1],["9",2,1],
@@ -3257,8 +3260,14 @@ $("lkSetup").addEventListener("click", () => { const dbg = $("lkZones").classLis
 
 function lkTap(k) {
   if (k === "clr") { lkReset(); return; }
-  if (lkCribMode) {                                  // crib lockscreen: digits build the number directly (no value/colour)
-    if (/^[0-9]$/.test(k) && lkNum.length < 2) { lkNum += k; lkRenderDate(); }
+  if (lkCribMode) {                                  // crib lockscreen: number (year) then value (day) -> 4-suit code by the weather
+    if (lkCribPhase === "val") {                     // value phase: a single value key sets the value 2-K
+      let v = null;
+      if (k === "10") v = "10"; else if (k === "J" || k === "Q" || k === "K") v = k; else if (k >= "2" && k <= "9") v = k;
+      if (v) { lkCribVal = v; lkbtValAcc = lkValToNum(v); lkRenderDate(); lkCribRefresh(); }
+      return;
+    }
+    if (/^[0-9]$/.test(k) && lkNum.length < 2) { lkNum += k; if (lkNum.length === 2) lkCribPhase = "val"; lkRenderDate(); lkCribRefresh(); }   // 2 digits entered -> switch to value entry
     return;
   }
   if (lkPhase === "value") {
@@ -3278,7 +3287,8 @@ function lkTap(k) {
     lkNum += k; lkRenderDate();
   }
 }
-function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkRenderDate(); }
+function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkCribPhase="num"; lkCribVal=null; lkbtValAcc=0; lkRenderDate(); }
+function lkValToNum(v){ return v==="10"?10 : v==="J"?11 : v==="Q"?12 : v==="K"?13 : (+v||0); }
 function lkStartClock() { lkTick(); lkTimer = setInterval(lkTick, 1000); }
 function lkStopClock() { if (lkTimer) clearInterval(lkTimer); lkTimer = null; }
 function lkTick() { const t = new Date();
@@ -3291,16 +3301,20 @@ function lkRenderDate(t) {
   const mo = t.toLocaleDateString(undefined,{month:"short"});
   const face = (lkValue && lkColor) ? faceFor(lkValue, lkColor) : null;
   // feedback: show the value as soon as it's tapped (before colour), then the full card
-  const dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
+  let dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
+  if (lkCribMode) dayTxt = lkCribVal ? lkCribVal : String(t.getDate());   // crib lockscreen: the day-of-month is the chosen value
   const yearTxt = lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear());
   $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
   lkRenderCode(face);
 }
 function lkRenderCode(face) {
   const w = $("lkWeather"), N = parseInt(lkNum,10);
-  if (lkCribMode) {   // crib lockscreen: append the unavailable-value range next to the temperature ("-" = any value ok)
+  if (lkCribMode) {   // crib lockscreen: once a value is chosen show its 4-suit code, else the unavailable-value range
     w.classList.remove("u");
-    w.textContent = (N >= 1 && N <= 52) ? lkWeatherTxt + "  " + acUnavailRange(N) : lkWeatherTxt;
+    const validN = N >= 1 && N <= 52;
+    if (validN && lkCribVal) w.innerHTML = lkWeatherTxt + "  " + acValCodesHTML(N, lkCribVal);
+    else if (validN)         w.textContent = lkWeatherTxt + "  " + acUnavailRange(N);
+    else                     w.textContent = lkWeatherTxt;
     return;
   }
   if (face && N >= 1 && N <= 52) { const out = resolveOut(face, N, $("dl").checked);
@@ -3378,6 +3392,7 @@ const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Dele
 const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5, 72:10 };   // face buttons: A=71(g)+1  B=74(j)+2  Y=73(i)+5  X=72(h)+10
 const LK_ZERO2_CRIB = new Set([67]);                 // c (d-pad) -> toggle crib
 const LK_ZERO2_CLR  = new Set([70]);                 // f (d-pad) -> clear
+const LK_ZERO2_PHASE= new Set([68]);                 // d (d-pad) -> switch between entering the NUMBER and the VALUE
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 let lkbtLastKc=null, lkbtLastT=0;   // debounce: swallow OS key-repeat + same-key bounce
 const lkHeld = new Map();           // keyCode -> time first pressed; one count per physical press (ignore until keyup)
@@ -3404,19 +3419,26 @@ function lkbtKey(e){
   else if(/^Digit[0-9]$/.test(c)) digit=+c.slice(5);
   const inc = c==="ArrowUp"?1 : c==="ArrowRight"?2 : c==="ArrowDown"?5 : c==="ArrowLeft"?10 : null;
   const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
-  if(lkCribMode){   // crib lockscreen — Zero 2 accumulator (keyed by keyCode): d-pad/face +1/+2/+5/+10, R1 toggles crib, L1 clears
+  if(lkCribMode){   // crib lockscreen — Zero 2 accumulator (keyed by keyCode): face +1/+2/+5/+10, d=switch number/value, c toggles crib, f clears
     const kc = e.keyCode;
-    if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // one press = one action
+    if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc) || LK_ZERO2_PHASE.has(kc)){   // one press = one action
       const nowT = performance.now();
       const recent = (kc===lkbtLastKc && nowT-lkbtLastT < 500);   // same button within 500ms = OS auto-repeat/bounce
       lkbtLastKc = kc; lkbtLastT = nowT;                          // slide the window on EVERY press so dense repeats can't escape
       if(e.repeat || lkHeld.has(kc) || recent){ e.preventDefault(); return; }
       lkHeld.set(kc, nowT);
     }
-    if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
-    if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
-    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }                     // clear the number; keep the crib open (empty)
-    if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); lkCribRefresh(); } lkbtDotSet("hit"); return; }   // BT numpad digits (bonus)
+    if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault();
+      if(lkCribPhase==="val"){ lkbtValAcc=Math.min(13, lkbtValAcc+LK_ZERO2_ADD[kc]); lkCribVal=lkbtValAcc>=2?lkbtVal(lkbtValAcc):null; }   // build the value 2..K
+      else { lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; }                              // build the number 1..52
+      lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
+    if(LK_ZERO2_PHASE.has(kc)){ e.preventDefault(); lkCribPhase = lkCribPhase==="num" ? "val" : "num"; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }   // d: flip between entering the number and the value
+    if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // c toggle crib
+    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkbtValAcc=0; lkCribVal=null; lkCribPhase="num"; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }   // clear number + value
+    if(digit!==null){ e.preventDefault();
+      if(lkCribPhase==="val"){ if(digit>=2&&digit<=9){ lkCribVal=String(digit); lkbtValAcc=digit; lkRenderDate(); lkCribRefresh(); } }   // BT numpad: value 2-9 (bonus)
+      else if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); lkCribRefresh(); }                    // BT numpad: number digits (bonus)
+      lkbtDotSet("hit"); return; }
     if(c==="NumpadEnter"||c==="Enter"){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // numpad Enter also toggles
     return;
   }
@@ -3634,6 +3656,16 @@ const acCode = o => (o.cut ? "1" : "2") + ({0:"N",2:"J",4:"A",6:"B"}[o.packet] |
 function acUnavailRange(N){
   const un = AC_VALS.filter(v => !AC_SUITS.some(([s]) => acReach(v+s, N)));
   return !un.length ? "-" : (un.length === 1 ? un[0] : un[0] + "-" + un[un.length-1]);
+}
+// the chosen VALUE's code across the four suits (clubs/hearts/spades/diamonds), "/"-separated.
+// unreachable suit -> "-"; dealt-from-face -> underlined.  Returns HTML.
+function acValCodesHTML(N, val){
+  return AC_SUITS.map(([s]) => {
+    const out = acReach(val + s, N);
+    if (!out) return "-";
+    const code = acCode(out);
+    return out.end === "face" ? `<u>${code}</u>` : code;
+  }).join("/");
 }
 
 function acaanShow(){
