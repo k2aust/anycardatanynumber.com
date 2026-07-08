@@ -3408,9 +3408,10 @@ function lkbtKey(e){
     const kc = e.keyCode;
     if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // one press = one action
       const nowT = performance.now();
-      if(e.repeat || lkHeld.has(kc)){ e.preventDefault(); return; }   // one count per press: ignore auto-repeat + anything still held (until keyup)
-      if(kc===lkbtLastKc && nowT-lkbtLastT < 80){ e.preventDefault(); return; }   // tiny bounce guard
-      lkHeld.set(kc, nowT); lkbtLastKc = kc; lkbtLastT = nowT;
+      const recent = (kc===lkbtLastKc && nowT-lkbtLastT < 500);   // same button within 500ms = OS auto-repeat/bounce
+      lkbtLastKc = kc; lkbtLastT = nowT;                          // slide the window on EVERY press so dense repeats can't escape
+      if(e.repeat || lkHeld.has(kc) || recent){ e.preventDefault(); return; }
+      lkHeld.set(kc, nowT);
     }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
     if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
