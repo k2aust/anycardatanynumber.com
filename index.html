@@ -3408,9 +3408,8 @@ function lkbtKey(e){
     const kc = e.keyCode;
     if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // one press = one action
       const nowT = performance.now();
-      const heldAt = lkHeld.get(kc);
-      if(e.repeat || (heldAt !== undefined && nowT-heldAt < 1500)){ e.preventDefault(); return; }   // ignore auto-repeat / still-held (stale-recover after 1.5s)
-      if(kc===lkbtLastKc && nowT-lkbtLastT < 80){ e.preventDefault(); return; }   // tiny bounce guard (per-press held-tracking does the real work)
+      if(e.repeat || lkHeld.has(kc)){ e.preventDefault(); return; }   // one count per press: ignore auto-repeat + anything still held (until keyup)
+      if(kc===lkbtLastKc && nowT-lkbtLastT < 80){ e.preventDefault(); return; }   // tiny bounce guard
       lkHeld.set(kc, nowT); lkbtLastKc = kc; lkbtLastT = nowT;
     }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
@@ -3435,6 +3434,7 @@ function lkbtKey(e){
 }
 document.addEventListener("keydown", lkbtKey);
 document.addEventListener("keyup", e => lkHeld.delete(e.keyCode));   // release lets the key count again
+window.addEventListener("blur", () => lkHeld.clear());   // if focus is lost mid-hold (keyup may be missed), don't leave a key stuck
 
 /* ---- Gamepad API: the Zero 2 usually reports as a gamepad (not a keyboard) on iOS/Safari.
    Standard button indices: 0=A 1=B 2=X 3=Y 4=L1 5=R1 8=Select 9=Start 12-15=dpad.
