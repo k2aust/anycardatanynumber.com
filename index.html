@@ -272,12 +272,12 @@
   /* vertical clock + fingerprint ARE the tap targets for 8 / 5 / 2 (middle column only, so 7/9 etc. stay tappable) */
   /* clock hrs/mins/fingerprint are pinned to exactly their numpad cells (keys 8/5/2, middle column) and
      are pointer-events:none so the invisible zone grid handles every tap — guarantees alignment + no overlap */
-  #lkHrs, #lkMins { position: absolute; left: 33.34%; width: 33.34%; height: 17%; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 15vh; font-weight: 100; line-height: 1; letter-spacing: -0.5vh; z-index: 62; pointer-events: none; }
+  #lkHrs, #lkMins { position: absolute; left: 33.34%; width: 33.34%; height: 17%; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 20vh; font-weight: 100; line-height: 1; letter-spacing: -0.5vh; z-index: 62; pointer-events: none; overflow: visible; }
   #lkHrs { top: 31%; }
   #lkMins { top: 48%; }
   #lkFinger { position: absolute; left: 33.34%; width: 33.34%; height: 17%; top: 65%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 62; pointer-events: none; color: rgba(255,255,255,.6); }
-  #lkFinger .fp { width: 9vh; height: 9vh; display: block; margin: 0 auto; pointer-events: none; }
-  #lkFinger .lkHint { font-size: 1.7vh; margin-top: 0.6vh; }
+  #lkFinger .fp { width: 6vh; height: 6vh; display: block; margin: 0 auto; pointer-events: none; }
+  #lkFinger .lkHint { font-size: 1.5vh; margin-top: 0.6vh; }
   #lkZones { position: absolute; inset: 0; z-index: 60; pointer-events: none; }   /* only the zones capture taps */
   #lkZones .z { position: absolute; pointer-events: auto; display: flex; align-items: center; justify-content: center; }
   #lkZones .z .zl { display: none; font-size: 4.5vw; color: rgba(255,210,80,.9); }
@@ -3331,9 +3331,8 @@ $("lkCribBack").addEventListener("click", lkCribPeekHide);
 function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
-  $("lkCribBody").innerHTML = (N >= 1 && N <= 52)
-    ? `<div class="lkc-h">${N}</div>` + acGridHTML(N)
-    : `<div class="lkc-h" style="font-size:20px">Tap in a number (1&ndash;52) first</div>`;
+  const valid = N >= 1 && N <= 52;
+  $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>` + acGridHTML(valid ? N : 0);
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
@@ -3415,7 +3414,7 @@ function lkbtKey(e){
     }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
     if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
-    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkCribPeekHide(); lkRenderDate(); lkbtDotSet("hit"); return; }                 // L1 clear
+    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }                     // clear the number; keep the crib open (empty)
     if(digit!==null){ e.preventDefault(); if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); lkCribRefresh(); } lkbtDotSet("hit"); return; }   // BT numpad digits (bonus)
     if(c==="NumpadEnter"||c==="Enter"){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // numpad Enter also toggles
     return;
@@ -3659,10 +3658,11 @@ function acDrawEntry(){
 }
 // Pure crib grid for a number N: summary + value x suit table (with codes) + legend. Reused by the crib screen and the lockscreen peek.
 function acGridHTML(N){
+  const valid = N >= 1 && N <= 52;
   const head = AC_SUITS.map(([c,sym,red]) => `<th class="${red?'r':''}">${sym}</th>`).join("");
   let cardCount = 0, valCount = 0;
   const rows = AC_VALS.map(v => {
-    const outs = AC_SUITS.map(([s]) => acReach(v+s, N));
+    const outs = AC_SUITS.map(([s]) => valid ? acReach(v+s, N) : null);
     const any = outs.some(Boolean);
     if (any) valCount++;
     const cells = AC_SUITS.map((suit, i) => {
@@ -3671,11 +3671,11 @@ function acGridHTML(N){
         const ori = out.end === "face" ? "face" : "top";   // top = deal face-down (white), face = deal from face (black)
         return `<td class="on ${ori}" data-card="${v+suit[0]}">${acCode(out)}</td>`;
       }
-      return any ? `<td></td>` : `<td class="dead">&#10005;</td>`;   // red X only when the WHOLE value is unavailable
+      return (any || !valid) ? `<td></td>` : `<td class="dead">&#10005;</td>`;   // red X only when the WHOLE value is unavailable (blank when no number)
     }).join("");
-    return `<tr><th class="${any?'':'dead'}">${v}</th>${cells}</tr>`;
+    return `<tr><th class="${(valid && !any)?'dead':''}">${v}</th>${cells}</tr>`;
   }).join("");
-  return `<div class="ac-summary">At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards</div>`
+  return `<div class="ac-summary">${valid ? `At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards` : `Enter a number`}</div>`
     + `<table class="ac-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`
     + `<div class="ac-legend"><b>1</b>/<b>2</b> hand spectator 1 (cut) / 2 (no cut) &middot; <b>N</b>/<b>J</b>/<b>A</b>/<b>B</b> add nothing/jokers/aces/both &middot; <b>+</b> next card / <b>.</b> direct hit &middot; <span class="sw" style="background:#fff"></span> face&#8209;down <span class="sw" style="background:#111"></span> from face</div>`;
 }
