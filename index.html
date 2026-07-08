@@ -3406,7 +3406,7 @@ function lkbtKey(e){
     if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // debounce: one press = one action
       if(e.repeat){ e.preventDefault(); return; }
       const nowT = performance.now();
-      const gap = (LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)) ? 400 : 90;   // toggle/clear get a much bigger guard so they don't double-fire
+      const gap = (LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)) ? 400 : 150;   // toggle/clear get a much bigger guard; d-pad 150ms
       if(kc===lkbtLastKc && nowT-lkbtLastT < gap){ e.preventDefault(); return; }
       lkbtLastKc = kc; lkbtLastT = nowT;
     }
