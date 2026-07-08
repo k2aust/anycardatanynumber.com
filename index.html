@@ -3373,10 +3373,12 @@ window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("sh
 const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Delete"]);
 // 8BitDo Zero 2 (Android keyboard mode) — keyed by e.keyCode (the code comes through empty).
 // A=+1 B=+2 Y=+5 X=+10, R1=toggle crib, L1=clear.  Confirmed: A=71 B=74 Y=73.  X/R1/L1 pending.
-const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5, 72:10 };   // 8BitDo Zero 2 (keyboard mode): A=71(g)+1  B=74(j)+2  Y=73(i)+5  X=72(h)+10
+const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5, 72:10,   // face buttons: A=71(g)+1 B=74(j)+2 Y=73(i)+5 X=72(h)+10
+                        69:1, 67:2, 70:5, 68:10 };  // d-pad: e=69(+1) c=67(+2) f=70(+5) d=68(+10)
 const LK_ZERO2_CRIB = new Set([77]);                 // R1=77(m) -> toggle crib
 const LK_ZERO2_CLR  = new Set([75]);                 // L1=75(k) -> clear
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
+let lkbtLastKc=null, lkbtLastT=0;   // debounce: swallow OS key-repeat + same-key bounce
 function lkbtDotEl(){ if(!lkbtDot){ lkbtDot=document.createElement("div"); lkbtDot.style.cssText="position:absolute;left:11px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#243;opacity:.35;transition:opacity .15s,background .15s;z-index:6;pointer-events:none"; $("lockScreen").appendChild(lkbtDot); } return lkbtDot; }
 function lkbtDotSet(s){ const d=lkbtDotEl(); if(s==="armed"){ d.style.background="#2a7"; d.style.opacity=".8"; } else if(s==="hit"){ d.style.background="#7f7"; d.style.opacity="1"; setTimeout(()=>{ if(lkbtActive) lkbtDotSet("armed"); },130); } else { d.style.background="#243"; d.style.opacity=".35"; } }
 function lkbtIdleBump(){ if(lkCribMode) return; if(lkbtIdle) clearTimeout(lkbtIdle); lkbtIdle=setTimeout(()=>lkbtArm(false),60000); }   // crib lockscreen stays armed (no 60s idle disarm)
@@ -3400,8 +3402,14 @@ function lkbtKey(e){
   else if(/^Digit[0-9]$/.test(c)) digit=+c.slice(5);
   const inc = c==="ArrowUp"?1 : c==="ArrowRight"?2 : c==="ArrowDown"?5 : c==="ArrowLeft"?10 : null;
   const commit = c==="NumpadEnter"||c==="Enter"||c==="Space"||c==="KeyA";
-  if(lkCribMode){   // crib lockscreen — Zero 2 accumulator (keyed by keyCode): A=+1 B=+2 Y=+5 X=+10, R1 toggles crib, L1 clears
+  if(lkCribMode){   // crib lockscreen — Zero 2 accumulator (keyed by keyCode): d-pad/face +1/+2/+5/+10, R1 toggles crib, L1 clears
     const kc = e.keyCode;
+    if(LK_ZERO2_ADD[kc]!==undefined || LK_ZERO2_CRIB.has(kc) || LK_ZERO2_CLR.has(kc)){   // debounce: one press = one action
+      if(e.repeat){ e.preventDefault(); return; }
+      const nowT = performance.now();
+      if(kc===lkbtLastKc && nowT-lkbtLastT < 90){ e.preventDefault(); return; }
+      lkbtLastKc = kc; lkbtLastT = nowT;
+    }
     if(LK_ZERO2_ADD[kc]!==undefined){ e.preventDefault(); lkbtAcc=Math.min(52, lkbtAcc+LK_ZERO2_ADD[kc]); lkbtBuf=""; lkNum=lkbtAcc?String(lkbtAcc):""; lkRenderDate(); lkbtDotSet("hit"); return; }
     if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // R1 toggle crib
     if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkCribPeekHide(); lkRenderDate(); lkbtDotSet("hit"); return; }                 // L1 clear
