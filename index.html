@@ -3391,8 +3391,8 @@ const LK_ARM_KEYS = new Set(["NumpadDivide","NumLock","Escape","Backspace","Dele
 // A=+1 B=+2 Y=+5 X=+10, R1=toggle crib, L1=clear.  Confirmed: A=71 B=74 Y=73.  X/R1/L1 pending.
 const LK_ZERO2_ADD  = { 71:1, 74:2, 73:5, 72:10 };   // face buttons: A=71(g)+1  B=74(j)+2  Y=73(i)+5  X=72(h)+10
 const LK_ZERO2_CRIB = new Set([67]);                 // c (d-pad) -> toggle crib
-const LK_ZERO2_CLR  = new Set([70]);                 // f (d-pad) -> clear
-const LK_ZERO2_PHASE= new Set([68]);                 // d (d-pad) -> switch between entering the NUMBER and the VALUE
+const LK_ZERO2_CLR  = new Set([70, 75]);             // f (d-pad) / L1 (k=#75) -> clear
+const LK_ZERO2_PHASE= new Set([68, 77]);             // d (d-pad) / R1 (m=#77) -> switch between entering the NUMBER and the VALUE
 let lkbtActive=false, lkbtAcc=0, lkbtBuf="", lkbtDone=false, lkbtIdle=null, lkbtDot=null;
 let lkbtLastKc=null, lkbtLastT=0;   // debounce: swallow OS key-repeat + same-key bounce
 const lkHeld = new Map();           // keyCode -> time first pressed; one count per physical press (ignore until keyup)
