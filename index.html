@@ -332,6 +332,16 @@
   #camScreen .cambtn.rec { background: #c0392b; border-color: #c0392b; }
   #camScreen .cambtn.rec.on { background: #fff; color: #c0392b; }
   #camExit { position: absolute; top: 0; left: 0; width: 22%; height: 9%; z-index: 61; }
+  #camReadChip { position: absolute; top: 10vh; left: 50%; transform: translateX(-50%); z-index: 62;
+    background: rgba(14,15,19,.55); color: #f5d67b; border: 1px solid rgba(245,214,123,.35);
+    border-radius: 14px; padding: 8px 16px; font-size: 14px; font-weight: 600; max-width: 86vw;
+    text-align: center; pointer-events: none; backdrop-filter: blur(3px); }
+  #camReadChip.err { color: #ff8a80; border-color: rgba(255,138,128,.4); }
+  #camCutPad { position: absolute; bottom: 12vh; left: 50%; transform: translateX(-50%); z-index: 62;
+    background: rgba(14,15,19,.85); border: 1px solid rgba(255,255,255,.25); border-radius: 14px;
+    padding: 10px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  #camCutPad button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px; padding: 10px 0; font-size: 15px; font-weight: 700; min-width: 40px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -473,8 +483,12 @@
   <div id="camBar">
     <button id="camHideBtn" class="cambtn">Hide</button>
     <button id="camRec" class="cambtn rec">&#9679; Record</button>
+    <button id="camRead" class="cambtn">&#8981; Read</button>
+    <button id="camCut" class="cambtn" style="display:none">Cut?</button>
     <button id="camFlip" class="cambtn">Flip</button>
   </div>
+  <div id="camReadChip" style="display:none"></div>
+  <div id="camCutPad" style="display:none"></div>
   <div id="camExit"></div>
 </section>
 
@@ -2105,6 +2119,15 @@ function spellOpen(){
   const ap = $("app"); if (ap) ap.style.display = "none";
   $("spellScreen").style.display = "block";
   spVal = null; spSuit = null; spellRender();
+  // Spelling is a property of the Combined stack's engineered order — the
+  // letter-count handling is silently WRONG on any other stack.
+  const warn = $("spWarn") || (() => { const d = document.createElement("div"); d.id = "spWarn";
+    d.style.cssText = "margin:8px 12px;padding:10px;border:1px solid #c0392b;border-radius:10px;color:#ff8a80;font-weight:600;text-align:center";
+    $("spellScreen").prepend(d); return d; })();
+  if (rdScheme !== "highlow") {
+    warn.textContent = "⚠ Spelling only works with the Combined stack — current stack: " + rdScheme + ". Switch in Settings before using these handlings.";
+    warn.style.display = "";
+  } else warn.style.display = "none";
 }
 function renderSettings() {
   // v2: only the camera view + the new-stack setup/reference are exposed.
@@ -2174,6 +2197,15 @@ function renderSettings() {
     +   '<button class="segopt' + (chimeEnabled ? ' active' : '') + '" data-v="1">On<small>bell on reveal</small></button>'
     +   '<button class="segopt' + (chimeEnabled ? '' : ' active') + '" data-v="0">Off</button>'
     + '</div></div>'
+    + '<div class="set-group"><div class="set-label">Selection order</div><div class="seg" id="segOrder">'
+    +   '<button class="segopt' + (cardFirst ? '' : ' active') + '" data-v="0">Number first<small>classic flow</small></button>'
+    +   '<button class="segopt' + (cardFirst ? ' active' : '') + '" data-v="1">Card first<small>free card, steer the number</small></button>'
+    + '</div></div>'
+    + '<div class="set-group"><div class="set-label">Stack</div><div class="seg" id="segStack">'
+    +   [["highlow","Combined","optimized"],["aronson","Aronson",""],["mnemonica","Mnemonica",""]]
+        .concat(localStorage.getItem("rdCustomStack") ? [["custom","Last read","live-read shuffle"]] : [])
+        .map(([v,l,sm]) => '<button class="segopt' + (rdScheme === v ? ' active' : '') + '" data-v="' + v + '">' + l + (sm ? '<small>' + sm + '</small>' : '') + '</button>').join('')
+    + '</div><div class="hint" id="stackThin"></div></div>'
     + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The full 52-card stack is listed below. Set aside the <b>2 jokers</b> and the <b>4 aces</b> (highlighted) in two face-up piles, leaving the 48-card ACAAN stack &mdash; which is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
     + instr
     + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers). The aces are placed here for an upcoming spelling mode.</div></div>`
@@ -2187,6 +2219,24 @@ function renderSettings() {
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
+  { const so = $("segOrder"); if (so) so.addEventListener("click", e => {
+      const b = e.target.closest(".segopt"); if (!b) return;
+      cardFirst = b.dataset.v === "1";
+      localStorage.setItem("rdCardFirst", cardFirst ? "1" : "0");
+      if (rdSetScheme) rdSetScheme(rdScheme);   // reset flow state + re-render
+      renderSettings(); }); }
+  { const ss = $("segStack"); if (ss) ss.addEventListener("click", e => {
+      const b = e.target.closest(".segopt"); if (!b) return;
+      const v = b.dataset.v;
+      if (v === "custom") {
+        try { const saved = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
+              if (saved && window.__st) { window.__st.rdUseCustomStack(saved.stack, saved.flags);
+                if (rdSetScheme) rdSetScheme("custom"); } } catch (err) {}
+      } else if (rdSetScheme) rdSetScheme(v);
+      renderSettings(); });
+    const th = $("stackThin");
+    if (th && window.__st) { try { th.innerHTML = "Thin numbers for this stack (pre-empt them aloud): <b>" +
+      window.__st.rdWorstNumbers(3).join(", ") + "</b>"; } catch (err) { th.textContent = ""; } } }
   return;
   const activeStack = stackArr(settings);
   let h = `<div class="set-group"><h3>Deck</h3>
@@ -2513,6 +2563,7 @@ let rdChime = null;     // set by the tool's IIFE; plays the reveal bell (used f
 let stackForSettings = null;  // the dealing stack (48, aces/jokers out), exposed to the settings panel
 let fullStackForSettings = null;  // the full 52-card order WITH aces in place (for the settings reference display)
 let selectMode = localStorage.getItem("rdSelectMode") === "1";  // false = removing (eliminate), true = selecting (tap the value)
+let cardFirst = localStorage.getItem("rdCardFirst") === "1";    // true = card named freely first, then the NUMBER is selected (shuffled-stack friendly)
 let noDL = localStorage.getItem("rdNoDL") === "1";              // true = limit selections that would require a double lift
 // Title shows a trailing "." in Selection mode so you can tell the mode at a glance.
 function updateModeTitle(){ const t = $("title"); if (t) t.textContent = "Any Card At Any Number" + (selectMode ? "." : ""); }
@@ -2674,6 +2725,23 @@ const RD_SCHEMES = {
     lowFan: ["2","3","4","5","6","7"], highFan: ["8","9","10","J","Q","K"],
   },
 };
+// Classic memorized stacks under the same High/Low mechanics (aces+jokers
+// held out as packets). Not scheme-optimized like the combined stack, so
+// reachability is computed dynamically — same as a live-read shuffle;
+// check the thin-numbers line in Settings before performing.
+for (const [nm, stk, fl] of [
+  ["aronson",
+   ["JS","KC","5C","2H","9S","3H","6C","8D","10S","5H","2D","KD","7D","8C","3S","7S","5S","QD","8S","3D","7H","QH","5D","7C","4H","KH","4D","10D","JC","JH","10C","JD","4S","10H","6H","3C","2S","9H","KS","6S","4C","8H","9C","QS","6D","QC","2C","9D"],
+   ["JS","KC","5C","2H","9S","AS","3H","6C","8D","AC","10S","5H","2D","KD","7D","8C","3S","AD","7S","5S","QD","AH","8S","3D","7H","QH","5D","7C","4H","KH","4D","10D","JC","JH","10C","JD","4S","10H","6H","3C","2S","9H","KS","6S","4C","8H","9C","QS","6D","QC","2C","9D"]],
+  ["mnemonica",
+   ["4C","2H","7D","3C","4H","6D","5H","9S","2S","QH","3D","QC","8H","6S","5S","9H","KC","2D","JH","3S","8S","6H","10C","5D","KD","2C","3H","8D","5C","KS","JD","8C","10S","KH","JC","7S","10H","4S","7H","4D","9C","JS","QD","7C","QS","10D","6C","9D"],
+   ["4C","2H","7D","3C","4H","6D","AS","5H","9S","2S","QH","3D","QC","8H","6S","5S","9H","KC","2D","JH","3S","8S","6H","10C","5D","KD","2C","3H","8D","5C","KS","JD","8C","10S","KH","JC","7S","10H","AD","4S","7H","4D","AC","9C","JS","QD","7C","QS","10D","6C","AH","9D"]],
+]) {
+  const base = RD_SCHEMES.highlow;
+  RD_SCHEMES[nm] = { stack: stk, full: fl, lo: base.lo, hi: base.hi, kindStep: false,
+    low: base.low, lowMid: base.lowMid, high: base.high, highMid: base.highMid,
+    mid: base.mid, lowFan: base.lowFan, highFan: base.highFan };
+}
 // rdScheme is declared in the outer scope (shared with renderSettings); we just read/write it here.
 const RD_PACKETS = [0,2,4,6];
 let RD_STACK, RD_LO, RD_HI, RD_L0, RD_HALF, RD_POS = {};
@@ -2688,22 +2756,56 @@ function rdApplyScheme(name){
 }
 rdApplyScheme(rdScheme);
 rdSetScheme = name => { rdApplyScheme(name); rdResetState(); rdRender(); };   // bridge for the settings toggle (outer scope)
+// ---- shuffled-deck (live-read) custom stack ----
+let rdExcluded = new Set();          // flagged/uncertain cards: never offered, never forced
+function rdUseCustomStack(stack48, flaggedCards){
+  const base = RD_SCHEMES.highlow;
+  RD_SCHEMES.custom = { stack: stack48.slice(), full: stack48.slice(),
+    lo: base.lo, hi: base.hi, kindStep: false,
+    low: base.low, lowMid: base.lowMid, high: base.high, highMid: base.highMid,
+    mid: base.mid, lowFan: base.lowFan, highFan: base.highFan };
+  rdExcluded = new Set(flaggedCards || []);
+  rdApplyScheme("custom");
+  try { localStorage.setItem("rdCustomStack", JSON.stringify({ stack: stack48, flags: flaggedCards || [], at: new Date().toISOString() })); } catch (e) {}
+}
+function rdSetCutCard(card){          // glimpsed bottom card of the handed-off TOP half
+  const p = RD_POS[card];
+  if (!p) return false;
+  RD_HALF = p;
+  return true;
+}
+// per-stack thinnest numbers (for the "don't let me influence you" pre-empt line)
+function rdWorstNumbers(k){
+  const scored = [];
+  for (let N = RD_LO; N <= RD_HI; N++){
+    let score = 0, thin = false;
+    for (const color of ["red","black"]){
+      const g = rdGroups(color, N);
+      score += g.low.length + g.high.length;
+      if (!g.low.length || !g.high.length) thin = true;
+    }
+    scored.push({ N, score: score - (thin ? 100 : 0) });
+  }
+  scored.sort((a,b) => a.score - b.score);
+  return scored.slice(0, k || 3).map(s => s.N);
+}
 // ---- scheme-aware helpers ----
 const RD_VORDER = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 const rdValCmp = (a,b) => RD_VORDER.indexOf(String(a)) - RD_VORDER.indexOf(String(b));
 const rdHasKind = () => RD_SCHEMES[rdScheme].kindStep;
-const rdNumMode = st => rdScheme === "highlow" ? true : st.kind === "num";   // "number-card" (high/low) mode reached?
+const rdHL = () => !RD_SCHEMES[rdScheme].kindStep;   // all High/Low-mechanics schemes (combined/aronson/mnemonica/custom)
+const rdNumMode = st => rdHL() ? true : st.kind === "num";   // "number-card" (high/low) mode reached?
 const rdMidSet = () => RD_SCHEMES[rdScheme].mid;
 function rdReach(v, color, N){ const r = rdSuit(String(v), color, N);
   if (!r.out) return false;
-  if (rdScheme === "highlow") return r.out.method !== "dl";   // highlow never offers a double-lift card
+  if (rdHL()) return r.out.method !== "dl";   // highlow never offers a double-lift card
   return true;
 }
 // scheme-aware low/high grouping (pure: takes color+number). Pictures fold into "high" for highlow.
 function rdGroups(color, num){
   const reach = v => rdReach(v, color, num);
   const S = RD_SCHEMES[rdScheme];
-  if (rdScheme === "highlow"){
+  if (rdHL()){
     const low = S.low.filter(reach);
     for (const v of S.lowMid){ if (reach(v)) low.push(v); else break; }     // extend up from 5: 6 then 7
     const high = S.high.filter(reach);
@@ -2731,6 +2833,7 @@ function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1),
 // fewest added cards; then no-cut; then top end. Packet on top shifts top positions by k
 // (face unchanged); packet on face shifts face positions by k (top unchanged).
 function rdResolve(card, N){
+  if (rdExcluded.size && rdExcluded.has(card)) return null;   // uncertain live-read cards are unreachable
   const p = RD_POS[card]; if (p === undefined) return null;
   const c = [];
   for (const cut of [false, true]){
@@ -2839,7 +2942,7 @@ let numEntry = "";
 const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null, valElim: [] };
 const RD_VNAME = { "2":"Two","3":"Three","4":"Four","5":"Five","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
 const RD_SNAME = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" }, RD_SSYM = { S:"♠", C:"♣", H:"♥", D:"♦" };
-function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; rd.suitPicked=null; rd.valElim=[]; numEntry=""; }
+function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; rd.suitPicked=null; rd.valElim=[]; rd.nhl=null; rd.npar=null; numEntry=""; }
 
 // ---- number step ----
 $("keypad").addEventListener("click", e => {
@@ -2885,6 +2988,7 @@ $("ddGaffFlow").addEventListener("click", e => {
   const g = b.dataset.g, v = b.dataset.v; if (!g) return;
   // magician view: direct selection (tap what they named), no animation/images
   if (magicianMode) {
+    if (["cfval","cfsuit","nhl","npar","nnum"].includes(g)) return rdApply(g, v);   // card-first steps share one path
     if (g === "color") rd.color = v;
     else if (g === "kind") { rd.kind = v; rd.hl = null; }
     else if (g === "hl") rd.hl = v;
@@ -2944,6 +3048,21 @@ function rdChimePlay(){
 }
 rdChime = rdChimePlay;   // expose for the settings preview
 function rdApply(g, v){
+  // ---- card-first steps ----
+  if (g === "cfval") { rd.value = v; return rdRender(); }
+  if (g === "cfsuit") {
+    rd.card = rd.value + v; rd.suitPicked = v;
+    rd.color = (v === "H" || v === "D") ? "red" : "black";
+    rd.step = 1; return rdRender();
+  }
+  if (g === "nhl") { rd.nhl = v; return rdRender(); }
+  if (g === "npar") { rd.npar = v; return rdRender(); }
+  if (g === "nnum") {
+    rd.num = parseInt(v, 10); rd.step = 2; rdRender();
+    rdPopupChain([{ msg: `The ${rdCardLabel(rd.card)}<br>at number ${rd.num}!`, final: true }]);
+    if (!selectMode) rdChimePlay();
+    return;
+  }
   if (g === "suit") {
     const r = rdSuit(rd.value, rd.color, rd.num);
     rd.suitPicked = v;
@@ -2988,6 +3107,29 @@ function rdPopup(msg, final){ if (!msg) return; rdPopupChain([{ msg, final: !!fi
 // 5 is reachable, else high if 7 is reachable, else it's an orphan and is dropped (e.g. 5 & 7 both dud →
 // low 2-4 / high 8-10 even though 6 is available). all reachable → low 2-6 / high 7-10.
 function rdHiLoSplit(){ return rdGroups(rd.color, rd.num); }   // scheme-aware (see rdGroups)
+// Removing mode, value step: an ascending fan with an INTERIOR hole
+// ("2 3 4 6 7") advertises the missing value. If values are missing
+// anywhere except the fan's inner edge (top of the lows / bottom of the
+// highs — where a shorter fan just looks natural), show the offered
+// values in a shuffled order instead. Seeded by (N, color, side) so
+// re-renders and eliminations never visibly reshuffle.
+function rdDeceptiveOrder(offered, num, color, hl){
+  const S = RD_SCHEMES[rdScheme];
+  const fan = hl === "low" ? S.lowFan : hl === "high" ? S.highFan : null;
+  if (!fan || offered.length === fan.length) return offered;
+  const idx = offered.map(v => fan.indexOf(v));
+  const prefixOK = hl === "low"  && idx.every((x, i) => x === i);
+  const suffixOK = hl === "high" && idx.every((x, i) => x === fan.length - offered.length + i);
+  if (prefixOK || suffixOK) return offered;
+  let seed = num * 131 + (color === "red" ? 7 : 13) + (hl === "low" ? 3 : 5);
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const a = offered.slice();
+  for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  // a shuffle that lands ascending would defeat the purpose — nudge it
+  if (a.length > 1 && a.every((v, i) => !i || fan.indexOf(a[i - 1]) < fan.indexOf(v)))
+    { const t = a[0]; a[0] = a[1]; a[1] = t; }
+  return a;
+}
 function rdAllMid(){ return rdMidSet().every(v => rdReach(v, rd.color, rd.num)); }   // no middle needs eliminating (this colour)
 function rdAllMidBoth(){ return ["red","black"].every(c => rdMidSet().every(v => rdReach(v, c, rd.num))); }   // ...for both colours
 function rdOfferedValues(){
@@ -3072,6 +3214,60 @@ function rdMagStep(){
   flow.innerHTML = html;
   if (rd.value != null) rdFitCardNames();
 }
+/* ---- Card-first flow (shuffled-stack friendly): the card is named freely,
+   then the NUMBER is selected. High/low and odd/even are guaranteed-free
+   choices for every card (engine-verified 48/48); the final menu is the
+   best run of consecutive same-parity reachable numbers — gap-free by
+   construction. ---- */
+function cfCardEntry(){
+  const flow = $("ddGaffFlow");
+  flow.className = "flow-cells";
+  if (!rd.value){
+    $("ddCardTitle").textContent = "Their card — tap the value";
+    flow.style.gridTemplateColumns = "repeat(auto-fill,minmax(64px,1fr))";
+    // no aces: they were openly removed during the spread — not nameable
+    flow.innerHTML = ["2","3","4","5","6","7","8","9","10","J","Q","K"]
+      .map(v => `<div class="optcell" data-g="cfval" data-v="${v}"><div class="optlbl">${v}</div></div>`).join("");
+  } else {
+    $("ddCardTitle").textContent = "Their card — tap the suit";
+    flow.style.gridTemplateColumns = "repeat(4,minmax(0,1fr))";
+    flow.innerHTML = ["S","H","D","C"]
+      .map(s => `<div class="optcell" data-g="cfsuit" data-v="${s}"><div class="optlbl" style="${s==="H"||s==="D"?"color:var(--red)":""}">${RD_SUIT_SYM[s]}</div></div>`).join("");
+  }
+}
+function cfReach(N){ const o = rdResolve(rd.card, N); return !!(o && o.method !== "dl"); }
+function cfMenu(){
+  const nums = [];
+  for (let N = RD_LO; N <= RD_HI; N++){
+    if ((rd.nhl === "low") !== (N <= 26)) continue;
+    if ((rd.npar === "odd") !== (N % 2 === 1)) continue;
+    if (cfReach(N)) nums.push(N);
+  }
+  const runs = []; let cur = [];
+  for (const n of nums){ if (cur.length && n !== cur[cur.length - 1] + 2){ runs.push(cur); cur = []; } cur.push(n); }
+  if (cur.length) runs.push(cur);
+  runs.sort((a, b) => b.length - a.length);
+  return runs[0] || [];
+}
+function cfFlowStep(){
+  const flow = $("ddGaffFlow");
+  flow.className = "flow-cells";
+  const btn = (g, v, label) => `<div class="optcell" data-g="${g}" data-v="${v}"><div class="optlbl">${label}</div></div>`;
+  if (!rd.nhl){
+    $("ddCardTitle").textContent = "High or low number?";
+    flow.style.gridTemplateColumns = "repeat(2,minmax(0,1fr))";
+    flow.innerHTML = btn("nhl", "low", "Low<br>(4–26)") + btn("nhl", "high", "High<br>(27–50)");
+  } else if (!rd.npar){
+    $("ddCardTitle").textContent = "Odd or even?";
+    flow.style.gridTemplateColumns = "repeat(2,minmax(0,1fr))";
+    flow.innerHTML = btn("npar", "odd", "Odd") + btn("npar", "even", "Even");
+  } else {
+    const menu = cfMenu();
+    $("ddCardTitle").textContent = "Pick a number";
+    flow.style.gridTemplateColumns = "repeat(auto-fill,minmax(72px,1fr))";
+    flow.innerHTML = menu.map(n => btn("nnum", n, n)).join("");
+  }
+}
 function rdFlowStep(){
   if (magicianMode) return rdMagStep();
   const flow = $("ddGaffFlow"); let html="", freeSuit=false, layout="cells", grid="repeat(2,minmax(0,1fr))";
@@ -3095,11 +3291,11 @@ function rdFlowStep(){
       html = `${rdMiniFan(rdRun(rd.color, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optrow">${btns}</div>`;
     }
   } else if (rdNumMode(rd) && !rd.hl) {                        // high/low always shown
-    const NW = rdScheme === "highlow" ? "Cards" : "Numbers";
+    const NW = rdHL() ? "Cards" : "Numbers";
     const S = RD_SCHEMES[rdScheme];
     // highlow: split into two spreads whenever this colour drops at most one middle value — the lone
     // dud (e.g. the 8) rides inside its own group's fan and just isn't offered on the next page.
-    const splitClean = rdScheme === "highlow"
+    const splitClean = rdHL()
       ? rdMidSet().filter(v => !rdReach(v, rd.color, rd.num)).length <= 1
       : rdAllMidBoth();
     if (splitClean) {                                         // clean (or one dud) -> two separate spreads
@@ -3109,7 +3305,7 @@ function rdFlowStep(){
            + `<div class="optcell" data-g="hl" data-v="high">${rdMiniFan(rdRun(rd.color, S.highFan, true))}<div class="optlbl">${hi}</div></div>`;
     } else {                                                   // a middle must be eliminated -> one shared spread (duds fade on tap)
       layout="shared";
-      const numVals = rdScheme === "highlow" ? rdSpreadVals().filter(v => v !== "A") : rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
+      const numVals = rdHL() ? rdSpreadVals().filter(v => v !== "A") : rdSpreadVals().filter(v => !["J","Q","K","A"].includes(v));
       const btns = selectMode
         ? `<button data-g="hl" data-v="low">Low<br>${NW}</button><button data-g="hl" data-v="high">High<br>${NW}</button>`
         : `<button data-g="hl" data-v="low">Remove<br>Low ${NW}</button><button data-g="hl" data-v="high">Remove<br>High ${NW}</button>`;
@@ -3117,7 +3313,9 @@ function rdFlowStep(){
     }
   } else if (!rd.value) {
     const a = rd.color==="red"?"H":"C", b = rd.color==="red"?"D":"S";
-    const vals = selectMode ? rdOfferedValues() : rdOfferedValues().filter(x => !rd.valElim.includes(x));
+    const base = selectMode ? rdOfferedValues()
+                            : rdDeceptiveOrder(rdOfferedValues(), rd.num, rd.color, rd.hl);
+    const vals = selectMode ? base : base.filter(x => !rd.valElim.includes(x));
     grid = "repeat(auto-fill,minmax(150px,1fr))";
     html = vals.map(v => {
       const lbl = selectMode ? RD_VNAME_FULL[v] : `Remove<br>${RD_VNAME_FULL[v]}s`;
@@ -3201,6 +3399,18 @@ $("ddChips").addEventListener("click", e => { if (rd.step === 2) return;   // ch
   const c = e.target.closest(".chip"); if (!c) return;
   const st = +c.dataset.step; if (st === 1 && rd.num == null) return; rd.step = st; rdRender(); });
 $("ddBack").addEventListener("click", () => {
+  if (cardFirst) {
+    if (rd.step === 2) { rd.num = null; rd.step = 1; return rdRender(); }   // keep the named card
+    if (rd.step === 1) {
+      if (rd.npar) { rd.npar = null; return rdRender(); }
+      if (rd.nhl) { rd.nhl = null; return rdRender(); }
+      rd.step = 0; rd.card = null; rd.suitPicked = null; rd.color = null; return rdRender();
+    }
+    if (rd.step === 0) {
+      if (rd.value != null) { rd.value = null; return rdRender(); }
+      $("ddScreen").style.display = "none"; $("app").style.display = "block"; return render();
+    }
+  }
   if (rd.step === 2) { rd.card = null; rd.suitPicked = null; rd.step = 1; return rdRender(); }
   if (rd.step === 1) {
     if (rd.value != null) { rd.value = null; rd.valElim.pop(); return rdRender(); }   // undo: restore the survivor + one
@@ -3225,8 +3435,8 @@ function rdRender(){
   $("ddChips").style.gridTemplateColumns = "";
   const atRoot = rd.step === 0 && !numEntry;
   $("ddBack").parentElement.style.display = ((coded && atRoot) || rd.step === 2) ? "none" : "";
-  $("ddNumberPicker").style.display = rd.step === 0 ? "" : "none";
-  $("ddCardPicker").style.display = rd.step === 1 ? "" : "none";
+  $("ddNumberPicker").style.display = (!cardFirst && rd.step === 0) ? "" : "none";
+  $("ddCardPicker").style.display = (rd.step === 1 || (cardFirst && rd.step === 0)) ? "" : "none";
   $("ddResults").style.display = rd.step === 2 ? "" : "none";
   // legacy gaff pickers stay hidden; the flow uses #ddGaffFlow
   $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
@@ -3234,8 +3444,13 @@ function rdRender(){
   $("ddCardRoll").style.display = "none"; $("ddNumRoll").style.display = "none";
   $("ddNumExample").textContent = "";
   rdSetCoded(coded);
-  if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; $("ddNumTitle").textContent = coded ? "Enter any number (1–52)" : "Name any number between 1 and 52."; rdNumGuide(); }
-  if (rd.step === 1) rdFlowStep();
+  if (cardFirst) {
+    if (rd.step === 0) cfCardEntry();
+    if (rd.step === 1) cfFlowStep();
+  } else {
+    if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; $("ddNumTitle").textContent = coded ? "Enter any number (1–52)" : "Name any number between 1 and 52."; rdNumGuide(); }
+    if (rd.step === 1) rdFlowStep();
+  }
   if (rd.step === 2) rdRenderOut(coded);
 }
 ddRerender = rdRender;
@@ -3627,6 +3842,162 @@ function camRender() {
   if (camRd.step === 2) camRenderOut();
 }
 
+/* ---- Live stack read (shuffled-deck mode) ----
+   While the ace-hunt spread is filmed, frames stream to the local proxy
+   (stack_proxy.py) which returns visible card codes with "GAP" occlusion
+   markers. Adjacency votes across all reads assemble the deck order. */
+const ST_ACES = new Set(["AS","AH","AC","AD"]);
+const stRead = { on: false, timer: null, inflight: 0, done: 0, fail: 0,
+                 adj: new Map(), sight: new Map(), lastNew: 0, stack: null };
+function stProxy(){ return localStorage.getItem("rdProxyUrl") || "http://192.168.1.1:8787"; }
+function stChip(msg, err){ const c = $("camReadChip"); c.style.display = ""; c.textContent = msg; c.classList.toggle("err", !!err); }
+function stChipHide(){ $("camReadChip").style.display = "none"; }
+function stNote(code){ stRead.sight.set(code, (stRead.sight.get(code) || 0) + 1); }
+function stIngest(codes){
+  let seg = [];
+  const segs = [];
+  for (const c of codes){ if (c === "GAP"){ if (seg.length >= 2) segs.push(seg); seg = []; } else seg.push(c); }
+  if (seg.length >= 2) segs.push(seg);
+  const before = stRead.sight.size;
+  for (const s of segs){
+    for (let i = 0; i < s.length; i++){
+      stNote(s[i]);
+      if (i){ const k = s[i-1] + ">" + s[i]; stRead.adj.set(k, (stRead.adj.get(k) || 0) + 1); }
+    }
+  }
+  if (stRead.sight.size > before) stRead.lastNew = Date.now();
+}
+function stAssemble(){
+  // Greedy path assembly: accept adjacency edges strongest-first, each
+  // card at most one successor and one predecessor, no cycles. Noise
+  // edges (suit misreads) lose to true adjacencies seen many times.
+  const edges = [...stRead.adj.entries()]
+    .map(([k, w]) => { const i = k.indexOf(">"); return { a: k.slice(0, i), b: k.slice(i + 1), w }; })
+    .sort((x, y) => y.w - x.w);
+  const succ = new Map(), pred = new Map();
+  const reaches = (from, to) => { let c = from, n = 0; while (c && n++ < 60){ if (c === to) return true; c = succ.get(c); } return false; };
+  for (const e of edges){
+    if (succ.has(e.a) || pred.has(e.b) || e.a === e.b) continue;
+    if (reaches(e.b, e.a)) continue;                   // would close a cycle
+    succ.set(e.a, e.b); pred.set(e.b, e.a);
+  }
+  // walk each path from its start; order paths by strength of their join evidence
+  const codes = [...stRead.sight.keys()];
+  const starts = codes.filter(c => !pred.has(c) && succ.has(c));
+  const paths = starts.map(s => { const p = []; let c = s; while (c){ p.push(c); c = succ.get(c); } return p; });
+  for (const c of codes) if (!pred.has(c) && !succ.has(c)) paths.push([c]);   // isolated
+  // join paths: strongest remaining edge from a path-end to a path-start
+  const joins = [];
+  while (paths.length > 1){
+    let best = null;
+    for (const e of edges){
+      const pi = paths.findIndex(p => p[p.length - 1] === e.a);
+      const qi = paths.findIndex(p => p[0] === e.b);
+      if (pi >= 0 && qi >= 0 && pi !== qi && (!best || e.w > best.e.w)) best = { e, pi, qi };
+    }
+    if (!best){                                        // no evidence: append biggest first
+      paths.sort((p, q) => q.length - p.length);
+      joins.push(paths[1][0]);
+      paths[0] = paths[0].concat(paths.splice(1, 1)[0]);
+      continue;
+    }
+    joins.push(best.e.b);
+    const q = paths.splice(best.qi, 1)[0];
+    const pi2 = paths.findIndex(p => p[p.length - 1] === best.e.a);
+    paths[pi2] = paths[pi2].concat(q);
+  }
+  const chain = paths[0] || [];
+  const flags = chain.filter(c => (stRead.sight.get(c) || 0) < 2 || joins.includes(c));
+  return { chain, flags };
+}
+async function stGrab(){
+  const v = $("camVideo");
+  if (!v.videoWidth || stRead.inflight >= 4) return;
+  const scale = Math.min(1, 1280 / v.videoWidth);
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
+  cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+  if (!blob) return;
+  stRead.inflight++;
+  try {
+    const resp = await fetch(stProxy() + "/read_frame", { method: "POST", body: blob, headers: { "Content-Type": "image/jpeg" } });
+    const j = await resp.json();
+    if (j.codes) { stIngest(j.codes); stRead.done++; }
+    else stRead.fail++;
+  } catch (e) { stRead.fail++; }
+  stRead.inflight--;
+  if (stRead.on){
+    const nonAce = [...stRead.sight.keys()].filter(c => !ST_ACES.has(c));
+    const solid = nonAce.filter(c => stRead.sight.get(c) >= 2).length;
+    stChip(`reading… ${solid}/48 confirmed · ${stRead.done} frames` + (stRead.fail ? ` · ${stRead.fail} errors` : ""), stRead.fail > 3 && !stRead.done);
+    // auto-finish: all 48 non-ace cards solid and nothing new for 4s
+    if (solid >= 48 && Date.now() - stRead.lastNew > 4000) stStop();
+  }
+}
+function stStart(){
+  stRead.on = true; stRead.done = 0; stRead.fail = 0; stRead.inflight = 0;
+  stRead.adj.clear(); stRead.sight.clear(); stRead.lastNew = Date.now(); stRead.stack = null;
+  $("camRead").classList.add("on"); $("camRead").textContent = "■ Reading";
+  stChip("reading… point at the spread");
+  fetch(stProxy() + "/health").catch(() => stChip("proxy unreachable — long-press Read to set URL", true));
+  stRead.timer = setInterval(stGrab, 600);
+}
+function stStop(){
+  stRead.on = false;
+  if (stRead.timer) clearInterval(stRead.timer);
+  $("camRead").classList.remove("on"); $("camRead").textContent = "⌗ Read";
+  const { chain, flags } = stAssemble();
+  const stack48 = chain.filter(c => !ST_ACES.has(c));
+  if (stack48.length < 44){ stChip(`read incomplete: ${stack48.length}/48 — tap Read to resume`, true); return; }
+  stRead.stack = { stack48, flags: flags.filter(c => !ST_ACES.has(c)) };
+  rdUseCustomStack(stack48, stRead.stack.flags);
+  const worst = rdWorstNumbers(3);
+  $("camCut").style.display = "";
+  stChip(`STACK READY (${stack48.length}, ${stRead.stack.flags.length} flagged) · pre-empt: ${worst.join(", ")}`);
+}
+// cut-card entry: tap value then suit of the glimpsed bottom card
+let stCutVal = null;
+function stCutPad(){
+  const pad = $("camCutPad");
+  pad.style.display = "";
+  pad.innerHTML = "";
+  if (stCutVal === null){
+    for (const v of ["2","3","4","5","6","7","8","9","10","J","Q","K","A"]){
+      const b = document.createElement("button"); b.textContent = v;
+      b.addEventListener("click", () => { stCutVal = v; stCutPad(); });
+      pad.appendChild(b);
+    }
+  } else {
+    for (const s of ["S","H","D","C"]){
+      const b = document.createElement("button"); b.textContent = stCutVal + {S:"♠",H:"♥",D:"♦",C:"♣"}[s];
+      b.addEventListener("click", () => {
+        const card = stCutVal + s; stCutVal = null; pad.style.display = "none";
+        // thin numbers depend on the CUT DEPTH, not just the stack — refresh
+        // the pre-empt line now that the real cut is known
+        if (rdSetCutCard(card)) stChip(`cut locked: ${card} → packet of ${RD_HALF} · pre-empt: ${rdWorstNumbers(3).join(", ")}`);
+        else stChip(`${card} not in stack — re-enter`, true);
+      });
+      pad.appendChild(b);
+    }
+    const x = document.createElement("button"); x.textContent = "←";
+    x.addEventListener("click", () => { stCutVal = null; stCutPad(); });
+    pad.appendChild(x);
+  }
+}
+$("camRead").addEventListener("click", () => { stRead.on ? stStop() : stStart(); });
+let stPressT = null;
+$("camRead").addEventListener("pointerdown", () => { stPressT = setTimeout(() => {
+  const url = prompt("Stack-read proxy URL", stProxy());
+  if (url) localStorage.setItem("rdProxyUrl", url.replace(/\/$/, ""));
+}, 900); });
+$("camRead").addEventListener("pointerup", () => clearTimeout(stPressT));
+$("camRead").addEventListener("pointerleave", () => clearTimeout(stPressT));
+$("camCut").addEventListener("click", () => { stCutVal = null; $("camCutPad").style.display === "none" ? stCutPad() : ($("camCutPad").style.display = "none"); });
+window.__st = { stIngest, stAssemble, stRead, stStop, rdUseCustomStack, rdWorstNumbers, rdSetCutCard,
+  rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
+  state: () => ({ scheme: rdScheme, half: RD_HALF, n: RD_L0, excluded: [...rdExcluded] }) };   // debug/test bridge
+
 // --- controls ---
 $("camExit").addEventListener("click", camHide);
 $("camFlip").addEventListener("click", camFlip);
@@ -3652,10 +4023,16 @@ let acN = null, acSel = null;   // entered number, selected card (for the steps 
 const acReach = (card, N) => { const o = rdResolve(card, N); return (o && o.method !== "dl") ? o : null; };
 // compact handling code: [1=cut→hand spec 1 / 2=no cut→hand spec 2] [N/J/A/B = add nothing/jokers/aces/both] [+ = next card / . = direct hit]
 const acCode = o => (o.cut ? "1" : "2") + ({0:"N",2:"J",4:"A",6:"B"}[o.packet] || "N") + (o.method === "next" ? "+" : ".");
-// values with NO reachable suit at N -> "-" if every value can be chosen, else the range of unavailable values (e.g. "6-9")
+// values with NO reachable suit at N -> "-" if every value can be chosen.
+// A "6-9" range is shown only for a truly CONTIGUOUS run of 3+; anything
+// else lists the values ("3, 8") — on non-optimized stacks the unavailable
+// set can be scattered and a range would falsely condemn the values between.
 function acUnavailRange(N){
   const un = AC_VALS.filter(v => !AC_SUITS.some(([s]) => acReach(v+s, N)));
-  return !un.length ? "-" : (un.length === 1 ? un[0] : un[0] + "-" + un[un.length-1]);
+  if (!un.length) return "-";
+  if (un.length === 1) return un[0];
+  const contiguous = AC_VALS.indexOf(un[un.length - 1]) - AC_VALS.indexOf(un[0]) === un.length - 1;
+  return (contiguous && un.length >= 3) ? un[0] + "-" + un[un.length - 1] : un.join(", ");
 }
 // the chosen VALUE's code across the four suits (clubs/hearts/spades/diamonds), "/"-separated.
 // unreachable suit -> "-"; dealt-from-face -> underlined.  Returns HTML.
