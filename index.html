@@ -2939,6 +2939,8 @@ $("keypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button 
 
 // real-deck flow state: number first, then guided equivoque, then suit.
 let numEntry = "";
+let camSeq = [];         // covert ✓C✓C✓ gesture buffer (empty-entry presses only)
+let camFromDd = false;   // camera opened from the dd tool — exit returns there
 const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null, valElim: [] };
 const RD_VNAME = { "2":"Two","3":"Three","4":"Four","5":"Five","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
 const RD_SNAME = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" }, RD_SSYM = { S:"♠", C:"♣", H:"♥", D:"♦" };
@@ -2947,6 +2949,15 @@ function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd
 // ---- number step ----
 $("keypad").addEventListener("click", e => {
   const k = e.target.dataset?.k; if (!k) return;
+  // Covert jump to camera read: ✓ C ✓ C ✓ with the entry empty (no visible
+  // effect from any press), remembered magician devices only.
+  if ((k === "ok" || k === "clear") && !numEntry){
+    camSeq.push(k);
+    if (camSeq.length > 5) camSeq.shift();
+    if (camSeq.join() === "ok,clear,ok,clear,ok" && localStorage.getItem("rdMagTrusted") === "1"){
+      camSeq = []; camFromDd = true; if (camOpen) camOpen(); return;
+    }
+  } else camSeq = [];
   if (k === "clear") numEntry = "";
   else if (k === "ok") return rdCommitNum();
   else if (numEntry.length < 2) numEntry += k;
@@ -3731,7 +3742,13 @@ function camStopStream() { if (camRecording) camStopRec(); if (camStream) { camS
 function camFlip() { camFacing = camFacing === "environment" ? "user" : "environment"; camStart(); }
 function camShow() { $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none"; $("lockScreen").style.display="none"; $("camScreen").style.display="block"; $("camScreen").classList.add("hideui"); camUpdateHideBtn(); camReset(); camStart(); }
 function camUpdateHideBtn() { $("camHideBtn").textContent = $("camScreen").classList.contains("hideui") ? "Keypad" : "Hide"; }
-function camHide() { camStopStream(); $("camScreen").style.display="none"; $("app").style.display="block"; }
+function camHide() {
+  camStopStream(); $("camScreen").style.display="none";
+  if (camFromDd){   // came from the performing tool — snap back to it, state intact
+    camFromDd = false;
+    $("ddScreen").style.display="flex"; if (ddRerender) ddRerender();
+  } else $("app").style.display="block";
+}
 
 // --- recording ---
 function camMime() { return ["video/mp4","video/webm;codecs=vp9","video/webm"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || ""; }
