@@ -3925,7 +3925,7 @@ async function stGrab(){
     if (stRead.noVideo === 5){ stChip("no camera frames — allow camera access, then tap Read again", true); stBeacon({ ev: "novideo", stream: !!camStream }); }
     return;
   }
-  if (stRead.inflight >= 4) return;
+  if (stRead.inflight >= 2) return;   // free tunnel drops frames under burst; keep it gentle
   const scale = Math.min(1, 1280 / v.videoWidth);
   const cv = document.createElement("canvas");
   cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
@@ -3962,7 +3962,7 @@ function stStart(){
   setTimeout(() => stBeacon({ ev: "start2s", vw: $("camVideo").videoWidth,
     stream: !!camStream, done: stRead.done, fail: stRead.fail,
     ua: navigator.userAgent.slice(0, 90) }), 2000);
-  stRead.timer = setInterval(stGrab, 600);
+  stRead.timer = setInterval(stGrab, 750);
 }
 function stStop(){
   stRead.on = false;
