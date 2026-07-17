@@ -3849,7 +3849,8 @@ function camRender() {
 const ST_ACES = new Set(["AS","AH","AC","AD"]);
 const stRead = { on: false, timer: null, inflight: 0, done: 0, fail: 0,
                  adj: new Map(), sight: new Map(), lastNew: 0, stack: null };
-function stProxy(){ return localStorage.getItem("rdProxyUrl") || "http://192.168.1.1:8787"; }
+const ST_DEFAULT_PROXY = "https://compact-ensemble-bathroom-times.trycloudflare.com";   // Cloudflare quick-tunnel to the Mac proxy; change when the tunnel is re-minted
+function stProxy(){ return localStorage.getItem("rdProxyUrl") || ST_DEFAULT_PROXY; }
 function stChip(msg, err){ const c = $("camReadChip"); c.style.display = ""; c.textContent = msg; c.classList.toggle("err", !!err); }
 function stBeacon(o){ try { fetch(stProxy() + "/diag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) }); } catch (e) {} }
 function stChipHide(){ $("camReadChip").style.display = "none"; }
