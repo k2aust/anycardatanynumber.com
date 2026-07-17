@@ -3992,6 +3992,10 @@ function stCoverageSort(queue){
   scored.sort((a, b) => a.key - b.key);
   return scored.map(s => s.item);
 }
+// A Cloudflare Worker proxy handles far more parallel reads than the Mac
+// tunnel; the ceiling (and starting point) scale with the proxy type.
+function stCcMax(){ return stProxy().includes(".workers.dev") ? 8 : 4; }
+function stCcStart(){ return stCcMax() > 4 ? 6 : 3; }
 async function stDrainOne(){
   const limit = stRead.cc || 3;
   if (stRead.inflight >= limit || !stRead.queue.length){
@@ -4005,9 +4009,14 @@ async function stDrainOne(){
     const j = await resp.json();
     if (j.codes) { stIngest(j.codes); stRead.done++;
       stRead.clean = (stRead.clean || 0) + 1;
-      if (stRead.clean >= 5 && (stRead.cc || 3) < 4){ stRead.cc = 4; stRead.clean = 0; }   // healthy — speed up
+      if (stRead.clean >= 5 && (stRead.cc || 3) < stCcMax()){       // healthy — speed up
+        stRead.cc = Math.min(stCcMax(), (stRead.cc || 3) + 2); stRead.clean = 0; }
     }
-    else { stRead.fail++; if (stRead.fail === 1) stBeacon({ ev: "badresp", err: (j.error || "").slice(0, 120) }); }
+    else {                                                           // proxy/API error (rate limit etc.)
+      stRead.fail++; stRead.clean = 0; stRead.cc = 2;
+      if (stRead.fail === 1) stBeacon({ ev: "badresp", err: (j.error || "").slice(0, 120) });
+      if (item.tries < 2){ item.tries++; stRead.queue.push(item); }
+    }
   } catch (e) {
     stRead.fail++; stRead.clean = 0; stRead.cc = 2;                  // tunnel struggling — back off
     if (stRead.fail === 1) stBeacon({ ev: "fetcherr", msg: String(e).slice(0, 120) });
@@ -4026,7 +4035,7 @@ function stStart(){
   catch (e) { stChip("bad proxy URL: " + stProxy() + " — long-press Read to fix", true); return; }
   stRead.on = true; stRead.draining = false; stRead.done = 0; stRead.fail = 0;
   stRead.inflight = 0; stRead.noVideo = 0; stRead.captured = 0;
-  stRead.cc = 3; stRead.clean = 0; stRead.finalized = false;
+  stRead.cc = stCcStart(); stRead.clean = 0; stRead.finalized = false;
   stRead.queue = []; stRead.lastSig = null;
   const resume = stRead.resumable && Date.now() - stRead.resumable < 180000;
   if (!resume){ stRead.adj.clear(); stRead.sight.clear(); }   // resume keeps prior evidence
