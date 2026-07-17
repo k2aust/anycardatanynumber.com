@@ -3959,14 +3959,62 @@ async function stCapture(){
     if (d / 1024 < 8) return;
   }
   stRead.lastSig = sig;
-  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+  const banded = stBandCrop(cv);
+  const blob = await new Promise(r => banded.toBlob(r, "image/jpeg", 0.85));
   if (!blob) { stBeacon({ ev: "noblob" }); return; }
-  stRead.queue.push({ blob, tries: 0 });
+  stRead.queue.push({ blob, tries: 0, idx: stRead.captured });
   stRead.captured++;
   stProgressChip();
 }
+// On-phone band crop: keep only the rows containing the bright card spread.
+// Halves upload size and the model's image tokens. Conservative padding;
+// falls back to the full frame when no clear band is found.
+function stBandCrop(cv){
+  const w = 64, h = 64;
+  const c2 = document.createElement("canvas");
+  c2.width = w; c2.height = h;
+  const ctx = c2.getContext("2d");
+  ctx.drawImage(cv, 0, 0, w, h);
+  const px = ctx.getImageData(0, 0, w, h).data;
+  const rows = new Array(h).fill(0);
+  for (let y = 0; y < h; y++){
+    for (let x = 0; x < w; x++){
+      const i = (y * w + x) * 4;
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      const lum = (r + g + b) / 3;
+      const sat = Math.max(r, g, b) - Math.min(r, g, b);
+      if (lum > 150 && sat < 60) rows[y]++;               // white-ish, unsaturated = card face
+    }
+  }
+  const peak = Math.max(...rows);
+  if (peak < w * 0.15) return cv;                          // no clear band — send full frame
+  const th = peak * 0.25;
+  let y0 = rows.findIndex(v => v > th);
+  let y1 = h - 1 - [...rows].reverse().findIndex(v => v > th);
+  const pad = Math.round(h * 0.08);
+  y0 = Math.max(0, y0 - pad); y1 = Math.min(h - 1, y1 + pad);
+  if (y1 - y0 < 6 || y1 - y0 > h * 0.85) return cv;        // degenerate or nearly-full — keep full
+  const sy = cv.height * y0 / h, sh = cv.height * (y1 - y0 + 1) / h;
+  const out = document.createElement("canvas");
+  out.width = cv.width; out.height = Math.round(sh);
+  out.getContext("2d").drawImage(cv, 0, sy, cv.width, sh, 0, 0, cv.width, out.height);
+  return out;
+}
+// Coverage-first ordering: sort queued frames so the drain samples the whole
+// spread timeline early (ends, middle, quarters, ...). The 48-solid early
+// exit then fires long before the redundant in-between frames are paid for.
+function stCoverageSort(queue){
+  const scored = queue.map(item => {
+    let v = item.idx, r = 0;
+    for (let b = 0; b < 10; b++){ r = (r << 1) | (v & 1); v >>= 1; }
+    return { item, key: r };
+  });
+  scored.sort((a, b) => a.key - b.key);
+  return scored.map(s => s.item);
+}
 async function stDrainOne(){
-  if (stRead.inflight >= 3 || !stRead.queue.length){
+  const limit = stRead.cc || 3;
+  if (stRead.inflight >= limit || !stRead.queue.length){
     if (stRead.draining && !stRead.queue.length && !stRead.inflight) stFinalize();
     return;
   }
@@ -3975,10 +4023,13 @@ async function stDrainOne(){
   try {
     const resp = await fetch(stProxy() + "/read_frame", { method: "POST", body: item.blob, headers: { "Content-Type": "image/jpeg" } });
     const j = await resp.json();
-    if (j.codes) { stIngest(j.codes); stRead.done++; }
+    if (j.codes) { stIngest(j.codes); stRead.done++;
+      stRead.clean = (stRead.clean || 0) + 1;
+      if (stRead.clean >= 5 && (stRead.cc || 3) < 4){ stRead.cc = 4; stRead.clean = 0; }   // healthy — speed up
+    }
     else { stRead.fail++; if (stRead.fail === 1) stBeacon({ ev: "badresp", err: (j.error || "").slice(0, 120) }); }
   } catch (e) {
-    stRead.fail++;
+    stRead.fail++; stRead.clean = 0; stRead.cc = 2;                  // tunnel struggling — back off
     if (stRead.fail === 1) stBeacon({ ev: "fetcherr", msg: String(e).slice(0, 120) });
     if (item.tries < 2){ item.tries++; stRead.queue.push(item); }   // dropped by the tunnel — retry
   }
@@ -3995,6 +4046,7 @@ function stStart(){
   catch (e) { stChip("bad proxy URL: " + stProxy() + " — long-press Read to fix", true); return; }
   stRead.on = true; stRead.draining = false; stRead.done = 0; stRead.fail = 0;
   stRead.inflight = 0; stRead.noVideo = 0; stRead.captured = 0;
+  stRead.cc = 3; stRead.clean = 0;
   stRead.queue = []; stRead.lastSig = null;
   stRead.adj.clear(); stRead.sight.clear(); stRead.lastNew = Date.now(); stRead.stack = null;
   $("camRead").classList.add("on"); $("camRead").textContent = "■ Reading";
@@ -4012,6 +4064,7 @@ function stStop(){   // first tap: hands are done — stop capturing, keep proce
   if (stRead.on && (stRead.queue.length || stRead.inflight)){
     stRead.on = false; stRead.draining = true;
     if (stRead.timer) clearInterval(stRead.timer);
+    stRead.queue = stCoverageSort(stRead.queue);   // sample the whole timeline early → earlier early-exit
     $("camRead").textContent = "◌ Processing";
     stProgressChip();
     return;
