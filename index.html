@@ -3927,13 +3927,24 @@ function stSolid(){
   const nonAce = [...stRead.sight.keys()].filter(c => !ST_ACES.has(c));
   return nonAce.filter(c => stRead.sight.get(c) >= 2).length;
 }
+const ST_SUITSYM = { S: "♠", H: "♥", D: "♦", C: "♣" };
+const stPretty = c => c.slice(0, -1) + ST_SUITSYM[c.slice(-1)];
+function stMissing(){          // non-ace cards not yet confirmed (<2 sightings)
+  const out = [];
+  for (const v of ["2","3","4","5","6","7","8","9","10","J","Q","K"])
+    for (const s of ["S","H","D","C"])
+      if ((stRead.sight.get(v + s) || 0) < 2) out.push(v + s);
+  return out;
+}
 function stProgressChip(){
   const solid = stSolid();
   const left = stRead.queue.length + stRead.inflight;
+  const miss = stMissing();
+  const need = (miss.length && miss.length <= 8) ? ` · need ${miss.map(stPretty).join(" ")}` : "";
   if (stRead.on)
-    stChip(`spreading… ${solid}/48 confirmed · ${stRead.captured} frames · ${left} queued` + (stRead.fail ? ` · ${stRead.fail} retries` : ""));
+    stChip(`spreading… ${solid}/48 confirmed · ${stRead.captured} frames · ${left} queued` + (stRead.fail ? ` · ${stRead.fail} retries` : "") + need);
   else if (stRead.draining)
-    stChip(`hands free — processing ${left} left · ${solid}/48 confirmed`);
+    stChip(`hands free — processing ${left} left · ${solid}/48 confirmed` + need);
 }
 function stSig(cv){
   const c2 = document.createElement("canvas"); c2.width = 32; c2.height = 32;
@@ -4017,9 +4028,12 @@ function stStart(){
   stRead.inflight = 0; stRead.noVideo = 0; stRead.captured = 0;
   stRead.cc = 3; stRead.clean = 0; stRead.finalized = false;
   stRead.queue = []; stRead.lastSig = null;
-  stRead.adj.clear(); stRead.sight.clear(); stRead.lastNew = Date.now(); stRead.stack = null;
+  const resume = stRead.resumable && Date.now() - stRead.resumable < 180000;
+  if (!resume){ stRead.adj.clear(); stRead.sight.clear(); }   // resume keeps prior evidence
+  stRead.resumable = 0;
+  stRead.lastNew = Date.now(); stRead.stack = null;
   $("camRead").classList.add("on"); $("camRead").textContent = "■ Reading";
-  stChip("reading via " + host + " …");
+  stChip(resume ? `resuming — need ${stMissing().map(stPretty).join(" ")}` : "reading via " + host + " …");
   fetch(stProxy() + "/health")
     .then(r => { if (!r.ok) throw 0; })
     .catch(() => { if (stRead.on) stChip("can't reach " + host + " — long-press Read to fix the URL", true); });
@@ -4048,11 +4062,18 @@ function stFinalize(){
   if (stRead.drainTimer) clearInterval(stRead.drainTimer);
   stRead.queue = [];
   stBeacon({ ev: "stop", done: stRead.done, fail: stRead.fail,
-             cards: stRead.sight.size, noVideo: stRead.noVideo || 0 });
+             cards: stRead.sight.size, miss: stMissing().length, noVideo: stRead.noVideo || 0 });
   $("camRead").classList.remove("on"); $("camRead").textContent = "⌗ Read";
   const { chain, flags } = stAssemble();
   const stack48 = chain.filter(c => !ST_ACES.has(c));
-  if (stack48.length < 44){ stChip(`read incomplete: ${stack48.length}/48 — tap Read to resume`, true); return; }
+  if (stack48.length < 44){
+    stRead.resumable = Date.now();       // keep the evidence — next Read only needs the missing cards
+    const miss = stMissing();
+    const names = miss.length <= 10 ? miss.map(stPretty).join(" ") : `${miss.length} cards`;
+    stChip(`read incomplete (${stSolid()}/48) — need ${names} · tap Read and film just those`, true);
+    return;
+  }
+  stRead.resumable = 0;
   stRead.stack = { stack48, flags: flags.filter(c => !ST_ACES.has(c)) };
   rdUseCustomStack(stack48, stRead.stack.flags);
   const worst = rdWorstNumbers(3);
