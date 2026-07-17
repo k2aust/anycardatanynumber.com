@@ -3912,7 +3912,12 @@ function stAssemble(){
 }
 async function stGrab(){
   const v = $("camVideo");
-  if (!v.videoWidth || stRead.inflight >= 4) return;
+  if (!v.videoWidth){
+    stRead.noVideo = (stRead.noVideo || 0) + 1;
+    if (stRead.noVideo === 5) stChip("no camera frames — allow camera access, then tap Read again", true);
+    return;
+  }
+  if (stRead.inflight >= 4) return;
   const scale = Math.min(1, 1280 / v.videoWidth);
   const cv = document.createElement("canvas");
   cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
@@ -3936,11 +3941,16 @@ async function stGrab(){
   }
 }
 function stStart(){
-  stRead.on = true; stRead.done = 0; stRead.fail = 0; stRead.inflight = 0;
+  let host;
+  try { host = new URL(stProxy()).host; }
+  catch (e) { stChip("bad proxy URL: " + stProxy() + " — long-press Read to fix", true); return; }
+  stRead.on = true; stRead.done = 0; stRead.fail = 0; stRead.inflight = 0; stRead.noVideo = 0;
   stRead.adj.clear(); stRead.sight.clear(); stRead.lastNew = Date.now(); stRead.stack = null;
   $("camRead").classList.add("on"); $("camRead").textContent = "■ Reading";
-  stChip("reading… point at the spread");
-  fetch(stProxy() + "/health").catch(() => stChip("proxy unreachable — long-press Read to set URL", true));
+  stChip("reading via " + host + " …");
+  fetch(stProxy() + "/health")
+    .then(r => { if (!r.ok) throw 0; })
+    .catch(() => { if (stRead.on) stChip("can't reach " + host + " — long-press Read to fix the URL", true); });
   stRead.timer = setInterval(stGrab, 600);
 }
 function stStop(){
@@ -3985,11 +3995,17 @@ function stCutPad(){
     pad.appendChild(x);
   }
 }
-$("camRead").addEventListener("click", () => { stRead.on ? stStop() : stStart(); });
+let stSwallowClick = false;
+$("camRead").addEventListener("click", () => {
+  if (stSwallowClick) { stSwallowClick = false; return; }   // release after a long-press is not a toggle
+  stRead.on ? stStop() : stStart();
+});
 let stPressT = null;
 $("camRead").addEventListener("pointerdown", () => { stPressT = setTimeout(() => {
+  stSwallowClick = true;
   const url = prompt("Stack-read proxy URL", stProxy());
-  if (url) localStorage.setItem("rdProxyUrl", url.replace(/\/$/, ""));
+  if (url) { localStorage.setItem("rdProxyUrl", url.trim().replace(/\/+$/, ""));
+             stChip("proxy set: " + url.trim().replace(/\/+$/, "")); }
 }, 900); });
 $("camRead").addEventListener("pointerup", () => clearTimeout(stPressT));
 $("camRead").addEventListener("pointerleave", () => clearTimeout(stPressT));
