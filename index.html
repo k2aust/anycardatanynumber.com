@@ -3723,7 +3723,7 @@ const camRd = { step: 0, num: null, color: null, kind: null, hl: null, value: nu
 async function camStart() {
   try {
     if (camStream) camStream.getTracks().forEach(t => t.stop());
-    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing }, audio: true });
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true });
     $("camVideo").srcObject = camStream; $("camVideo").style.display = "";
   } catch (e) { camStream = null; $("camVideo").style.display = "none"; }   // fallback: dark bg
 }
