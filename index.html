@@ -3850,11 +3850,13 @@ const ST_ACES = new Set(["AS","AH","AC","AD"]);
 const stRead = { on: false, draining: false, timer: null, drainTimer: null,
                  queue: [], captured: 0, lastSig: null, inflight: 0, done: 0, fail: 0,
                  adj: new Map(), sight: new Map(), lastNew: 0, stack: null };
-const ST_DEFAULT_PROXY = "https://compact-ensemble-bathroom-times.trycloudflare.com";   // Cloudflare quick-tunnel to the Mac proxy; change when the tunnel is re-minted
+const ST_DEFAULT_PROXY = "https://withered-field-e951.k2aust.workers.dev";   // Cloudflare Worker (permanent) — holds the API key, no Mac needed
 function stProxy(){
   const saved = localStorage.getItem("rdProxyUrl");
-  // ignore stale LAN/localhost/non-https saves — they can never reach a phone; fall through to the tunnel default
-  if (!saved || /^https?:\/\/(192\.168\.|10\.|127\.|localhost)/.test(saved) || !/^https:/.test(saved))
+  // ignore stale saves that can't serve a phone: LAN/localhost/non-https, and
+  // ephemeral quick-tunnel URLs from the old Mac-proxy era
+  if (!saved || /^https?:\/\/(192\.168\.|10\.|127\.|localhost)/.test(saved) || !/^https:/.test(saved)
+      || saved.includes(".trycloudflare.com"))
     return ST_DEFAULT_PROXY;
   return saved;
 }
