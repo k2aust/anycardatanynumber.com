@@ -4046,7 +4046,7 @@ function stStart(){
   catch (e) { stChip("bad proxy URL: " + stProxy() + " — long-press Read to fix", true); return; }
   stRead.on = true; stRead.draining = false; stRead.done = 0; stRead.fail = 0;
   stRead.inflight = 0; stRead.noVideo = 0; stRead.captured = 0;
-  stRead.cc = 3; stRead.clean = 0;
+  stRead.cc = 3; stRead.clean = 0; stRead.finalized = false;
   stRead.queue = []; stRead.lastSig = null;
   stRead.adj.clear(); stRead.sight.clear(); stRead.lastNew = Date.now(); stRead.stack = null;
   $("camRead").classList.add("on"); $("camRead").textContent = "■ Reading";
@@ -4072,6 +4072,8 @@ function stStop(){   // first tap: hands are done — stop capturing, keep proce
   stFinalize();      // second tap (or nothing left): finish now with what we have
 }
 function stFinalize(){
+  if (stRead.finalized) return;   // stragglers land after the early-exit — finalize once
+  stRead.finalized = true;
   stRead.on = false; stRead.draining = false;
   if (stRead.timer) clearInterval(stRead.timer);
   if (stRead.drainTimer) clearInterval(stRead.drainTimer);
