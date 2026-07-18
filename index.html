@@ -86,8 +86,6 @@
     border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 12px;
     font-size: 15px; font-weight: 600; cursor: pointer; }
   .randombtn.confirmbtn { background: var(--gold); color: #000; border-color: var(--gold); }
-  .rollcard { font-size: 46px; font-weight: 800; min-height: 58px; padding: 6px 0; }
-  .rollcard.red { color: var(--red); }
   #numEntry { text-align: center; font-size: 34px; font-weight: 800; min-height: 46px;
     padding: 2px 0 10px; letter-spacing: 2px; }
   .grid button { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
@@ -363,11 +361,6 @@
     <h2 id="cardPickerTitle">Spectator 1 — card</h2>
     <div class="grid values" id="valueGrid"></div>
     <div class="grid suits" id="suitGrid"></div>
-    <button class="randombtn" id="randomCard">&#127922; Random card generator</button>
-    <div id="cardRoll" style="display:none;text-align:center">
-      <div id="cardRollPreview" class="rollcard"></div>
-      <button class="randombtn confirmbtn" id="useCard">&#10003; Use this card</button>
-    </div>
   </div>
 
   <div class="picker" id="numberPicker" style="display:none">
@@ -422,11 +415,6 @@
     <div class="grid" id="ddGaffFlow" style="display:none"></div>
     <div class="grid values" id="vals"></div>
     <div class="grid suits" id="suitsel"></div>
-    <button class="randombtn" id="ddRandomCard">&#127922; Random card generator</button>
-    <div id="ddCardRoll" style="display:none;text-align:center">
-      <div id="ddCardRollPreview" class="rollcard"></div>
-      <button class="randombtn confirmbtn" id="ddUseCard">&#10003; Use this card</button>
-    </div>
   </div>
 
   <div class="picker" id="ddNumberPicker" style="display:none">
@@ -1428,7 +1416,7 @@ const VALUES = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 const SUITS = ["S","H","C","D"];
 
 let settings = loadSettings();
-let state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null };
+let state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null };
 let numEntry = "", lastNumStep = -1;
 // Spectator mode is the default on every load (re-locked each visit). The
 // magician unlocks the full view + settings by tapping the title 6 times.
@@ -1604,18 +1592,6 @@ function topNumbers(card, n = 8) {
   const ranked = Object.keys(sc.score).map(Number).sort((a, b) => sc.score[b] - sc.score[a]);
   return ranked.length ? ranked.slice(0, n) : [1];
 }
-// Dead numbers a spectator might realistically name (the high 50s are rarely
-// called, so they don't count against a card's quality).
-function deadNamedCount(card) { return scanCard(card, settings).dead.filter(n => n >= 1 && n <= 49).length; }
-// The cards with the fewest dead zones — what the random CARD generator draws
-// from, so a spectator is steered to a clean card. Returns the best tier, padded
-// to at least `minPool` for variety.
-function bestCards(minPool = 10) {
-  const ranked = ARONSON.map(c => ({ c, d: deadNamedCount(c) })).sort((a, b) => a.d - b.d);
-  let cut = Math.min(minPool, ranked.length) - 1;
-  while (cut + 1 < ranked.length && ranked[cut + 1].d === ranked[cut].d) cut++; // keep whole tiers
-  return ranked.slice(0, cut + 1).map(r => r.c);
-}
 // If a typed number is a dead miss, swap its LAST digit for the nearest
 // keypad-neighbour that hits (e.g. 28 → 25). Reads as a mis-tap on the small pad.
 function steerNumber(card, v) {
@@ -1741,9 +1717,6 @@ function buildPickers() {
   $("valueGrid").addEventListener("click", e => {
     const v = e.target.dataset?.v; if (!v) return;
     state.pendingValue = v;
-    // a manual pick supersedes any rolled card
-    state.pendingCard = null; $("cardRoll").style.display = "none";
-    $("randomCard").innerHTML = "&#127922; Random card generator";
     [...$("valueGrid").children].forEach(b => b.style.borderColor = b.dataset.v === v ? "var(--gold)" : "var(--line)");
   });
   $("suitGrid").addEventListener("click", e => {
@@ -1827,19 +1800,6 @@ function buildPickers() {
     $("numEntry").textContent = numEntry || "–";
   });
 
-  // Random card: each press rolls a new card into the preview; "Use this card"
-  // confirms. The spectator can keep re-rolling until they like one.
-  $("randomCard").addEventListener("click", () => {
-    const pool = bestCards(), cur = state.pendingCard;
-    const choices = pool.length > 1 ? pool.filter(c => c !== cur) : pool;  // change every press
-    state.pendingCard = choices[Math.floor(Math.random() * choices.length)];
-    const pv = $("cardRollPreview");
-    pv.textContent = prettyCard(state.pendingCard);
-    pv.className = "rollcard" + (/[HD]$/.test(state.pendingCard) ? " red" : "");
-    $("cardRoll").style.display = "block";
-  });
-  $("useCard").addEventListener("click", () => { if (state.pendingCard) setStepValue(state.pendingCard); });
-
   // Random number: pick one of the card's top 8 numbers (no animation). Each
   // press shows a fresh one; "Use this number" confirms.
   $("randomNum").addEventListener("click", () => {
@@ -1879,13 +1839,10 @@ function render() {
     el.parentElement.classList.toggle("active", state.step === i);
   }
   $("gearBtn").style.display = magicianMode ? "" : "none";
-  // random generators are a spectator aid; the magician types exact values
-  $("randomCard").style.display = magicianMode ? "none" : "";
+  // the random number generator is a spectator aid; the magician types exact values
   $("randomNum").style.display = magicianMode ? "none" : "";
   // reset the roll-and-confirm UI on every (re)render — rolling never re-renders
-  $("cardRoll").style.display = "none";
   $("numRoll").style.display = "none";
-  $("randomCard").innerHTML = "&#127922; Random card generator";
   $("randomNum").innerHTML = "&#127922; Random number generator";
   const isCard = state.step === 0, isNum = state.step === 1;
   $("cardPicker").style.display = isCard ? "" : "none";
@@ -2509,7 +2466,7 @@ $("trainBack").addEventListener("click", () => { $("trainScreen").style.display 
 $("acaanBack").addEventListener("click", () => { $("acaanScreen").style.display = "none"; renderSettings(); $("settings").style.display = "block"; });
 $("resetSettings").addEventListener("click", () => { settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); });
 $("editBtn").addEventListener("click", () => { state.step = 0; render(); });
-$("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null, pendingCard: null }; fumble = null; render(); });
+$("resetBtn").addEventListener("click", () => { state = { step: 0, c1: null, n1: null, c2: null, n2: null, pendingValue: null }; fumble = null; render(); });
 document.querySelectorAll(".chip").forEach(ch => ch.addEventListener("click", () => { state.step = +ch.dataset.step; render(); }));
 
 // Secret unlock: tap the blank space just right of the title 5 times in a row
@@ -3451,8 +3408,7 @@ function rdRender(){
   $("ddResults").style.display = rd.step === 2 ? "" : "none";
   // legacy gaff pickers stay hidden; the flow uses #ddGaffFlow
   $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
-  $("ddRandomCard").style.display = "none"; $("ddRandomNum").style.display = "none";
-  $("ddCardRoll").style.display = "none"; $("ddNumRoll").style.display = "none";
+  $("ddRandomNum").style.display = "none"; $("ddNumRoll").style.display = "none";
   $("ddNumExample").textContent = "";
   rdSetCoded(coded);
   if (cardFirst) {
