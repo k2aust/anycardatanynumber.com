@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
+<title>glimpse bench</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #0b0b0f; color: #ddd; font: 15px/1.45 -apple-system, Roboto, sans-serif;
+         padding: 12px; padding-bottom: 40px; }
+  body.fill { background: #fff; }           /* screen-as-fill-light test */
+  body.fill .panel { opacity: .25; }
+  h1 { font-size: 17px; color: #9ab; margin-bottom: 8px; }
+  .panel { background: #15151c; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  video { width: 100%; max-height: 38vh; border-radius: 10px; background: #000; object-fit: contain; }
+  button { background: #2a2a36; color: #eee; border: 0; border-radius: 10px;
+           padding: 12px 16px; font-size: 16px; margin: 4px 6px 4px 0; }
+  button.on { background: #2e7d32; }
+  #result { font-size: 15px; }
+  #result .big { font-size: 42px; font-weight: 700; letter-spacing: 2px; margin: 4px 0; }
+  #result .red { color: #ff6b6b; }
+  .dim { color: #778; font-size: 13px; }
+  #log { font: 12px/1.5 ui-monospace, monospace; color: #9a9; max-height: 30vh;
+         overflow-y: auto; white-space: pre-wrap; }
+  #caps { font: 11px/1.4 ui-monospace, monospace; color: #667; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Glimpse bench — front camera → Worker → successor</h1>
+
+<div class="panel">
+  <button id="start">▶ Start front camera</button>
+  <button id="fill">💡 Fill light</button>
+  <button id="save">⇩ Save last frame</button>
+  <video id="v" autoplay playsinline muted></video>
+  <div id="caps" class="dim"></div>
+</div>
+
+<div class="panel" id="result">
+  <div class="dim">Hold the packet face-down above the front camera. Commits after 2 matching reads.</div>
+</div>
+
+<div class="panel"><div id="log">idle</div></div>
+
+<script>
+// Combined stack FULL 52-card order (aces in place) — successor lookup is
+// cyclic, so any number of complete cuts is irrelevant. Bench-only copy of
+// RD_SCHEMES.highlow.full in index.html.
+const FULL = ["QC","10D","KS","5C","6C","7H","AH","8S","6D","3C","10H","JH","2S","2H","5H","AD","4D","JS","9S","7D","8D","9H","2D","5D","10S","3S","3H","KH","QD","2C","6H","7C","7S","9D","3D","KD","QH","5S","AS","AC","4S","KC","10C","QS","6S","8H","8C","9C","4C","JD","4H","JC"];
+const WORKER = "https://withered-field-e951.k2aust.workers.dev";
+const SYM = { S: "♠", H: "♥", D: "♦", C: "♣" };
+const pretty = c => c.slice(0, -1) + SYM[c.slice(-1)];
+const isRed = c => "HD".includes(c.slice(-1));
+
+const $ = id => document.getElementById(id);
+let stream = null, timer = null, lastSig = null, lastBlob = null;
+let lastCode = null, committed = false, nSent = 0;
+
+function log(msg) {
+  const el = $("log");
+  el.textContent = (el.textContent === "idle" ? "" : el.textContent) + msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+async function start() {
+  if (stream) { stop(); return; }
+  committed = false; lastCode = null; lastSig = null; nSent = 0;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+  } catch (e) { log("camera error: " + e); return; }
+  $("v").srcObject = stream;
+  $("start").textContent = "■ Stop"; $("start").classList.add("on");
+  const track = stream.getVideoTracks()[0];
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const st = track.getSettings ? track.getSettings() : {};
+  $("caps").textContent =
+    `res ${st.width}x${st.height}  focusMode:${JSON.stringify(caps.focusMode || "n/a")}  ` +
+    `focusDistance:${JSON.stringify(caps.focusDistance || "n/a")}`;
+  // ask for close continuous focus if the hardware allows it at all
+  if (caps.focusMode && caps.focusMode.includes("continuous"))
+    track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+  timer = setInterval(tick, 700);
+  log("started " + st.width + "x" + st.height);
+}
+function stop() {
+  if (timer) clearInterval(timer);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; timer = null;
+  $("start").textContent = "▶ Start front camera"; $("start").classList.remove("on");
+}
+
+// mean |Δ| between neighbor pixels on a grayscale downsample — cheap sharpness proxy
+function sharpness(ctx, w, h) {
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let s = 0, n = 0;
+  for (let y = 0; y < h; y++)
+    for (let x = 1; x < w; x++) {
+      const i = (y * w + x) * 4, j = i - 4;
+      s += Math.abs((d[i] + d[i + 1] + d[i + 2]) - (d[j] + d[j + 1] + d[j + 2]));
+      n++;
+    }
+  return s / n / 3;
+}
+
+async function tick() {
+  const v = $("v");
+  if (!v.videoWidth || committed) return;
+  const scale = Math.min(1, 1280 / v.videoWidth);
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
+  const ctx = cv.getContext("2d");
+  ctx.drawImage(v, 0, 0, cv.width, cv.height);
+  // change detection (same trick as the spread reader): skip static views
+  const c2 = document.createElement("canvas"); c2.width = 32; c2.height = 32;
+  const x2 = c2.getContext("2d"); x2.drawImage(cv, 0, 0, 32, 32);
+  const sig = x2.getImageData(0, 0, 32, 32).data;
+  if (lastSig) {
+    let d = 0;
+    for (let i = 0; i < sig.length; i += 4) d += Math.abs(sig[i] - lastSig[i]);
+    if (d / 1024 < 6) return;
+  }
+  lastSig = sig;
+  const sc = document.createElement("canvas"); sc.width = 96; sc.height = 96;
+  const sctx = sc.getContext("2d"); sctx.drawImage(cv, 0, 0, 96, 96);
+  const sharp = sharpness(sctx, 96, 96);
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+  if (!blob) return;
+  lastBlob = blob;
+  await send(blob, sharp);
+}
+
+async function send(blob, sharp) {
+  const t0 = performance.now();
+  nSent++;
+  try {
+    const resp = await fetch(WORKER + "/read_frame",
+      { method: "POST", body: blob, headers: { "Content-Type": "image/jpeg" } });
+    const j = await resp.json();
+    const ms = Math.round(performance.now() - t0);
+    const codes = (j.codes || []).filter(c => c !== "GAP");
+    log(`#${nSent} sharp=${(sharp || 0).toFixed(1)} ${ms}ms -> ` +
+        (codes.length ? codes.join(" ") : (j.error ? "ERR " + String(j.error).slice(0, 60) : "nothing")));
+    if (codes.length === 1 && FULL.includes(codes[0])) hit(codes[0]);
+    else lastCode = null;
+  } catch (e) { log("fetch error: " + String(e).slice(0, 80)); }
+}
+
+function hit(code) {
+  if (code === lastCode) {          // 2 consecutive matching reads -> commit
+    committed = true;
+    const i = FULL.indexOf(code);
+    const chosen = FULL[(i + 1) % 52];             // card UNDER the packet bottom = their card
+    const prev = FULL[(i + 51) % 52];              // shown too, in case the choreography flips
+    $("result").innerHTML =
+      `<div class="dim">glimpsed (packet bottom)</div>` +
+      `<div class="big${isRed(code) ? " red" : ""}">${pretty(code)}</div>` +
+      `<div class="dim">their card (next in stack)</div>` +
+      `<div class="big${isRed(chosen) ? " red" : ""}">${pretty(chosen)}</div>` +
+      `<div class="dim">previous in stack: ${pretty(prev)} · tap Start to re-arm</div>`;
+    log(`COMMIT ${code} -> chosen ${chosen}`);
+    stop();
+  } else lastCode = code;
+}
+
+$("start").addEventListener("click", start);
+$("fill").addEventListener("click", () => $("fill").classList.toggle("on") | document.body.classList.toggle("fill"));
+$("save").addEventListener("click", async () => {
+  if (!lastBlob) return;
+  const file = new File([lastBlob], `glimpse-${Date.now()}.jpg`, { type: "image/jpeg" });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) {}
+  const url = URL.createObjectURL(lastBlob); const a = document.createElement("a");
+  a.href = url; a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+});
+// test hook: run the full read->commit path on any image URL/dataURL (no camera needed)
+window.__glimpse = { send, hit, FULL,
+  async testImage(src) {
+    const img = new Image(); img.src = src;
+    await new Promise(r => { img.onload = r; });
+    const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height;
+    cv.getContext("2d").drawImage(img, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+    await send(blob, -1);
+  } };
+</script>
+</body>
+</html>
