@@ -85,7 +85,6 @@
   .randombtn { display: block; width: 100%; margin-top: 12px; background: var(--panel2);
     border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 12px;
     font-size: 15px; font-weight: 600; cursor: pointer; }
-  .randombtn.confirmbtn { background: var(--gold); color: #000; border-color: var(--gold); }
   #numEntry { text-align: center; font-size: 34px; font-weight: 800; min-height: 46px;
     padding: 2px 0 10px; letter-spacing: 2px; }
   .grid button { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
@@ -368,10 +367,6 @@
     <div class="banner" id="partialOut" style="display:none"></div>
     <div id="numEntry">&ndash;</div>
     <div class="grid pad" id="numberPad"></div>
-    <button class="randombtn" id="randomNum">&#127922; Random number generator</button>
-    <div id="numRoll" style="display:none">
-      <button class="randombtn confirmbtn" id="useNum">&#10003; Use this number</button>
-    </div>
   </div>
 
   <section id="results">
@@ -423,10 +418,6 @@
     <div id="ddNumEntry">&ndash;</div>
     <div class="grid pad" id="keypad"></div>
     <div class="hint" id="numGuide" style="text-align:center; margin-top:8px"></div>
-    <button class="randombtn" id="ddRandomNum">&#127922; Random number generator</button>
-    <div id="ddNumRoll" style="display:none">
-      <button class="randombtn confirmbtn" id="ddUseNum">&#10003; Use this number</button>
-    </div>
   </div>
 
   <section id="ddResults" style="display:none">
@@ -1585,13 +1576,6 @@ function padDir(d, dir) {
 let lastTapLean = null;
 // numbers that produce ANY out for this card (digit-sum counts as a hit)
 function deadSet(card) { return new Set(scanCard(card, settings).dead); }
-// the top N numbers for a card, ranked by best-out score — what the random
-// generator draws from (default the 8 strongest).
-function topNumbers(card, n = 8) {
-  const sc = scanCard(card, settings);
-  const ranked = Object.keys(sc.score).map(Number).sort((a, b) => sc.score[b] - sc.score[a]);
-  return ranked.length ? ranked.slice(0, n) : [1];
-}
 // If a typed number is a dead miss, swap its LAST digit for the nearest
 // keypad-neighbour that hits (e.g. 28 → 25). Reads as a mis-tap on the small pad.
 function steerNumber(card, v) {
@@ -1735,8 +1719,6 @@ function buildPickers() {
       const sc = { right: dx, left: -dx, down: dy, up: -dy };
       lastTapLean = ["right", "left", "down", "up"].sort((a, b) => sc[b] - sc[a]);
     } else lastTapLean = null;
-    // manual pad use supersedes a rolled number
-    $("numRoll").style.display = "none"; $("randomNum").innerHTML = "&#127922; Random number generator";
     // --- "laggy pad" recovery for a dead-end ---
     //  lag: completing tap dropped, further taps buffer → 3-digit garbage to CLEAR
     //  respond (re-entry): first tap swallowed only if it's the dead number's tens;
@@ -1800,21 +1782,6 @@ function buildPickers() {
     $("numEntry").textContent = numEntry || "–";
   });
 
-  // Random number: pick one of the card's top 8 numbers (no animation). Each
-  // press shows a fresh one; "Use this number" confirms.
-  $("randomNum").addEventListener("click", () => {
-    if (!state.c1) return;
-    fumble = null;
-    const pool = topNumbers(state.c1, 8), cur = parseInt(numEntry, 10);
-    const choices = pool.length > 1 ? pool.filter(n => n !== cur) : pool;  // change every press
-    numEntry = String(choices[Math.floor(Math.random() * choices.length)]);
-    $("numEntry").textContent = numEntry;
-    $("numRoll").style.display = "block";
-  });
-  $("useNum").addEventListener("click", () => {
-    const v = parseInt(numEntry, 10);
-    if (v >= 1 && v <= 52) commitNumber(v);
-  });
 }
 
 const STEP_KEYS = ["c1", "n1"];
@@ -1839,11 +1806,6 @@ function render() {
     el.parentElement.classList.toggle("active", state.step === i);
   }
   $("gearBtn").style.display = magicianMode ? "" : "none";
-  // the random number generator is a spectator aid; the magician types exact values
-  $("randomNum").style.display = magicianMode ? "none" : "";
-  // reset the roll-and-confirm UI on every (re)render — rolling never re-renders
-  $("numRoll").style.display = "none";
-  $("randomNum").innerHTML = "&#127922; Random number generator";
   const isCard = state.step === 0, isNum = state.step === 1;
   $("cardPicker").style.display = isCard ? "" : "none";
   $("numberPicker").style.display = isNum ? "" : "none";
@@ -3408,7 +3370,6 @@ function rdRender(){
   $("ddResults").style.display = rd.step === 2 ? "" : "none";
   // legacy gaff pickers stay hidden; the flow uses #ddGaffFlow
   $("vals").style.display = "none"; $("suitsel").style.display = "none"; $("ddGaffFlow").style.display = "";
-  $("ddRandomNum").style.display = "none"; $("ddNumRoll").style.display = "none";
   $("ddNumExample").textContent = "";
   rdSetCoded(coded);
   if (cardFirst) {
