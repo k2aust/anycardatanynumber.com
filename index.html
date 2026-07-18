@@ -3726,7 +3726,7 @@ lkCribOpen = lkCribShow;
 
 /* ---- Camera ACAAN (#camScreen): records video while running the real-deck flow ---- */
 let camStream = null, camFacing = "environment";
-let camRecorder = null, camChunks = [], camRecording = false;
+let camRecorder = null, camChunks = [], camRecording = false, camRecT = 0;
 let camNumEntry = "";
 const camRd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null };
 
@@ -3759,7 +3759,7 @@ function camStartRec() {
   catch (e) { return; }
   camRecorder.ondataavailable = e => { if (e.data.size) camChunks.push(e.data); };
   camRecorder.onstop = camSave;
-  camRecorder.start(); camRecording = true;
+  camRecorder.start(); camRecording = true; camRecT = Date.now();
   $("camRec").classList.add("on"); $("camRec").textContent = "■ Stop";
 }
 function camStopRec() { if (camRecorder && camRecording) { camRecording = false; try { camRecorder.stop(); } catch (e) {} $("camRec").classList.remove("on"); $("camRec").textContent = "● Record"; } }
@@ -3995,7 +3995,7 @@ async function stCapture(){
   // The proxy's crop_card_band does the cropping properly server-side.
   const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
   if (!blob) { stBeacon({ ev: "noblob" }); return; }
-  stRead.queue.push({ blob, tries: 0, idx: stRead.captured });
+  stRead.queue.push({ blob, tries: 0, idx: stRead.captured, t: Date.now() });
   stRead.captured++;
   stProgressChip();
 }
@@ -4027,6 +4027,7 @@ async function stDrainOne(){
     const resp = await fetch(stProxy() + "/read_frame", { method: "POST", body: item.blob, headers: { "Content-Type": "image/jpeg" } });
     const j = await resp.json();
     if (j.codes) { stIngest(j.codes); stRead.done++;
+      stRead.log.push({ idx: item.idx, t: item.t, codes: j.codes });   // per-frame evidence for score_live.py
       stRead.clean = (stRead.clean || 0) + 1;
       if (stRead.clean >= 5 && (stRead.cc || 3) < stCcMax()){       // healthy — speed up
         stRead.cc = Math.min(stCcMax(), (stRead.cc || 3) + 2); stRead.clean = 0; }
@@ -4057,7 +4058,9 @@ function stStart(){
   stRead.cc = stCcStart(); stRead.clean = 0; stRead.finalized = false;
   stRead.queue = []; stRead.lastSig = null;
   const resume = stRead.resumable && Date.now() - stRead.resumable < 180000;
-  if (!resume){ stRead.adj.clear(); stRead.sight.clear(); }   // resume keeps prior evidence
+  if (!resume){ stRead.adj.clear(); stRead.sight.clear(); stRead.log = []; }   // resume keeps prior evidence
+  if (!stRead.log) stRead.log = [];
+  stRead.t0 = Date.now();
   stRead.resumable = 0;
   stRead.lastNew = Date.now(); stRead.stack = null;
   $("camRead").classList.add("on"); $("camRead").textContent = "■ Reading";
@@ -4108,6 +4111,31 @@ function stFinalize(){
   $("camCut").style.display = "";
   stChip(`STACK READY (${stack48.length}, ${stRead.stack.flags.length} flagged) · pre-empt: ${worst.join(", ")}`);
 }
+// Debug export: after a read ends, tapping the status chip shares the full
+// evidence log (per-frame codes + timestamps aligned to the ● Record video).
+// Feed it to stack_reader/score_live.py with the true deck order to diagnose
+// missed/misread cards. Timestamps are Date.now() ms; video time of a frame
+// = (t - recT) / 1000 when recording ran during the read.
+async function stShareLog(){
+  if (!stRead.log || !stRead.log.length) return;
+  let assembled = null;
+  try { assembled = stAssemble(); } catch (e) {}
+  const data = {
+    v: 1, t0: stRead.t0 || 0, recT: camRecT || 0,
+    captured: stRead.captured, done: stRead.done, fail: stRead.fail,
+    frames: stRead.log,
+    sight: Object.fromEntries(stRead.sight),
+    adj: Object.fromEntries(stRead.adj),
+    assembled,                                  // {chain, flags} incl. aces
+    result: stRead.stack,                       // {stack48, flags} or null if incomplete
+    ua: navigator.userAgent.slice(0, 120)
+  };
+  const file = new File([JSON.stringify(data)], `stackread-${Date.now()}.json`, { type: "application/json" });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) {}
+  const url = URL.createObjectURL(file); const a = document.createElement("a"); a.href = url; a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+$("camReadChip").addEventListener("click", () => { if (!stRead.on && !stRead.draining) stShareLog(); });
+
 // cut-card entry: tap value then suit of the glimpsed bottom card
 let stCutVal = null;
 function stCutPad(){
@@ -4152,7 +4180,7 @@ $("camRead").addEventListener("pointerdown", () => { stPressT = setTimeout(() =>
 $("camRead").addEventListener("pointerup", () => clearTimeout(stPressT));
 $("camRead").addEventListener("pointerleave", () => clearTimeout(stPressT));
 $("camCut").addEventListener("click", () => { stCutVal = null; $("camCutPad").style.display === "none" ? stCutPad() : ($("camCutPad").style.display = "none"); });
-window.__st = { stIngest, stAssemble, stRead, stStop, rdUseCustomStack, rdWorstNumbers, rdSetCutCard,
+window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomStack, rdWorstNumbers, rdSetCutCard,
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
   state: () => ({ scheme: rdScheme, half: RD_HALF, n: RD_L0, excluded: [...rdExcluded] }) };   // debug/test bridge
 
