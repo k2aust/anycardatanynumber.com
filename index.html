@@ -3524,12 +3524,16 @@ window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("sh
    condition word's initial = suit (Sunny=♠ Hazy=♥ Drizzly=♦ Cloudy=♣).
    Tap again: clear + re-arm (or stop, if still reading). */
 let lkCamStream = null, lkCamTimer = null, lkCamVideoEl = null, lkCamSig = null,
-    lkCamVotes = new Map(), lkCamInflight = 0, lkCamCard = null, lkCamDot = null;
+    lkCamVotes = new Map(), lkCamInflight = 0, lkCamCard = null, lkCamDot = null,
+    lkCamCap = null, lkCamGrabbing = false, lkCamNoFrame = 0, lkCamSent = 0;
 const LK_CAM_SUIT = { S: "Sunny", H: "Hazy", D: "Drizzly", C: "Cloudy" };
 function lkCamDayNum(c){ const v = c.slice(0, -1); return v === "A" ? 1 : v === "J" ? 11 : v === "Q" ? 12 : v === "K" ? 13 : parseInt(v, 10); }
 function lkCamDotEl(){ if (!lkCamDot){ lkCamDot = document.createElement("div");
   lkCamDot.style.cssText = "display:none;position:absolute;left:24px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#27c;opacity:.6;z-index:6;pointer-events:none";
   $("lockScreen").appendChild(lkCamDot); } return lkCamDot; }
+function lkCamDotSet(state){ const d = lkCamDotEl();
+  if (state === "off"){ d.style.display = "none"; return; }
+  d.style.display = "block"; d.style.background = state === "err" ? "#c33" : "#27c"; }
 function lkCamVideo(){ if (!lkCamVideoEl){ lkCamVideoEl = document.createElement("video");
   lkCamVideoEl.muted = true; lkCamVideoEl.playsInline = true; lkCamVideoEl.setAttribute("playsinline", "");
   lkCamVideoEl.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:1";
@@ -3538,30 +3542,61 @@ async function lkCamStart(){
   try {
     lkCamStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
-  } catch (e) { lkCamStream = null; return; }
+  } catch (e) { lkCamStream = null; lkCamDotSet("err"); lkDbgShow("cam denied: " + (e.name || e)); return; }
+  const track = lkCamStream.getVideoTracks()[0];
+  // Primary capture: ImageCapture.grabFrame() straight off the track — Android
+  // Chrome can stall frame delivery to a near-invisible <video>, which is
+  // exactly what the covert design uses. The hidden video stays as fallback.
+  try { lkCamCap = ("ImageCapture" in window) ? new ImageCapture(track) : null; }
+  catch (e) { lkCamCap = null; }
   const v = lkCamVideo(); v.srcObject = lkCamStream; v.play().catch(() => {});
   lkCamSig = null; lkCamVotes.clear(); lkCamInflight = 0;
+  lkCamGrabbing = false; lkCamNoFrame = 0; lkCamSent = 0;
   lkCamTimer = setInterval(lkCamTick, 300);
-  lkCamDotEl().style.display = "block";
+  lkCamDotSet("on");
+  const st = track.getSettings ? track.getSettings() : {};
+  lkDbgShow("cam on " + (st.width || "?") + "x" + (st.height || "?") + (lkCamCap ? " ic" : " video"));
 }
 function lkCamStop(){
   if (lkCamTimer) clearInterval(lkCamTimer);
   lkCamTimer = null;
   if (lkCamStream) lkCamStream.getTracks().forEach(t => t.stop());
-  lkCamStream = null; lkCamSig = null; lkCamVotes.clear();
-  if (lkCamDot) lkCamDot.style.display = "none";
+  lkCamStream = null; lkCamCap = null; lkCamSig = null; lkCamVotes.clear();
+  lkCamDotSet("off");
+}
+// One frame as a ≤1280px canvas: ImageCapture first, hidden-video fallback.
+async function lkCamFrame(){
+  let w = 0, h = 0, src = null, bmp = null;
+  if (lkCamCap){
+    try { bmp = await lkCamCap.grabFrame(); w = bmp.width; h = bmp.height; src = bmp; }
+    catch (e) {}
+  }
+  if (!src){
+    const v = lkCamVideoEl;
+    if (!v || !v.videoWidth) return null;
+    w = v.videoWidth; h = v.videoHeight; src = v;
+  }
+  const scale = Math.min(1, 1280 / w);
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+  cv.getContext("2d").drawImage(src, 0, 0, cv.width, cv.height);
+  if (bmp && bmp.close) bmp.close();
+  return cv;
 }
 /* Reads run in PARALLEL (up to 3 in flight) and commit on any two reads
    agreeing — halves the wait vs the old serial consecutive-match rule.
    The change gate skips static views to save reads, but once one vote is
    in it is BYPASSED: a rock-steady card must not stall its confirmation. */
 async function lkCamTick(){
-  const v = lkCamVideoEl;
-  if (!v || !v.videoWidth || lkCamCard || lkCamInflight >= 3) return;
-  const scale = Math.min(1, 1280 / v.videoWidth);
-  const cv = document.createElement("canvas");
-  cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
-  cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
+  if (lkCamCard || lkCamInflight >= 3 || lkCamGrabbing) return;
+  lkCamGrabbing = true;
+  const cv = await lkCamFrame().catch(() => null);
+  lkCamGrabbing = false;
+  if (!cv){
+    if (++lkCamNoFrame === 10){ lkCamDotSet("err"); lkDbgShow("no camera frames"); }
+    return;
+  }
+  lkCamNoFrame = 0;
   const c2 = document.createElement("canvas"); c2.width = 32; c2.height = 32;
   const x2 = c2.getContext("2d"); x2.drawImage(cv, 0, 0, 32, 32);
   const sig = x2.getImageData(0, 0, 32, 32).data;
@@ -3573,24 +3608,27 @@ async function lkCamTick(){
   const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
   if (!blob || lkCamCard) return;
   lkCamInflight++;
+  const nSent = ++lkCamSent;
   try {
     const resp = await fetch(stProxy() + "/read_frame", { method: "POST", body: blob, headers: { "Content-Type": "image/jpeg" } });
     const j = await resp.json();
     const codes = (j.codes || []).filter(c => c !== "GAP");
+    lkDbgShow("#" + nSent + " → " + (codes.length ? codes.join(" ") : (j.error ? "err " + String(j.error).slice(0, 30) : "∅")));
     if (codes.length === 1 && !lkCamCard){
       const n = (lkCamVotes.get(codes[0]) || 0) + 1;
       lkCamVotes.set(codes[0], n);
       if (n >= 2) lkCamCommit(codes[0]);
     }
-  } catch (e) {}
+  } catch (e) { lkDbgShow("#" + nSent + " fetch err"); }
   lkCamInflight--;
 }
 function lkCamCommit(code){
   const stack = fullStackForSettings || RD_SCHEMES.highlow.full;
   const i = stack.indexOf(code);
-  if (i < 0){ lkCamVotes.delete(code); return; }       // not in this stack (excluded/ace) — keep reading
+  if (i < 0){ lkCamVotes.delete(code); lkDbgShow(code + " not in stack"); return; }   // excluded/ace — keep reading
   lkCamCard = stack[(i + 1) % stack.length];           // their card sits under the glimpsed packet bottom
   lkCamStop();
+  lkDbgShow("COMMIT " + code + " → " + lkCamCard);
   lkRenderDate();
 }
 function lkCamToggle(){
