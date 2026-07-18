@@ -282,8 +282,8 @@
   #lkZones.debug .z .zl { display: block; }
   #lkSetup { position: absolute; top: 0; right: 0; width: 22%; height: 10%; z-index: 61; }
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
-  /* deadman switch: bottom-left, but inset off the very edges so iOS edge-gesture protection doesn't eat the touch */
-  #lkCribHold { position: absolute; bottom: 4%; left: 3%; width: 34%; height: 16%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  /* front-camera glimpse toggle: bottom-left, inset off the very edges so iOS edge-gesture protection doesn't eat the tap */
+  #lkCam { position: absolute; bottom: 4%; left: 3%; width: 34%; height: 16%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #000; padding: 6px 8px; flex-direction: column; overflow: hidden; box-sizing: border-box; }
   /* invisible tap zone over the date: tap the date to OPEN the crib (nothing visible to a spectator) */
   #lkToggle { display: none; position: absolute; left: 0; top: 8%; width: 62%; height: 11%; z-index: 75;
@@ -439,7 +439,7 @@
   <div id="lkZones"></div>
   <div id="lkSetup"></div>
   <div id="lkExit"></div>
-  <div id="lkCribHold" style="display:none"></div>
+  <div id="lkCam" style="display:none"></div>
   <div id="lkCrib"><div id="lkCribBody"></div></div>
   <div id="lkToggle"></div>
   <div id="lkCribBack">&#8249;&nbsp; Lock screen</div>
@@ -3430,7 +3430,7 @@ function lkTap(k) {
     lkNum += k; lkRenderDate();
   }
 }
-function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkCribPhase="num"; lkCribVal=null; lkbtValAcc=0; lkRenderDate(); }
+function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkCribPhase="num"; lkCribVal=null; lkbtValAcc=0; lkCamCard=null; lkRenderDate(); }
 function lkValToNum(v){ return v==="10"?10 : v==="J"?11 : v==="Q"?12 : v==="K"?13 : (+v||0); }
 function lkStartClock() { lkTick(); lkTimer = setInterval(lkTick, 1000); }
 function lkStopClock() { if (lkTimer) clearInterval(lkTimer); lkTimer = null; }
@@ -3446,6 +3446,7 @@ function lkRenderDate(t) {
   // feedback: show the value as soon as it's tapped (before colour), then the full card
   let dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
   if (lkCribMode) dayTxt = lkCribVal ? lkCribVal : (lkCribPhase === "val" ? "_" : String(t.getDate()));   // crib lockscreen: day-of-month = chosen value ("_" once value entry is armed)
+  if (lkCribMode && lkCamCard) dayTxt = String(lkCamDayNum(lkCamCard));   // camera glimpse: day-of-month = their card's value
   const yearTxt = lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear());
   $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
   lkRenderCode(face);
@@ -3454,6 +3455,8 @@ function lkRenderCode(face) {
   const w = $("lkWeather"), N = parseInt(lkNum,10);
   if (lkCribMode) {   // crib lockscreen: once a value is chosen show its 4-suit code, else the unavailable-value range
     w.classList.remove("u");
+    // camera glimpse committed: weather condition's initial = suit (Sunny=S Hazy=H Drizzly=D Cloudy=C)
+    if (lkCamCard) { w.textContent = lkWeatherTxt + "  " + LK_CAM_SUIT[lkCamCard.slice(-1)]; return; }
     const validN = N >= 1 && N <= 52;
     if (validN && lkCribVal) w.innerHTML = lkWeatherTxt + "  " + acValCodesHTML(N, lkCribVal);
     else if (validN)         w.textContent = lkWeatherTxt + "  " + acUnavailRange(N);
@@ -3472,14 +3475,14 @@ function lkFetchWeather() {
 function lkShowCommon() {
   $("app").style.display="none"; $("settings").style.display="none"; $("ddScreen").style.display="none";
   $("lockScreen").style.display="block";
-  $("lkCribHold").style.display = lkCribMode ? "block" : "none";   // deadman switch only on the crib lockscreen (keeps the gaff "10" key free)
+  $("lkCam").style.display = lkCribMode ? "block" : "none";   // camera glimpse toggle only on the crib lockscreen (keeps the gaff "10" key free)
   $("lkToggle").classList.toggle("on", lkCribMode);               // tap-toggle button (crib lockscreen only)
   lkCribPeekHide();
   lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(lkCribMode);   // crib lockscreen auto-arms the BT remote (no arm key needed)
 }
 function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
 function lkCribShow() { lkCribMode = true;  lkShowCommon(); lkbtActive = true; lkbtAcc = 0; lkbtBuf = ""; lkbtDone = false; lkbtDotSet("armed"); lkGpStart(); }   // crib lockscreen auto-arms + polls the gamepad (Zero 2 works immediately, no arm button)
-function lkHide() { lkCribPeekHide(); $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+function lkHide() { lkCribPeekHide(); lkCamStop(); lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
 // tap the button under the fingerprint to flip between the lockscreen and the crib (stays until tapped again)
 $("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow(); });
 $("lkCribBack").addEventListener("click", lkCribPeekHide);
@@ -3509,19 +3512,87 @@ function lkCribFit() {
   tbl.style.fontSize = Math.max(10, Math.floor(fs)) + "px";
 }
 window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("show")) lkCribFit(); });
-// Reliable press-and-hold on touch: touchstart/end fire on the element the touch STARTED on, even after the
-// overlay pops up over the finger. Mouse path covers desktop. (Pointer events were flaky at the screen edge.)
-{
-  const holdEl = $("lkCribHold");
-  const show = e => { if (e.cancelable) e.preventDefault(); lkCribPeekShow(); };
-  const hide = () => lkCribPeekHide();
-  holdEl.addEventListener("touchstart", show, { passive: false });
-  holdEl.addEventListener("touchend", hide);
-  holdEl.addEventListener("touchcancel", hide);
-  holdEl.addEventListener("mousedown", show);
-  window.addEventListener("mouseup", hide);
-  window.addEventListener("blur", hide);
+/* ---- Bottom-left front-camera glimpse toggle (replaces the deadman switch; the crib
+   is still reachable via lkToggle and the BT-remote crib button) ----
+   Tap: front camera on, NO preview (2px near-invisible video element — display:none
+   can stall mobile frame delivery). Frames stream to the Worker; two consecutive
+   matching single-card reads commit: chosen card = SUCCESSOR of the glimpsed
+   packet-bottom card in the current full stack (cyclic — cuts don't matter; follows
+   the scheme picker and live-read custom stacks via fullStackForSettings).
+   On commit the camera stops immediately (kills the OS camera indicator) and the
+   lockscreen shows the card covertly: day-of-month = value (A=1 … K=13), weather
+   condition word's initial = suit (Sunny=♠ Hazy=♥ Drizzly=♦ Cloudy=♣).
+   Tap again: clear + re-arm (or stop, if still reading). */
+let lkCamStream = null, lkCamTimer = null, lkCamVideoEl = null, lkCamSig = null,
+    lkCamPrevRead = null, lkCamBusy = false, lkCamCard = null, lkCamDot = null;
+const LK_CAM_SUIT = { S: "Sunny", H: "Hazy", D: "Drizzly", C: "Cloudy" };
+function lkCamDayNum(c){ const v = c.slice(0, -1); return v === "A" ? 1 : v === "J" ? 11 : v === "Q" ? 12 : v === "K" ? 13 : parseInt(v, 10); }
+function lkCamDotEl(){ if (!lkCamDot){ lkCamDot = document.createElement("div");
+  lkCamDot.style.cssText = "display:none;position:absolute;left:24px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#27c;opacity:.6;z-index:6;pointer-events:none";
+  $("lockScreen").appendChild(lkCamDot); } return lkCamDot; }
+function lkCamVideo(){ if (!lkCamVideoEl){ lkCamVideoEl = document.createElement("video");
+  lkCamVideoEl.muted = true; lkCamVideoEl.playsInline = true; lkCamVideoEl.setAttribute("playsinline", "");
+  lkCamVideoEl.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:1";
+  $("lockScreen").appendChild(lkCamVideoEl); } return lkCamVideoEl; }
+async function lkCamStart(){
+  try {
+    lkCamStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+  } catch (e) { lkCamStream = null; return; }
+  const v = lkCamVideo(); v.srcObject = lkCamStream; v.play().catch(() => {});
+  lkCamSig = null; lkCamPrevRead = null; lkCamBusy = false;
+  lkCamTimer = setInterval(lkCamTick, 700);
+  lkCamDotEl().style.display = "block";
 }
+function lkCamStop(){
+  if (lkCamTimer) clearInterval(lkCamTimer);
+  lkCamTimer = null;
+  if (lkCamStream) lkCamStream.getTracks().forEach(t => t.stop());
+  lkCamStream = null; lkCamSig = null; lkCamPrevRead = null;
+  if (lkCamDot) lkCamDot.style.display = "none";
+}
+async function lkCamTick(){
+  const v = lkCamVideoEl;
+  if (!v || !v.videoWidth || lkCamBusy) return;
+  const scale = Math.min(1, 1280 / v.videoWidth);
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
+  cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
+  const c2 = document.createElement("canvas"); c2.width = 32; c2.height = 32;
+  const x2 = c2.getContext("2d"); x2.drawImage(cv, 0, 0, 32, 32);
+  const sig = x2.getImageData(0, 0, 32, 32).data;
+  if (lkCamSig){                                       // skip unchanged views
+    let d = 0; for (let i = 0; i < sig.length; i += 4) d += Math.abs(sig[i] - lkCamSig[i]);
+    if (d / 1024 < 6) return;
+  }
+  lkCamSig = sig;
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+  if (!blob) return;
+  lkCamBusy = true;
+  try {
+    const resp = await fetch(stProxy() + "/read_frame", { method: "POST", body: blob, headers: { "Content-Type": "image/jpeg" } });
+    const j = await resp.json();
+    const codes = (j.codes || []).filter(c => c !== "GAP");
+    if (codes.length === 1){
+      if (codes[0] === lkCamPrevRead) lkCamCommit(codes[0]);
+      else lkCamPrevRead = codes[0];
+    } else lkCamPrevRead = null;
+  } catch (e) {}
+  lkCamBusy = false;
+}
+function lkCamCommit(code){
+  const stack = fullStackForSettings || RD_SCHEMES.highlow.full;
+  const i = stack.indexOf(code);
+  if (i < 0){ lkCamPrevRead = null; return; }          // not in this stack (excluded/ace) — keep reading
+  lkCamCard = stack[(i + 1) % stack.length];           // their card sits under the glimpsed packet bottom
+  lkCamStop();
+  lkRenderDate();
+}
+function lkCamToggle(){
+  if (lkCamStream){ lkCamStop(); lkCamCard = null; lkRenderDate(); }   // reading -> abort + clear
+  else { lkCamCard = null; lkRenderDate(); lkCamStart(); }             // idle/committed -> clear + re-arm
+}
+$("lkCam").addEventListener("click", lkCamToggle);
 
 /* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
    Feeds the SAME value->color->number pipeline as the on-screen keypad. Read via e.code so it's NumLock-independent
@@ -4098,6 +4169,7 @@ $("camRead").addEventListener("pointerup", () => clearTimeout(stPressT));
 $("camRead").addEventListener("pointerleave", () => clearTimeout(stPressT));
 $("camCut").addEventListener("click", () => { stCutVal = null; $("camCutPad").style.display === "none" ? stCutPad() : ($("camCutPad").style.display = "none"); });
 window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomStack, rdWorstNumbers, rdSetCutCard,
+  lkCamCommit, lkCamToggle, lkCamState: () => ({ card: lkCamCard, on: !!lkCamStream }),
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
   state: () => ({ scheme: rdScheme, half: RD_HALF, n: RD_L0, excluded: [...rdExcluded] }) };   // debug/test bridge
 
