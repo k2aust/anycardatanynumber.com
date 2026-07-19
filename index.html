@@ -3898,6 +3898,47 @@ const ST_ACES = new Set(["AS","AH","AC","AD"]);
 const stRead = { on: false, draining: false, timer: null, drainTimer: null,
                  queue: [], captured: 0, lastSig: null, inflight: 0, done: 0, fail: 0,
                  adj: new Map(), sight: new Map(), lastNew: 0, stack: null };
+
+/* ---- Local (on-device) reader: detection + IndexNet ONNX in a Web Worker.
+   Frames it reads confidently never reach the Claude proxy — zero tokens.
+   Weak frames (blur, odd lighting) fall through to the proxy as before.
+   Kill switch: ?nolocal=1. ---- */
+const ST_LOCAL_SCORE = 0.85, ST_LOCAL_GAP = 0.5;   // per-card confidence gates
+const stLocal = { worker: null, ready: false, pending: new Map(), busy: 0,
+                  ok: 0, sent: 0, disabled: false };
+function stLocalInit(){
+  if (stLocal.worker || stLocal.disabled) return;
+  if (new URLSearchParams(location.search).has("nolocal")){ stLocal.disabled = true; return; }
+  try {
+    stLocal.worker = new Worker("local/reader_worker.js");
+    stLocal.worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "ready"){
+        stLocal.ready = true;
+        stLocal.worker.postMessage({ type: "config", scoreMin: ST_LOCAL_SCORE, gapMin: ST_LOCAL_GAP });
+        return;
+      }
+      if (m.type === "fail"){ stLocal.disabled = true; stLocal.ready = false;
+        stBeacon({ ev: "localfail", err: (m.error || "").slice(0, 120) }); return; }
+      stLocal.busy = Math.max(0, stLocal.busy - 1);
+      const item = stLocal.pending.get(m.id);
+      stLocal.pending.delete(m.id);
+      if (!item || stRead.finalized) return;
+      const nCodes = (m.codes || []).filter(c => c !== "GAP").length;
+      if (m.codes && nCodes >= 3 && m.nConfident >= 0.65 * m.nCandidates){
+        stIngest(m.codes); stRead.done++; stLocal.ok++;
+        stRead.log.push({ idx: item.idx, t: item.t, codes: m.codes, local: 1 });
+        stProgressChip();
+        if (stSolid() >= 48 && Date.now() - stRead.lastNew > 3000){
+          stRead.queue.length = 0; stFinalize();
+        }
+      } else {
+        stRead.queue.push(item);           // weak read — let Claude handle it
+      }
+    };
+    stLocal.worker.onerror = () => { stLocal.disabled = true; stLocal.ready = false; };
+  } catch (e){ stLocal.disabled = true; }
+}
 const ST_DEFAULT_PROXY = "https://withered-field-e951.k2aust.workers.dev";   // Cloudflare Worker (permanent) — holds the API key, no Mac needed
 function stProxy(){
   const saved = localStorage.getItem("rdProxyUrl");
@@ -3988,11 +4029,11 @@ function stMissing(){          // non-ace cards not yet confirmed (<2 sightings)
 }
 function stProgressChip(){
   const solid = stSolid();
-  const left = stRead.queue.length + stRead.inflight;
+  const left = stRead.queue.length + stRead.inflight + stLocal.pending.size;
   const miss = stMissing();
   const need = (miss.length && miss.length <= 8) ? ` · need ${miss.map(stPretty).join(" ")}` : "";
   if (stRead.on)
-    stChip(`spreading… ${solid}/48 confirmed · ${stRead.captured} frames · ${left} queued` + (stRead.fail ? ` · ${stRead.fail} retries` : "") + need);
+    stChip(`spreading… ${solid}/48 confirmed · ${stRead.captured} frames · ${left} queued` + (stLocal.ok ? ` · ${stLocal.ok} local` : "") + (stRead.fail ? ` · ${stRead.fail} retries` : "") + need);
   else if (stRead.draining)
     stChip(`hands free — processing ${left} left · ${solid}/48 confirmed` + need);
 }
@@ -4026,7 +4067,17 @@ async function stCapture(){
   // The proxy's crop_card_band does the cropping properly server-side.
   const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
   if (!blob) { stBeacon({ ev: "noblob" }); return; }
-  stRead.queue.push({ blob, tries: 0, idx: stRead.captured, t: Date.now() });
+  const item = { blob, tries: 0, idx: stRead.captured, t: Date.now() };
+  if (stLocal.ready && stLocal.busy < 2){
+    // local reader gets first look; blob is kept for Claude fallback
+    const idata = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height);
+    stLocal.pending.set(item.idx, item);
+    stLocal.busy++; stLocal.sent++;
+    stLocal.worker.postMessage({ id: item.idx, width: cv.width, height: cv.height,
+                                 data: idata.data.buffer }, [idata.data.buffer]);
+  } else {
+    stRead.queue.push(item);
+  }
   stRead.captured++;
   stProgressChip();
 }
@@ -4049,7 +4100,8 @@ function stCcStart(){ return stCcMax() > 4 ? 6 : 3; }
 async function stDrainOne(){
   const limit = stRead.cc || 3;
   if (stRead.inflight >= limit || !stRead.queue.length){
-    if (stRead.draining && !stRead.queue.length && !stRead.inflight) stFinalize();
+    if (stRead.draining && !stRead.queue.length && !stRead.inflight &&
+        !stLocal.pending.size) stFinalize();
     return;
   }
   const item = stRead.queue.shift();
@@ -4078,9 +4130,11 @@ async function stDrainOne(){
   if (stSolid() >= 48 && Date.now() - stRead.lastNew > 3000){       // complete — skip leftovers
     stRead.queue.length = 0;
     stFinalize();
-  } else if (stRead.draining && !stRead.queue.length && !stRead.inflight) stFinalize();
+  } else if (stRead.draining && !stRead.queue.length && !stRead.inflight &&
+             !stLocal.pending.size) stFinalize();
 }
 function stStart(){
+  stLocalInit();
   let host;
   try { host = new URL(stProxy()).host; }
   catch (e) { stChip("bad proxy URL: " + stProxy() + " — long-press Read to fix", true); return; }
