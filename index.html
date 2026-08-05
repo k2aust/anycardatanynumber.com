@@ -562,6 +562,42 @@
 .ac-steps .h{ font-size:15px; font-weight:800; color:var(--gold); margin-bottom:8px; }
 .ac-steps ol{ margin:0; padding-left:20px; } .ac-steps li{ font-size:14px; line-height:1.5; color:var(--text); margin-bottom:3px; }
 .ac-hint{ text-align:center; font-size:12px; color:var(--dim); margin-top:8px; }
+
+/* ---- Lie Detector (#lieScreen) ---- */
+#lieScreen{ display:none; }
+.ld-sub{ text-align:center; font-size:13px; color:var(--dim); margin:0 0 12px; line-height:1.45; }
+.ld-round{ text-align:center; font-size:12px; letter-spacing:.12em; color:var(--dim); text-transform:uppercase; margin:2px 0 8px; }
+.ld-panel{ background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:12px; }
+.ld-panel .h{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:8px; }
+.ld-q{ font-size:16.5px; font-weight:700; color:var(--text); line-height:1.45; }
+.ld-q b{ color:var(--gold); }
+.ld-steps{ margin:6px 0 0; padding:0; list-style:none; counter-reset:ld; }
+.ld-steps li{ counter-increment:ld; position:relative; padding:7px 0 7px 26px; border-bottom:1px solid var(--line); font-size:14px; line-height:1.45; color:var(--dim); }
+.ld-steps li:last-child{ border-bottom:none; }
+.ld-steps li::before{ content:counter(ld); position:absolute; left:0; top:7px; color:var(--gold); font-weight:800; }
+.ld-steps b{ color:var(--text); }
+.ld-yn{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+.ld-yn button{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:12px; padding:15px 8px; font-size:20px; font-weight:800; cursor:pointer; }
+.ld-yn button small{ display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:4px; text-transform:none; letter-spacing:0; line-height:1.3; }
+.ld-yn button:active{ border-color:var(--gold); }
+.ld-yn button.off{ opacity:.4; }
+.ld-chip{ display:inline-block; background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:3px 7px; margin:2px 3px 2px 0; font-size:15px; font-weight:800; color:var(--text); }
+.ld-chip.red{ color:var(--red); }
+.ld-chip .pos{ font-size:11px; font-weight:700; color:var(--gold); margin-left:4px; }
+.ld-chip i{ color:var(--gold); font-style:normal; margin-left:2px; }
+.ld-secs{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.ld-sec{ display:flex; align-items:flex-start; gap:8px; }
+.ld-sec .tag{ flex:none; width:34px; text-align:center; font-size:11px; font-weight:800; color:var(--gold); border:1px solid var(--line); border-radius:7px; padding:5px 0; margin-top:3px; }
+.ld-banner{ background:rgba(230,196,110,.12); border:1px solid var(--gold); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text); margin-top:10px; line-height:1.45; }
+.ld-warn{ background:rgba(224,74,74,.12); border:1px solid var(--red); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text); margin-top:10px; line-height:1.45; }
+.ld-verdict{ text-align:center; font-size:22px; font-weight:800; margin:8px 0 2px; }
+.ld-verdict.truth{ color:#37d67a; }
+.ld-verdict.lie{ color:var(--red); }
+.ld-tabs{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
+.ld-tabs button{ background:var(--panel2); border:1px solid var(--line); color:var(--dim); border-radius:10px; padding:9px 4px; font-size:13px; font-weight:700; cursor:pointer; }
+.ld-tabs button.active{ background:var(--gold); color:#000; border-color:var(--gold); }
+.ld-go{ display:block; width:100%; background:var(--gold); color:#000; border:none; border-radius:12px; padding:15px 0; font-size:17px; font-weight:800; cursor:pointer; margin-top:14px; }
+.ld-mini{ background:none; border:none; color:var(--dim); font-size:13px; text-decoration:underline; cursor:pointer; padding:6px; display:block; margin:8px auto 0; }
 </style>
 <section id="spellScreen" style="display:none">
   <div class="sp-wrap">
@@ -599,6 +635,14 @@
     <div class="tr-entry" id="acEntry"><span class="ph">&ndash;&ndash;</span></div>
     <div class="tr-pad" id="acPad"></div>
     <div id="acResult"></div>
+  </div>
+</section>
+
+<section id="lieScreen" style="display:none">
+  <div class="tr-wrap">
+    <div class="btnrow"><button id="lieBack">&#10094; Back</button></div>
+    <div class="tr-h1">Lie Detector</div>
+    <div id="lieBody"></div>
   </div>
 </section>
 
@@ -2107,6 +2151,7 @@ function renderSettings() {
     + '<button id="setOpenTrain" class="randombtn" style="margin:0 0 12px">&#127183; Learn my stack (flash cards)</button>'
     + '<button id="setOpenAcaan" class="randombtn" style="margin:0 0 12px">&#128290; ACAAN crib (number &rarr; cards)</button>'
     + '<button id="setOpenLkCrib" class="randombtn" style="margin:0 0 12px">&#128274; Lockscreen crib (covert peek)</button>'
+    + '<button id="setOpenLie" class="randombtn" style="margin:0 0 12px">&#129317; Lie detector (any stack)</button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -2135,6 +2180,7 @@ function renderSettings() {
   $("setOpenTrain").addEventListener("click", () => { $("settings").style.display = "none"; trainOpen(); });
   { const ba = $("setOpenAcaan"); if (ba) ba.addEventListener("click", () => { $("settings").style.display = "none"; if (acaanCribOpen) acaanCribOpen(); }); }
   { const bl = $("setOpenLkCrib"); if (bl) bl.addEventListener("click", () => { $("settings").style.display = "none"; if (lkCribOpen) lkCribOpen(); }); }
+  { const bd = $("setOpenLie"); if (bd) bd.addEventListener("click", () => { $("settings").style.display = "none"; if (lieOpen) lieOpen(); }); }
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
@@ -2475,6 +2521,7 @@ let lkOpen = null;      // set by the tool's IIFE; shows the lockscreen view
 let lkCribOpen = null;  // set by the tool's IIFE; shows the number-only crib lockscreen
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
 let acaanCribOpen = null; // set by the tool's IIFE; shows the ACAAN number-lookup crib
+let lieOpen = null;     // set by the tool's IIFE; shows the lie-detector tool
 let rdScheme = "highlow";  // single steering scheme (shared with the tool IIFE)
 let rdSetScheme = null; // set by the tool's IIFE; switches scheme + resets the flow
 let chimeEnabled = localStorage.getItem("rdChime") !== "0";   // reveal bell (elimination mode), on by default
@@ -4388,6 +4435,277 @@ function acaanScreenSelect(card){
   $("acSteps").innerHTML = `<div class="h">${rdFullName(card)} at ${acN}</div><ol>${steps.map(s => `<li>${s}</li>`).join("")}</ol>`;
 }
 acaanCribOpen = acaanShow;
+
+/* ===== Lie Detector — the 6-section lie/truth trick on ANY known stack (incl. live reads) =====
+   The 48-card stack's six contiguous 8-card sections play the six packets of the
+   arranged version, labeled top→bottom 5-4-6-2-3-1. Three rounds of "show the
+   first 24, cut 16 to the bottom" read the card's section as a binary sum
+   (yes = +4/+2/+1): red cards tell the truth, black cards lie, so a sum of p
+   means truth → the reds of section p, lie → the blacks of section 7-p.
+   "Is your card a {union of every candidate value}?" is truthfully YES on both
+   sides, so the answer exposes the lie and halves the field in one question. */
+const LD_LABEL = [5,4,6,2,3,1];              // physical section (top→bottom) → binary label
+const LD_SYM = {C:"&#9827;", D:"&#9830;", H:"&#9829;", S:"&#9824;"};
+const LD_SUITNAME = {C:"Club", D:"Diamond", H:"Heart", S:"Spade"};
+const LD_VNAME = v => ({J:"Jack", Q:"Queen", K:"King"}[v] || v);
+const LD_SCHEME_NAMES = { highlow:"Combined", aronson:"Aronson", mnemonica:"Mnemonica", custom:"Last read (live)" };
+const ld = { step:0, sp2:false, a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0 };
+function ldReset(){ ld.step=0; ld.a=[[null,null,null],[null,null,null]]; ld.verdict=[null,null]; ld.fhist=[[],[]]; ld.cur=0; }
+const ldIsRed = c => /[HD]$/.test(c);
+const ldVal = c => c.slice(0,-1);
+const ldChip = (c, pos) => '<span class="ld-chip' + (ldIsRed(c) ? ' red' : '') + '">' + ldVal(c) + LD_SYM[c.slice(-1)]
+  + (rdExcluded.has(c) ? "<i>?</i>" : "") + (pos ? '<span class="pos">#' + pos + '</span>' : '') + '</span>';
+const ldPool = sp => sp ? ["J","Q","K"] : ["2","3","4","5","6","7","8","9","10"];
+const ldInPool = (c, sp) => ldPool(sp).includes(ldVal(c));
+const ldSections = () => [0,1,2,3,4,5].map(i => RD_STACK.slice(i*8, i*8+8));
+const ldOrderAt = r => { const k = (16*r) % 48; return RD_STACK.slice(k).concat(RD_STACK.slice(0,k)); };
+const ldPat = sp => (ld.a[sp][0]?4:0) + (ld.a[sp][1]?2:0) + (ld.a[sp][2]?1:0);
+function ldCands(sp){
+  const secs = ldSections(), p = ldPat(sp);
+  const bySec = l => { const i = LD_LABEL.indexOf(l); return i < 0 ? [] : secs[i]; };
+  return { p,
+    R: bySec(p).filter(c => ldInPool(c, sp) && ldIsRed(c)),
+    B: bySec(7-p).filter(c => ldInPool(c, sp) && !ldIsRed(c)) };
+}
+const ldFinalPos = c => ((RD_STACK.indexOf(c) + 16) % 48) + 1;   // after the two 16-card cuts
+function ldValsOf(set){ const vs = [...new Set(set.map(ldVal))]; vs.sort(rdValCmp); return vs; }
+function ldValPhrase(vs){
+  if (!vs.length) return "";
+  if (vs.length === 1) return "a " + LD_VNAME(vs[0]);
+  const idx = vs.map(v => RD_VORDER.indexOf(v));
+  if (idx[idx.length-1] - idx[0] === vs.length - 1 && vs.length >= 4)
+    return "anywhere from " + LD_VNAME(vs[0]) + " to " + LD_VNAME(vs[vs.length-1]);
+  const n = vs.map(LD_VNAME);
+  return "a " + n.slice(0,-1).join(", ") + " or " + n[n.length-1];
+}
+function ldTease(cands, sp){
+  if (sp) return '&ldquo;Repeat after me: Jack&hellip; Queen&hellip; King.&rdquo; Study them, then: &ldquo;It&rsquo;s a court card &mdash; I can see that much. Don&rsquo;t give anything away.&rdquo;';
+  const band = v => "234".includes(v) ? 0 : "567".includes(v) ? 1 : 2;
+  const n = [0,0,0]; cands.forEach(c => n[band(ldVal(c))]++);
+  const lead = n.indexOf(Math.max(...n)), names = ["LOW","in the MIDDLE","HIGH"];
+  let line;
+  if (n[lead] === cands.length) line = 'Then: &ldquo;It feels kind of ' + names[lead] + ', doesn&rsquo;t it? Don&rsquo;t give anything away.&rdquo;';
+  else if (n[lead] * 2 > cands.length) line = 'Most candidates run ' + names[lead] + ' &mdash; tease it softly: &ldquo;it feels&hellip; ' + names[lead].toLowerCase() + 'ish.&rdquo;';
+  else line = 'Values are mixed &mdash; skip the guess and go straight to the question below.';
+  return '&ldquo;Repeat after me: high&hellip; high&hellip; middle&hellip; middle&hellip; low&hellip; low.&rdquo; ' + line;
+}
+function ldBestSplit(F){
+  let best = null;
+  const consider = (yes, label) => {
+    const a = yes.length, b = F.length - a;
+    if (!a || !b) return;
+    const score = Math.max(a, b);
+    if (!best || score < best.score) best = { yes, label, score };
+  };
+  const vs = ldValsOf(F);
+  for (let m = 1; m < (1 << vs.length) - 1; m++){
+    const pick = vs.filter((v,i) => m & (1 << i));
+    if (pick.length * 2 > vs.length) continue;         // name the smaller half aloud
+    consider(F.filter(c => pick.includes(ldVal(c))), "is your card " + ldValPhrase(pick) + "?");
+  }
+  for (const s of ["H","D","C","S"]){
+    consider(F.filter(c => c.slice(-1) === s), "is your card a " + LD_SUITNAME[s] + "?");
+  }
+  return best;
+}
+function ldFSet(sp){
+  const h = ld.fhist[sp];
+  if (h.length) return h[h.length-1];
+  const { R, B } = ldCands(sp);
+  return ld.verdict[sp] === "truth" ? R : B;
+}
+function ldRender(){
+  const el = $("lieBody");
+  if (RD_STACK.length !== 48){ el.innerHTML = '<div class="ld-warn">This tool needs a 48-card stack (aces out) &mdash; the current stack has ' + RD_STACK.length + ' cards.</div>'; return; }
+  if (ld.step === 0) return ldRenderSetup(el);
+  if (ld.step <= 3) return ldRenderRound(el, ld.step - 1);
+  return ldRenderResult(el);
+}
+function ldRenderSetup(el){
+  const secs = ldSections();
+  el.innerHTML =
+    '<div class="ld-sub">Works on <b>any</b> stack the app knows &mdash; including a genuinely shuffled, live-read deck. Current stack: <b>' + (LD_SCHEME_NAMES[rdScheme] || rdScheme) + '</b>. The deck must match the order below, uncut, aces out.</div>'
+    + (rdExcluded.size ? '<div class="ld-warn">&#9888; ' + rdExcluded.size + ' flagged card(s) from the live read (marked <i>?</i>) &mdash; identities uncertain.</div>' : '')
+    + '<div class="ld-panel"><div class="h">The setup</div><ol class="ld-steps">'
+    + '<li><b>&ldquo;Think of a card &mdash; first a number, 2 through 10&hellip; now add a suit.&rdquo;</b> (No aces, no picture cards.)</li>'
+    + '<li><b>&ldquo;Do you have a good poker face? You&rsquo;ll need it.&rdquo;</b></li>'
+    + '<li><b>&ldquo;If your card is RED, you tell the truth every time I ask. If it&rsquo;s BLACK &mdash; you lie. Every single time.&rdquo;</b></li>'
+    + '</ol></div>'
+    + '<div class="ld-panel"><div class="h">2nd spectator (thinks of a picture card)</div><div class="seg" id="ldSp2Seg">'
+    +   '<button class="segopt' + (ld.sp2 ? '' : ' active') + '" data-v="0">Off</button>'
+    +   '<button class="segopt' + (ld.sp2 ? ' active' : '') + '" data-v="1">On<small>&ldquo;think of a Jack, Queen or King&rdquo;</small></button>'
+    + '</div><div class="hint" style="margin-top:6px">Both answer every question through the same red&nbsp;=&nbsp;truth / black&nbsp;=&nbsp;lie rule; the app tracks both at once.</div></div>'
+    + '<div class="ld-panel"><div class="h">The six sections (top &rarr; bottom)</div><div class="ld-secs">'
+    + secs.map((s, i) => '<div class="ld-sec"><span class="tag">' + (i*8+1) + '&ndash;' + (i*8+8) + '</span><span>' + s.map(c => ldChip(c)).join('') + '</span></div>').join('')
+    + '</div><div class="hint" style="margin-top:8px">Each round you show the top 3 sections (24 cards), then cut 2 sections (16 cards) to the bottom &mdash; the next screens name the exact boundary cards as you go.</div></div>'
+    + '<button class="ld-go" id="ldStart">Start &mdash; question 1</button>';
+  $("ldSp2Seg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; ld.sp2 = b.dataset.v === "1"; ldRender(); });
+  $("ldStart").addEventListener("click", () => { ld.step = 1; ldRender(); });
+}
+function ldRenderRound(el, r){
+  const order = ldOrderAt(r);
+  const showLast = order[23], breakCard = order[15];
+  const spects = ld.sp2 ? [0,1] : [0];
+  const forced = sp => (r === 2 && ld.a[sp][0] === ld.a[sp][1]) ? !ld.a[sp][0] : null;
+  el.innerHTML =
+    '<div class="ld-round">Question ' + (r+1) + ' of 3</div>'
+    + '<div class="ld-panel"><div class="h">Show</div><ol class="ld-steps">'
+    + '<li>Spread and show the <b>first 24 cards</b> &mdash; stop after the <b>' + rdFullName(showLast) + '</b>.</li>'
+    + '<li>As you pass the 16th card (<b>' + rdFullName(breakCard) + '</b>), catch a break under it.</li>'
+    + '<li>' + (r < 2 ? 'Square up and <b>cut everything above the break to the bottom</b>.' : 'Square up &mdash; <b>no cut this time</b>.') + '</li>'
+    + '<li>Ask: <b>&ldquo;Yes or no &mdash; did you see your card?&rdquo;</b> Watch the poker face.</li>'
+    + '</ol></div>'
+    + spects.map(sp => {
+        const f = forced(sp), a = ld.a[sp][r];
+        return '<div class="ld-panel"><div class="h">' + (ld.sp2 ? (sp ? 'Spectator 2 (picture card)' : 'Spectator 1 (number card)') : 'Their answer') + '</div>'
+          + (f !== null ? '<div class="ld-banner">Only six sections &mdash; after two ' + (ld.a[sp][0] ? 'yeses' : 'nos') + ' the third answer <b>must be ' + (f ? 'YES' : 'NO') + '</b>. Say it for them: &ldquo;and this time you ' + (f ? 'did' : 'didn&rsquo;t') + ' see it.&rdquo;</div>' : '')
+          + '<div class="ld-yn" data-sp="' + sp + '">'
+          + '<button data-a="1"' + (a === true ? ' style="border-color:var(--gold)"' : '') + (f === false ? ' class="off"' : '') + '>YES</button>'
+          + '<button data-a="0"' + (a === false ? ' style="border-color:var(--gold)"' : '') + (f === true ? ' class="off"' : '') + '>NO</button>'
+          + '</div></div>';
+      }).join('');
+  el.querySelectorAll(".ld-yn").forEach(g => g.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const sp = +g.dataset.sp, val = b.dataset.a === "1", f = forced(sp);
+    if (f !== null && val !== f){ b.classList.add("tr-shake"); setTimeout(() => b.classList.remove("tr-shake"), 350); return; }
+    ld.a[sp][r] = val;
+    if (spects.every(s => ld.a[s][r] !== null)) ld.step++;
+    ldRender();
+  }));
+}
+function ldVerdictHTML(sp){
+  const { p, R, B } = ldCands(sp);
+  if (p < 1 || p > 6 || (!R.length && !B.length))
+    return '<div class="ld-warn">These answers don&rsquo;t point at any card &mdash; an answer (or the stack read) slipped somewhere. Use Back to rewind.</div>';
+  const union = ldValsOf(R.concat(B));
+  let h = '<div class="ld-panel"><div class="h">Candidates &mdash; truth reads section ' + p + ', lie reads section ' + (7-p) + '</div>'
+    + '<div style="margin-bottom:6px"><span class="hint">If telling the truth (red):</span><br>' + (R.length ? R.map(c => ldChip(c)).join('') : '<span class="hint">none possible</span>') + '</div>'
+    + '<div><span class="hint">If lying (black):</span><br>' + (B.length ? B.map(c => ldChip(c)).join('') : '<span class="hint">none possible</span>') + '</div></div>';
+  h += '<div class="ld-panel"><div class="h">The tease (optional)</div><div class="ld-q" style="font-weight:600">' + ldTease(R.concat(B), sp) + '</div></div>';
+  if (!R.length || !B.length){
+    const lie = !R.length;
+    h += '<div class="ld-banner">You already know: they can only be <b>' + (lie ? 'LYING (black card)' : 'TELLING THE TRUTH (red card)') + '</b> &mdash; no ' + (lie ? 'red' : 'black') + ' candidate exists. Ask the question below anyway as pure theater; the answer must be ' + (lie ? 'NO' : 'YES') + '.</div>';
+  }
+  h += '<div class="ld-panel"><div class="h">The lie-detector question</div>'
+    + '<div class="ld-q">&ldquo;One more, just to be sure. Yes or no &mdash; is your card <b>' + ldValPhrase(union) + '</b>?&rdquo;</div>'
+    + '<div class="hint" style="margin-top:6px">The honest answer is YES for every candidate &mdash; their answer IS the lie detector.</div>'
+    + '<div class="ld-yn" id="ldVq">'
+    + '<button data-v="truth"' + (R.length ? '' : ' class="off"') + '>YES<small>truth &middot; red card &middot; ' + R.length + ' left</small></button>'
+    + '<button data-v="lie"' + (B.length ? '' : ' class="off"') + '>NO<small>lying &middot; black card &middot; ' + B.length + ' left</small></button>'
+    + '</div></div>';
+  return h;
+}
+function ldRevealHTML(F){
+  const s = F.slice().sort((a,b) => rdValCmp(ldVal(b), ldVal(a)) || (a < b ? -1 : 1));   // value desc
+  const pos = c => ldFinalPos(c);
+  const restore = '<div class="hint" style="margin-top:8px">Everything so far was straight cuts &mdash; afterwards cut the <b>' + rdFullName(RD_STACK[0]) + '</b> back to the top and the stack is restored (minus any cards you culled).</div>';
+  if (s.length === 1){
+    const c = s[0];
+    return '<div class="ld-panel"><div class="h">The reveal &mdash; one card</div><ol class="ld-steps">'
+      + '<li>It&rsquo;s the <b>' + rdFullName(c) + '</b>, sitting <b>' + pos(c) + ' from the top</b> right now.</li>'
+      + '<li>Strongest finish: name the card&hellip; then add <b>&ldquo;and it&rsquo;s exactly ' + pos(c) + ' cards down&rdquo;</b> and deal to it &mdash; a shuffled-deck miracle.</li>'
+      + '</ol>' + restore + '</div>';
+  }
+  if (s.length === 2){
+    const y = s[0], x = s[1];
+    return '<div class="ld-panel"><div class="h">The reveal &mdash; two-way out</div><ol class="ld-steps">'
+      + '<li>Casually cull the <b>' + rdFullName(y) + '</b> (#' + pos(y) + ') and <b>' + rdFullName(x) + '</b> (#' + pos(x) + ') together, ' + rdFullName(y) + ' uppermost.</li>'
+      + '<li>Cut so <b>6 indifferent cards</b> sit above the pair.</li>'
+      + '<li>&ldquo;I&rsquo;ll go on intuition alone.&rdquo; Deal 6 cards slowly, deal one more (the ' + rdFullName(y) + ') and stop: &ldquo;For the first time &mdash; name your card.&rdquo;</li>'
+      + '<li><b>' + rdFullName(x) + '</b> &rarr; flip the top card of the <b>deck</b>. <b>' + rdFullName(y) + '</b> &rarr; flip the top card of the <b>dealt pile</b>.</li>'
+      + '</ol>' + restore + '</div>';
+  }
+  const z = s[0], y = s[1], x = s[2];
+  return '<div class="ld-panel"><div class="h">The reveal &mdash; three-way out</div><ol class="ld-steps">'
+    + '<li>Casually cull the three together, in this order from the top: <b>' + rdFullName(z) + '</b> (#' + pos(z) + '), <b>' + rdFullName(y) + '</b> (#' + pos(y) + '), <b>' + rdFullName(x) + '</b> (#' + pos(x) + ').</li>'
+    + '<li>Cut so <b>6 indifferent cards</b> sit above the packet.</li>'
+    + '<li>&ldquo;I&rsquo;ll go on intuition alone.&rdquo; Deal 6 cards slowly, then deal the next two (' + rdFullName(z) + ', then ' + rdFullName(y) + ') squared onto the pile &mdash; keep a break under the top card so a double is ready.</li>'
+    + '<li>&ldquo;For the first time &mdash; name your card.&rdquo;</li>'
+    + '<li><b>' + rdFullName(x) + '</b> &rarr; flip the top card of the <b>deck</b> &middot; <b>' + rdFullName(y) + '</b> &rarr; flip the top card of the <b>pile</b> &middot; <b>' + rdFullName(z) + '</b> &rarr; <b>double lift</b> the pile.</li>'
+    + '</ol>' + restore + '</div>';
+}
+function ldFishHTML(sp){
+  const v = ld.verdict[sp], F = ldFSet(sp);
+  let h = '<div class="ld-verdict ' + v + '">' + (v === "truth" ? 'TELLING THE TRUTH &middot; RED' : 'LYING &middot; BLACK') + '</div>'
+    + '<div class="ld-sub">&ldquo;Don&rsquo;t give anything away&hellip; but I can tell you&rsquo;re ' + (v === "truth" ? 'telling the truth' : 'lying') + '.&rdquo;</div>';
+  if (!F.length) return h + '<div class="ld-warn">No candidates left &mdash; an answer got crossed. Use Back to rewind.</div>';
+  h += '<div class="ld-panel"><div class="h">Their card is one of ' + F.length + '</div>'
+    + F.map(c => ldChip(c, ldFinalPos(c))).join('')
+    + '<div class="hint" style="margin-top:6px">#&nbsp;= position from the top of the deck as it sits now (after the two cuts).</div>'
+    + (F.some(c => rdExcluded.has(c)) ? '<div class="ld-warn">&#9888; a flagged (uncertain) read is among the candidates.</div>' : '')
+    + '</div>';
+  if (F.length > 3){
+    const q = ldBestSplit(F);
+    if (q) h += '<div class="ld-panel"><div class="h">Narrow it down</div>'
+      + '<div class="ld-q">&ldquo;Yes or no &mdash; ' + q.label + '&rdquo;</div>'
+      + '<div class="hint" style="margin-top:6px">They keep ' + (v === "truth" ? 'answering honestly' : 'lying') + ' &mdash; the app decodes it.</div>'
+      + '<div class="ld-yn" id="ldFq"><button data-a="1">YES</button><button data-a="0">NO</button></div></div>';
+  } else {
+    h += ldRevealHTML(F);
+  }
+  h += '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
+  return h;
+}
+function ldRenderResult(el){
+  const sp = ld.cur;
+  let html = "";
+  if (ld.sp2) html += '<div class="ld-tabs">' + [0,1].map(s =>
+    '<button data-sp="' + s + '"' + (s === sp ? ' class="active"' : '') + '>Spectator ' + (s+1) + (ld.verdict[s] ? ' &#10003;' : '') + '</button>').join('') + '</div>';
+  html += ld.verdict[sp] === null ? ldVerdictHTML(sp) : ldFishHTML(sp);
+  el.innerHTML = html;
+  const tabs = el.querySelector(".ld-tabs");
+  if (tabs) tabs.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ld.cur = +b.dataset.sp; ldRender(); });
+  const vq = el.querySelector("#ldVq");
+  if (vq) vq.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b || b.classList.contains("off")) return;
+    ld.verdict[sp] = b.dataset.v; ldRender();
+  });
+  const fq = el.querySelector("#ldFq");
+  if (fq){
+    const F = ldFSet(sp), q = ldBestSplit(F);
+    fq.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      const saidYes = b.dataset.a === "1";
+      const inSet = ld.verdict[sp] === "truth" ? saidYes : !saidYes;
+      ld.fhist[sp].push(inSet ? q.yes : F.filter(c => !q.yes.includes(c)));
+      ldRender();
+    });
+  }
+  const rs = el.querySelector("#ldRestart");
+  if (rs) rs.addEventListener("click", () => { ldReset(); ldRender(); });
+}
+function ldBack(){
+  if (ld.step === 0) return ldHide();
+  if (ld.step <= 3){
+    const r = ld.step - 1;
+    ld.a.forEach(arr => { arr[r] = null; });
+    if (r === 0) ld.step = 0;
+    else { ld.a.forEach(arr => { arr[r-1] = null; }); ld.step = r; }
+    return ldRender();
+  }
+  const sp = ld.cur;
+  if (ld.fhist[sp].length){ ld.fhist[sp].pop(); return ldRender(); }
+  if (ld.verdict[sp] !== null){ ld.verdict[sp] = null; return ldRender(); }
+  ld.step = 3; ld.a.forEach(arr => { arr[2] = null; }); ld.verdict = [null,null]; ld.fhist = [[],[]]; ld.cur = 0;
+  ldRender();
+}
+function ldShow(){
+  $("app").style.display = "none"; $("settings").style.display = "none";
+  $("ddScreen").style.display = "none"; $("spellScreen").style.display = "none";
+  $("trainScreen").style.display = "none"; $("acaanScreen").style.display = "none";
+  if ($("lockScreen")) $("lockScreen").style.display = "none";
+  if ($("camScreen")) $("camScreen").style.display = "none";
+  ldReset();
+  $("lieScreen").style.display = "block";
+  ldRender();
+}
+function ldHide(){
+  $("lieScreen").style.display = "none";
+  renderSettings(); $("settings").style.display = "block";
+}
+$("lieBack").addEventListener("click", ldBack);
+lieOpen = ldShow;
+window.__ld = { ld, open: ldShow, cands: ldCands, split: ldBestSplit, finalPos: ldFinalPos, sections: ldSections, pat: ldPat };   // debug/test bridge
 
 rdResetState(); rdRender();   // init (real-deck tool, number step)
 })();
