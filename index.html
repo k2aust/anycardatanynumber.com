@@ -4451,23 +4451,29 @@ acaanCribOpen = acaanShow;
 const LD_LABEL = [5,4,6,2,3,1];              // physical section (top→bottom) → binary label
 const LD_SYM = {C:"&#9827;", D:"&#9830;", H:"&#9829;", S:"&#9824;"};
 const LD_SUITNAME = {C:"Club", D:"Diamond", H:"Heart", S:"Spade"};
-const LD_VNAME = v => ({J:"Jack", Q:"Queen", K:"King"}[v] || v);
+const LD_VNAME = v => ({J:"Jack", Q:"Queen", K:"King", A:"Ace"}[v] || v);
 const LD_SCHEME_NAMES = { highlow:"Combined", aronson:"Aronson", mnemonica:"Mnemonica", custom:"Last read (live)" };
-const ld = { step:0, sp2:false, split:true, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
+const ld = { step:0, sp2:false, split:true, aces:false, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
 function ldReset(){ ld.step=0; ld.a=[[null,null,null],[null,null,null]]; ld.verdict=[null,null]; ld.fhist=[[],[]]; ld.cur=0; ld.warned=[false,false]; }
 const ldIsRed = c => /[HD]$/.test(c);
 const ldVal = c => c.slice(0,-1);
 const ldChip = (c, pos) => '<span class="ld-chip' + (ldIsRed(c) ? ' red' : '') + '">' + ldVal(c) + LD_SYM[c.slice(-1)]
   + (rdExcluded.has(c) ? "<i>?</i>" : "") + (pos ? '<span class="pos">#' + pos + '</span>' : '') + '</span>';
 const ldOrd = n => n + (n%100>=11 && n%100<=13 ? "th" : ["th","st","nd","rd"][n%10] || "th");
+// working deck: aces removed (48, the RD_STACK) or the full 52-card order with
+// aces in place — only for schemes that have one (live reads are read as 48)
+const ldAcesAvail = () => { const f = RD_SCHEMES[rdScheme].full; return !!f && f.length === 52; };
+const ldAcesIn = () => ld.aces && ldAcesAvail();
+const ldDeck = () => ldAcesIn() ? RD_SCHEMES[rdScheme].full : RD_STACK;
+const ldN = () => ldDeck().length;
 const ldBounds = () => { const b=[0]; for (let i=0;i<6;i++) b.push(b[i]+ld.sizes[i]); return b; };
-const ldSections = () => { const b = ldBounds(); return [0,1,2,3,4,5].map(i => RD_STACK.slice(b[i], b[i+1])); };
-const ldOrderAt = r => { const s = ld.sizes, k = (r>=1 ? s[0]+s[1] : 0) + (r>=2 ? s[2]+s[3] : 0);
-  return RD_STACK.slice(k).concat(RD_STACK.slice(0,k)); };
+const ldSections = () => { const b = ldBounds(), d = ldDeck(); return [0,1,2,3,4,5].map(i => d.slice(b[i], b[i+1])); };
+const ldOrderAt = r => { const s = ld.sizes, d = ldDeck(), k = (r>=1 ? s[0]+s[1] : 0) + (r>=2 ? s[2]+s[3] : 0);
+  return d.slice(k).concat(d.slice(0,k)); };
 const ldPat = sp => (ld.a[sp][0]?4:0) + (ld.a[sp][1]?2:0) + (ld.a[sp][2]?1:0);
 // value pool per spectator: split mode ties spectator 1 to number cards and
 // spectator 2 to picture cards (the classic two-person framing); otherwise free
-const ldPoolVals = sp => (ld.sp2 && ld.split) ? (sp ? RD_VORDER.slice(9,12) : RD_VORDER.slice(0,9)) : RD_VORDER.slice(0,12);
+const ldPoolVals = sp => (ld.sp2 && ld.split) ? (sp ? RD_VORDER.slice(9,12) : RD_VORDER.slice(0,9)) : RD_VORDER.slice(0, ldAcesIn() ? 13 : 12);
 function ldCands(sp){
   const secs = ldSections(), p = ldPat(sp), pool = ldPoolVals(sp);
   const bySec = l => { const i = LD_LABEL.indexOf(l); return i < 0 ? [] : secs[i]; };
@@ -4475,20 +4481,25 @@ function ldCands(sp){
     R: bySec(p).filter(c => ldIsRed(c) && pool.includes(ldVal(c))),
     B: bySec(7-p).filter(c => !ldIsRed(c) && pool.includes(ldVal(c))) };
 }
-const ldFinalPos = c => { const s = ld.sizes; return ((RD_STACK.indexOf(c) + s[4] + s[5]) % 48) + 1; };   // after the two cuts
+const ldFinalPos = c => { const s = ld.sizes; return ((ldDeck().indexOf(c) + s[4] + s[5]) % ldN()) + 1; };   // after the two cuts
 /* Boundary optimizer: search all section-size compositions (5–11 each, sum 48)
    for the one minimizing expected fishing questions (final side ≤3 needs none)
    plus a small penalty for lie-question length (union of values, complement-
    aware) and a nudge toward even 8s for a natural look. ~9.3k candidates. */
 function ldOptimize(){
-  if (RD_STACK.length !== 48) return [8,8,8,8,8,8];
-  const isRed = RD_STACK.map(ldIsRed), vIdx = RD_STACK.map(c => RD_VORDER.indexOf(ldVal(c)));
+  const deck = ldDeck(), N = deck.length;
+  const base = Math.floor(N/6), rem = N - base*6;
+  const even = Array.from({length:6}, (_,i) => base + (i < rem ? 1 : 0));
+  if (N !== 48 && N !== 52) return even;
+  const hiSz = N === 52 ? 12 : 11, mid = N/6;
+  const isRed = deck.map(ldIsRed), vIdx = deck.map(c => RD_VORDER.indexOf(ldVal(c)));
   const qx = n => n <= 3 ? 0 : n <= 6 ? 1 : 2;
-  // in split mode, optimize for BOTH pools at once (per-card weight = 1/pool size)
+  // in split mode, optimize for BOTH pools at once (per-card weight = 1/pool
+  // size); aces (vIdx 12) belong to no split pool — pure spacers
   const pools = (ld.sp2 && ld.split)
     ? [{lo:0, hi:8, tot:36, nv:9}, {lo:9, hi:11, tot:12, nv:3}]
-    : [{lo:0, hi:11, tot:48, nv:12}];
-  let best = [8,8,8,8,8,8], bestCost = Infinity;
+    : [{lo:0, hi: ldAcesIn() ? 12 : 11, tot:N, nv: ldAcesIn() ? 13 : 12}];
+  let best = even, bestCost = Infinity;
   const sizes = [0,0,0,0,0,0];
   const evalSizes = () => {
     const b = [0]; for (let i = 0; i < 6; i++) b.push(b[i] + sizes[i]);
@@ -4502,24 +4513,24 @@ function ldOptimize(){
         cost += nR/pl.tot*qx(nR) + nB/pl.tot*qx(nB) + 0.02*(nR+nB)/pl.tot*Math.min(vals.size, pl.nv - vals.size);
       }
     }
-    for (let i = 0; i < 6; i++) cost += 0.001*Math.abs(sizes[i]-8);
+    for (let i = 0; i < 6; i++) cost += 0.001*Math.abs(sizes[i]-mid);
     if (cost < bestCost){ bestCost = cost; best = sizes.slice(); }
   };
-  const rec = (i, rem) => {
-    if (i === 5){ if (rem >= 5 && rem <= 11){ sizes[5] = rem; evalSizes(); } return; }
-    for (let s = 5; s <= 11; s++){
-      const left = rem - s, slots = 5 - i;
-      if (left < 5*slots || left > 11*slots) continue;
+  const rec = (i, remN) => {
+    if (i === 5){ if (remN >= 5 && remN <= hiSz){ sizes[5] = remN; evalSizes(); } return; }
+    for (let s = 5; s <= hiSz; s++){
+      const left = remN - s, slots = 5 - i;
+      if (left < 5*slots || left > hiSz*slots) continue;
       sizes[i] = s; rec(i+1, left);
     }
   };
-  rec(0, 48);
+  rec(0, N);
   return best;
 }
 function ldValsOf(set){ const vs = [...new Set(set.map(ldVal))]; vs.sort(rdValCmp); return vs; }
 function ldValPhrase(vs){
   if (!vs.length) return "";
-  if (vs.length === 1) return "a " + LD_VNAME(vs[0]);
+  if (vs.length === 1) return (vs[0] === "A" ? "an " : "a ") + LD_VNAME(vs[0]);
   const idx = vs.map(v => RD_VORDER.indexOf(v));
   if (idx[idx.length-1] - idx[0] === vs.length - 1 && vs.length >= 4)
     return "anywhere from " + LD_VNAME(vs[0]) + " to " + LD_VNAME(vs[vs.length-1]);
@@ -4571,12 +4582,14 @@ function ldRender(){
 function ldRenderSetup(el){
   const secs = ldSections(), b = ldBounds();
   el.innerHTML =
-    '<div class="ld-sub">Works on <b>any</b> stack the app knows &mdash; including a genuinely shuffled, live-read deck. Current stack: <b>' + (LD_SCHEME_NAMES[rdScheme] || rdScheme) + '</b>. The deck must match the order below, uncut, aces out.</div>'
+    '<div class="ld-sub">Works on <b>any</b> stack the app knows &mdash; including a genuinely shuffled, live-read deck. Current stack: <b>' + (LD_SCHEME_NAMES[rdScheme] || rdScheme) + '</b>. The deck must match the order below, uncut &mdash; ' + (ldAcesIn() ? 'all 52 cards, aces in place' : 'aces set aside') + '.</div>'
     + (rdExcluded.size ? '<div class="ld-warn">&#9888; ' + rdExcluded.size + ' flagged card(s) from the live read (marked <i>?</i>) &mdash; identities uncertain.</div>' : '')
     + '<div class="ld-panel"><div class="h">The setup</div><ol class="ld-steps">'
     + (ld.sp2 && ld.split
-        ? '<li><b>&ldquo;You &mdash; think of a number card: 2 through 10, any suit. And you &mdash; a picture card: Jack, Queen or King, any suit.&rdquo;</b></li>'
-        : '<li><b>&ldquo;Think of any card in the deck &mdash; any value, any suit. Don&rsquo;t say it.&rdquo;</b> (The aces are out and they watched them leave &mdash; and if they think of one anyway, the app catches it.)</li>')
+        ? '<li><b>&ldquo;You &mdash; think of a number card: 2 through 10, any suit. And you &mdash; a picture card: Jack, Queen or King, any suit.&rdquo;</b>' + (ldAcesIn() ? '' : ' (Aces are set aside &mdash; neither number nor picture.)') + '</li>'
+        : (ldAcesIn()
+            ? '<li><b>&ldquo;Think of any card in the deck &mdash; any value, any suit. Don&rsquo;t say it.&rdquo;</b> Aces included &mdash; a genuinely free choice of all 52.</li>'
+            : '<li><b>&ldquo;Think of any card in the deck &mdash; any value, any suit. Don&rsquo;t say it.&rdquo;</b> (The aces are out and they watched them leave &mdash; and if they think of one anyway, the app catches it.)</li>'))
     + '<li><b>&ldquo;Do you have a good poker face? You&rsquo;ll need it.&rdquo;</b></li>'
     + '<li><b>&ldquo;If your card is RED, you tell the truth every time I ask. If it&rsquo;s BLACK &mdash; you lie. Every single time.&rdquo;</b></li>'
     + '</ol></div>'
@@ -4585,6 +4598,10 @@ function ldRenderSetup(el){
     +   '<button class="segopt' + (ld.sp2 && ld.split ? ' active' : '') + '" data-v="split">Number + picture<small>Sp&nbsp;1 a number card, Sp&nbsp;2 a picture card</small></button>'
     +   '<button class="segopt' + (ld.sp2 && !ld.split ? ' active' : '') + '" data-v="free">Both free<small>each thinks of any card</small></button>'
     + '</div><div class="hint" style="margin-top:6px">Both answer every question through the same red&nbsp;=&nbsp;truth / black&nbsp;=&nbsp;lie rule; the app tracks both at once. Number&nbsp;+&nbsp;picture is the sharpest: smaller pools mean shorter questions and less fishing (the picture side usually lands on 1&ndash;2 cards instantly).</div></div>'
+    + '<div class="ld-panel"><div class="h">Aces</div><div class="seg" id="ldAcesSeg">'
+    +   '<button class="segopt' + (ldAcesIn() ? '' : ' active') + '" data-v="0">Removed<small>set aside; can&rsquo;t be thought of</small></button>'
+    +   '<button class="segopt' + (ldAcesIn() ? ' active' : '') + '" data-v="1"' + (ldAcesAvail() ? '' : ' style="opacity:.4"') + '>In the deck<small>' + (ldAcesAvail() ? '52 cards' + (ld.sp2 && ld.split ? '; spacers only' : '; thinkable too') : 'needs a 52-card stack (live reads are 48)') + '</small></button>'
+    + '</div></div>'
     + '<div class="ld-panel"><div class="h">The six sections (top &rarr; bottom) &mdash; sizes ' + ld.sizes.join('&middot;') + '</div><div class="ld-secs">'
     + secs.map((s, i) => '<div class="ld-sec"><span class="tag">' + (b[i]+1) + '&ndash;' + b[i+1] + '</span><span>' + s.map(c => ldChip(c)).join('') + '</span></div>').join('')
     + '</div><div class="hint" style="margin-top:8px">Boundaries are <b>optimized for this stack</b> to minimize fishing. Each round you show the top 3 sections, then cut 2 sections to the bottom &mdash; the next screens name the exact counts and boundary cards as you go.</div></div>'
@@ -4592,6 +4609,11 @@ function ldRenderSetup(el){
   $("ldSp2Seg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return;
     ld.sp2 = b.dataset.v !== "off"; ld.split = b.dataset.v === "split";
     ld.sizes = ldOptimize();   // boundaries are pool-aware — re-optimize on mode change
+    ldRender(); });
+  $("ldAcesSeg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return;
+    if (b.dataset.v === "1" && !ldAcesAvail()) return;
+    ld.aces = b.dataset.v === "1";
+    ld.sizes = ldOptimize();   // deck length / pool changed
     ldRender(); });
   $("ldStart").addEventListener("click", () => { ld.step = 1; ldRender(); });
 }
@@ -4615,7 +4637,7 @@ function ldRenderRound(el, r){
         const spLbl = ld.sp2 ? 'Spectator ' + (sp+1) + (ld.split ? (sp ? ' (picture card)' : ' (number card)') : '') : 'Their answer';
         return '<div class="ld-panel"><div class="h">' + spLbl + '</div>'
           + (f !== null ? '<div class="ld-banner">Only six sections &mdash; after two ' + (ld.a[sp][0] ? 'yeses' : 'nos') + ' the third answer <b>must be ' + (f ? 'YES' : 'NO') + '</b>. Say it for them: &ldquo;and this time you ' + (f ? 'did' : 'didn&rsquo;t') + ' see it.&rdquo;'
-              + (ld.warned[sp] ? '<br><b>They insist on ' + (f ? 'NO' : 'YES') + '?</b> Then they&rsquo;re thinking of a card that isn&rsquo;t in play &mdash; an ace. Tap it again to accept.' : '')
+              + (ld.warned[sp] && !ldAcesIn() ? '<br><b>They insist on ' + (f ? 'NO' : 'YES') + '?</b> Then they&rsquo;re thinking of a card that isn&rsquo;t in play &mdash; an ace. Tap it again to accept.' : '')
               + '</div>' : '')
           + '<div class="ld-yn" data-sp="' + sp + '">'
           + '<button data-a="1"' + (a === true ? ' style="border-color:var(--gold)"' : '') + (f === false && !ld.warned[sp] ? ' class="off"' : '') + '>YES</button>'
@@ -4625,10 +4647,15 @@ function ldRenderRound(el, r){
   el.querySelectorAll(".ld-yn").forEach(g => g.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     const sp = +g.dataset.sp, val = b.dataset.a === "1", f = forced(sp);
-    if (f !== null && val !== f && !ld.warned[sp]){
-      ld.warned[sp] = true;
-      b.classList.add("tr-shake"); setTimeout(() => b.classList.remove("tr-shake"), 350);
-      return ldRender();
+    if (f !== null && val !== f){
+      // with every card in play (aces in) the forced answer is a hard rule;
+      // with aces out, a second insistent tap accepts the ace interpretation
+      if (ldAcesIn()){ b.classList.add("tr-shake"); setTimeout(() => b.classList.remove("tr-shake"), 350); return; }
+      if (!ld.warned[sp]){
+        ld.warned[sp] = true;
+        b.classList.add("tr-shake"); setTimeout(() => b.classList.remove("tr-shake"), 350);
+        return ldRender();
+      }
     }
     ld.a[sp][r] = val;
     if (spects.every(s => ld.a[s][r] !== null)){ ld.step++; ld.warned = [false,false]; }
@@ -4650,7 +4677,10 @@ function ldAceHTML(p){
 }
 function ldVerdictHTML(sp){
   const { p, R, B } = ldCands(sp);
-  if (p === 0 || p === 7) return ldAceHTML(p);
+  if (p === 0 || p === 7)
+    return ldAcesIn()
+      ? '<div class="ld-warn">All-' + (p ? 'yes' : 'no') + ' answers are impossible with every card in play &mdash; an answer got crossed somewhere. Use Back to rewind.</div><button class="ld-mini" id="ldRestart">&#8635; Start over</button>'
+      : ldAceHTML(p);
   if (!R.length && !B.length)
     return '<div class="ld-warn">These answers don&rsquo;t point at any card &mdash; an answer (or the stack read) slipped somewhere. Use Back to rewind.</div>'
       + '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
@@ -4686,7 +4716,7 @@ function ldVerdictHTML(sp){
 function ldRevealHTML(F){
   const s = F.slice().sort((a,b) => rdValCmp(ldVal(b), ldVal(a)) || (a < b ? -1 : 1));   // value desc
   const pos = c => ldFinalPos(c);
-  const restore = '<div class="hint" style="margin-top:8px">Everything so far was straight cuts &mdash; afterwards cut the <b>' + rdFullName(RD_STACK[0]) + '</b> back to the top and the stack is restored (minus any cards you culled).</div>';
+  const restore = '<div class="hint" style="margin-top:8px">Everything so far was straight cuts &mdash; afterwards cut the <b>' + rdFullName(ldDeck()[0]) + '</b> back to the top and the stack is restored (minus any cards you culled).</div>';
   if (s.length === 1){
     const c = s[0];
     return '<div class="ld-panel"><div class="h">The reveal &mdash; one card</div><ol class="ld-steps">'
