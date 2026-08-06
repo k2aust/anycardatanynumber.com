@@ -598,6 +598,11 @@
 .ld-tabs button.active{ background:var(--gold); color:#000; border-color:var(--gold); }
 .ld-go{ display:block; width:100%; background:var(--gold); color:#000; border:none; border-radius:12px; padding:15px 0; font-size:17px; font-weight:800; cursor:pointer; margin-top:14px; }
 .ld-mini{ background:none; border:none; color:var(--dim); font-size:13px; text-decoration:underline; cursor:pointer; padding:6px; display:block; margin:8px auto 0; }
+#lieScreen .tr-h1{ user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; cursor:pointer; }
+#liePeek{ position:fixed; inset:0; z-index:60; background:rgba(6,8,12,.97); overflow-y:auto; padding:16px 16px 40px; }
+#liePeek > *{ max-width:480px; margin-left:auto; margin-right:auto; }
+.ld-bigq{ text-align:center; font-size:20px; font-weight:700; color:var(--text); line-height:1.45; padding:10px 4px; }
+.ld-bigq b{ color:var(--gold); }
 </style>
 <section id="spellScreen" style="display:none">
   <div class="sp-wrap">
@@ -641,9 +646,10 @@
 <section id="lieScreen" style="display:none">
   <div class="tr-wrap">
     <div class="btnrow"><button id="lieBack">&#10094; Back</button></div>
-    <div class="tr-h1">Lie Detector</div>
+    <div class="tr-h1" id="lieTitle">Lie Detector</div>
     <div id="lieBody"></div>
   </div>
+  <div id="liePeek" style="display:none"></div>
 </section>
 
 <script>
@@ -4453,7 +4459,7 @@ const LD_SYM = {C:"&#9827;", D:"&#9830;", H:"&#9829;", S:"&#9824;"};
 const LD_SUITNAME = {C:"Club", D:"Diamond", H:"Heart", S:"Spade"};
 const LD_VNAME = v => ({J:"Jack", Q:"Queen", K:"King", A:"Ace"}[v] || v);
 const LD_SCHEME_NAMES = { highlow:"Combined", aronson:"Aronson", mnemonica:"Mnemonica", custom:"Last read (live)" };
-const ld = { step:0, sp2:false, split:true, aces:false, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
+const ld = { step:0, sp2:false, split:true, aces:false, spec:false, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
 function ldReset(){ ld.step=0; ld.a=[[null,null,null],[null,null,null]]; ld.verdict=[null,null]; ld.fhist=[[],[]]; ld.cur=0; ld.warned=[false,false]; }
 const ldIsRed = c => /[HD]$/.test(c);
 const ldVal = c => c.slice(0,-1);
@@ -4602,6 +4608,10 @@ function ldRenderSetup(el){
     +   '<button class="segopt' + (ldAcesIn() ? '' : ' active') + '" data-v="0">Removed<small>set aside; can&rsquo;t be thought of</small></button>'
     +   '<button class="segopt' + (ldAcesIn() ? ' active' : '') + '" data-v="1"' + (ldAcesAvail() ? '' : ' style="opacity:.4"') + '>In the deck<small>' + (ldAcesAvail() ? '52 cards' + (ld.sp2 && ld.split ? '; spacers only' : '; thinkable too') : 'needs a 52-card stack (live reads are 48)') + '</small></button>'
     + '</div></div>'
+    + '<div class="ld-panel"><div class="h">Performance screen</div><div class="seg" id="ldSpecSeg">'
+    +   '<button class="segopt' + (ld.spec ? '' : ' active') + '" data-v="0">Magician<small>full method visible</small></button>'
+    +   '<button class="segopt' + (ld.spec ? ' active' : '') + '" data-v="1">Spectator-facing<small>questions only</small></button>'
+    + '</div><div class="hint" style="margin-top:6px">Spectator-facing shows just the lie-detector questions and YES/NO &mdash; safe to hold toward the audience. <b>Press and hold the LIE DETECTOR title</b> to secretly overlay the full magician view (spread/cut cards, candidates, reveal); release to hide.</div></div>'
     + '<div class="ld-panel"><div class="h">The six sections (top &rarr; bottom) &mdash; sizes ' + ld.sizes.join('&middot;') + '</div><div class="ld-secs">'
     + secs.map((s, i) => '<div class="ld-sec"><span class="tag">' + (b[i]+1) + '&ndash;' + b[i+1] + '</span><span>' + s.map(c => ldChip(c)).join('') + '</span></div>').join('')
     + '</div><div class="hint" style="margin-top:8px">Boundaries are <b>optimized for this stack</b> to minimize fishing. Each round you show the top 3 sections, then cut 2 sections to the bottom &mdash; the next screens name the exact counts and boundary cards as you go.</div></div>'
@@ -4615,33 +4625,39 @@ function ldRenderSetup(el){
     ld.aces = b.dataset.v === "1";
     ld.sizes = ldOptimize();   // deck length / pool changed
     ldRender(); });
+  $("ldSpecSeg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return;
+    ld.spec = b.dataset.v === "1"; ldRender(); });
   $("ldStart").addEventListener("click", () => { ld.step = 1; ldRender(); });
 }
-function ldRenderRound(el, r){
+function ldRoundInfoHTML(r){
   const order = ldOrderAt(r);
   const sz = i => ld.sizes[(2*r + i) % 6];               // sizes of the shown sections, in current top-down order
   const breakN = sz(0) + sz(1), showN = breakN + sz(2);
-  const showLast = order[showN-1], breakCard = order[breakN-1];
+  return '<div class="ld-panel"><div class="h">Show</div><ol class="ld-steps">'
+    + '<li>Spread and show the <b>first ' + showN + ' cards</b> &mdash; stop after the <b>' + rdFullName(order[showN-1]) + '</b>.</li>'
+    + '<li>As you pass the ' + ldOrd(breakN) + ' card (<b>' + rdFullName(order[breakN-1]) + '</b>), catch a break under it.</li>'
+    + '<li>' + (r < 2 ? 'Square up and <b>cut everything above the break to the bottom</b>.' : 'Square up &mdash; <b>no cut this time</b>.') + '</li>'
+    + '<li>Ask: <b>&ldquo;Yes or no &mdash; did you see your card?&rdquo;</b> Watch the poker face.</li>'
+    + '</ol></div>';
+}
+function ldRenderRound(el, r){
   const spects = ld.sp2 ? [0,1] : [0];
   const forced = sp => (r === 2 && ld.a[sp][0] === ld.a[sp][1]) ? !ld.a[sp][0] : null;
   el.innerHTML =
     '<div class="ld-round">Question ' + (r+1) + ' of 3</div>'
-    + '<div class="ld-panel"><div class="h">Show</div><ol class="ld-steps">'
-    + '<li>Spread and show the <b>first ' + showN + ' cards</b> &mdash; stop after the <b>' + rdFullName(showLast) + '</b>.</li>'
-    + '<li>As you pass the ' + ldOrd(breakN) + ' card (<b>' + rdFullName(breakCard) + '</b>), catch a break under it.</li>'
-    + '<li>' + (r < 2 ? 'Square up and <b>cut everything above the break to the bottom</b>.' : 'Square up &mdash; <b>no cut this time</b>.') + '</li>'
-    + '<li>Ask: <b>&ldquo;Yes or no &mdash; did you see your card?&rdquo;</b> Watch the poker face.</li>'
-    + '</ol></div>'
+    + (ld.spec
+        ? '<div class="ld-bigq">&ldquo;Yes or no &mdash; did you see your card?&rdquo;</div>'
+        : ldRoundInfoHTML(r))
     + spects.map(sp => {
         const f = forced(sp), a = ld.a[sp][r];
         const spLbl = ld.sp2 ? 'Spectator ' + (sp+1) + (ld.split ? (sp ? ' (picture card)' : ' (number card)') : '') : 'Their answer';
-        return '<div class="ld-panel"><div class="h">' + spLbl + '</div>'
-          + (f !== null ? '<div class="ld-banner">Only six sections &mdash; after two ' + (ld.a[sp][0] ? 'yeses' : 'nos') + ' the third answer <b>must be ' + (f ? 'YES' : 'NO') + '</b>. Say it for them: &ldquo;and this time you ' + (f ? 'did' : 'didn&rsquo;t') + ' see it.&rdquo;'
+        return '<div class="ld-panel">' + (ld.sp2 || !ld.spec ? '<div class="h">' + spLbl + '</div>' : '')
+          + (f !== null && !ld.spec ? '<div class="ld-banner">Only six sections &mdash; after two ' + (ld.a[sp][0] ? 'yeses' : 'nos') + ' the third answer <b>must be ' + (f ? 'YES' : 'NO') + '</b>. Say it for them: &ldquo;and this time you ' + (f ? 'did' : 'didn&rsquo;t') + ' see it.&rdquo;'
               + (ld.warned[sp] && !ldAcesIn() ? '<br><b>They insist on ' + (f ? 'NO' : 'YES') + '?</b> Then they&rsquo;re thinking of a card that isn&rsquo;t in play &mdash; an ace. Tap it again to accept.' : '')
               + '</div>' : '')
           + '<div class="ld-yn" data-sp="' + sp + '">'
-          + '<button data-a="1"' + (a === true ? ' style="border-color:var(--gold)"' : '') + (f === false && !ld.warned[sp] ? ' class="off"' : '') + '>YES</button>'
-          + '<button data-a="0"' + (a === false ? ' style="border-color:var(--gold)"' : '') + (f === true && !ld.warned[sp] ? ' class="off"' : '') + '>NO</button>'
+          + '<button data-a="1"' + (a === true ? ' style="border-color:var(--gold)"' : '') + (f === false && !ld.warned[sp] && !ld.spec ? ' class="off"' : '') + '>YES</button>'
+          + '<button data-a="0"' + (a === false ? ' style="border-color:var(--gold)"' : '') + (f === true && !ld.warned[sp] && !ld.spec ? ' class="off"' : '') + '>NO</button>'
           + '</div></div>';
       }).join('');
   el.querySelectorAll(".ld-yn").forEach(g => g.addEventListener("click", e => {
@@ -4675,8 +4691,19 @@ function ldAceHTML(p){
     + '</ol></div>'
     + '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
 }
-function ldVerdictHTML(sp){
+// the lie-reveal question, shared by the magician and spectator-facing screens:
+// union of candidate values (honest answer YES) or its in-pool complement when
+// shorter (honest answer NO — the YES/NO -> truth/lie mapping flips)
+function ldVerdictQ(sp){
   const { p, R, B } = ldCands(sp);
+  const union = ldValsOf(R.concat(B));
+  const comp = ldPoolVals(sp).filter(v => !union.includes(v));
+  const askComp = comp.length > 0 && comp.length < union.length;
+  return { p, R, B, askVals: askComp ? comp : union, askComp,
+    yesV: askComp ? "lie" : "truth", noV: askComp ? "truth" : "lie" };
+}
+function ldVerdictHTML(sp){
+  const { p, R, B, askVals, askComp, yesV, noV } = ldVerdictQ(sp);
   if (p === 0 || p === 7)
     return ldAcesIn()
       ? '<div class="ld-warn">All-' + (p ? 'yes' : 'no') + ' answers are impossible with every card in play &mdash; an answer got crossed somewhere. Use Back to rewind.</div><button class="ld-mini" id="ldRestart">&#8635; Start over</button>'
@@ -4684,11 +4711,6 @@ function ldVerdictHTML(sp){
   if (!R.length && !B.length)
     return '<div class="ld-warn">These answers don&rsquo;t point at any card &mdash; an answer (or the stack read) slipped somewhere. Use Back to rewind.</div>'
       + '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
-  const union = ldValsOf(R.concat(B));
-  const comp = ldPoolVals(sp).filter(v => !union.includes(v));   // complement WITHIN this spectator's pool
-  const askComp = comp.length > 0 && comp.length < union.length; // ask the shorter list; honest answer flips to NO
-  const askVals = askComp ? comp : union;
-  const yesV = askComp ? "lie" : "truth", noV = askComp ? "truth" : "lie";
   const cnt = v => v === "truth" ? R.length : B.length;
   const lab = v => v === "truth" ? 'truth &middot; red card &middot; ' + R.length + ' left' : 'lying &middot; black card &middot; ' + B.length + ' left';
   let h = '<div class="ld-panel"><div class="h">Candidates &mdash; truth reads section ' + p + ', lie reads section ' + (7-p) + '</div>'
@@ -4708,10 +4730,42 @@ function ldVerdictHTML(sp){
     + '<div class="ld-q">&ldquo;One more, just to be sure. Yes or no &mdash; is your card <b>' + ldValPhrase(askVals) + '</b>?&rdquo;</div>'
     + '<div class="hint" style="margin-top:6px">The honest answer is ' + (askComp ? 'NO' : 'YES') + ' for every candidate &mdash; their answer IS the lie detector.</div>'
     + '<div class="ld-yn" id="ldVq">'
-    + '<button data-v="' + yesV + '"' + (cnt(yesV) ? '' : ' class="off"') + '>YES<small>' + lab(yesV) + '</small></button>'
-    + '<button data-v="' + noV + '"' + (cnt(noV) ? '' : ' class="off"') + '>NO<small>' + lab(noV) + '</small></button>'
+    + '<button data-v="' + yesV + '"' + (cnt(yesV) ? '' : ' class="off" data-off="1"') + '>YES<small>' + lab(yesV) + '</small></button>'
+    + '<button data-v="' + noV + '"' + (cnt(noV) ? '' : ' class="off" data-off="1"') + '>NO<small>' + lab(noV) + '</small></button>'
     + '</div></div>';
   return h;
+}
+/* ---- spectator-facing bodies: only the questions; hold the title to peek ---- */
+function ldSpecVerdictHTML(sp){
+  const { p, R, B, askVals, yesV, noV } = ldVerdictQ(sp);
+  if (p === 0 || p === 7){
+    if (ldAcesIn()) return '<div class="ld-panel"><div class="ld-bigq">Hmm &mdash; recalibrating&hellip;</div></div><button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
+    return '<div class="ld-verdict ' + (p === 7 ? 'lie' : 'truth') + '">' + (p === 7 ? 'LYING' : 'TELLING THE TRUTH') + '</div>'
+      + '<div class="ld-panel"><div class="ld-bigq">Analysis complete.<br><small style="font-size:14px;color:var(--dim)">The lie detector knows your card.</small></div></div>'
+      + '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
+  }
+  if (!R.length && !B.length)
+    return '<div class="ld-panel"><div class="ld-bigq">Hmm &mdash; recalibrating&hellip;</div></div><button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
+  const off = v => (v === "truth" ? R.length : B.length) ? '' : ' data-off="1"';
+  return '<div class="ld-round">Final question</div>'
+    + '<div class="ld-bigq">&ldquo;Yes or no &mdash; is your card <b>' + ldValPhrase(askVals) + '</b>?&rdquo;</div>'
+    + '<div class="ld-panel"><div class="ld-yn" id="ldVq">'
+    + '<button data-v="' + yesV + '"' + off(yesV) + '>YES</button>'
+    + '<button data-v="' + noV + '"' + off(noV) + '>NO</button>'
+    + '</div></div>';
+}
+function ldSpecFishHTML(sp){
+  const v = ld.verdict[sp], F = ldFSet(sp);
+  const head = '<div class="ld-verdict ' + v + '">' + (v === "truth" ? 'TELLING THE TRUTH' : 'LYING') + '</div>';
+  if (F.length > 3){
+    const q = ldBestSplit(F);
+    if (q) return head
+      + '<div class="ld-bigq">&ldquo;Yes or no &mdash; ' + q.label + '&rdquo;</div>'
+      + '<div class="ld-panel"><div class="ld-yn" id="ldFq"><button data-a="1">YES</button><button data-a="0">NO</button></div></div>';
+  }
+  return head
+    + '<div class="ld-panel"><div class="ld-bigq">Analysis complete.<br><small style="font-size:14px;color:var(--dim)">The lie detector knows your card &mdash; think of it now&hellip;</small></div></div>'
+    + '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
 }
 function ldRevealHTML(F){
   const s = F.slice().sort((a,b) => rdValCmp(ldVal(b), ldVal(a)) || (a < b ? -1 : 1));   // value desc
@@ -4770,13 +4824,15 @@ function ldRenderResult(el){
   if (ld.sp2) html += '<div class="ld-tabs">' + [0,1].map(s =>
     '<button data-sp="' + s + '"' + (s === sp ? ' class="active"' : '') + '>Spectator ' + (s+1)
     + (ld.split ? (s ? ' &middot; picture' : ' &middot; number') : '') + (ld.verdict[s] ? ' &#10003;' : '') + '</button>').join('') + '</div>';
-  html += ld.verdict[sp] === null ? ldVerdictHTML(sp) : ldFishHTML(sp);
+  html += ld.verdict[sp] === null
+    ? (ld.spec ? ldSpecVerdictHTML(sp) : ldVerdictHTML(sp))
+    : (ld.spec ? ldSpecFishHTML(sp) : ldFishHTML(sp));
   el.innerHTML = html;
   const tabs = el.querySelector(".ld-tabs");
   if (tabs) tabs.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ld.cur = +b.dataset.sp; ldRender(); });
   const vq = el.querySelector("#ldVq");
   if (vq) vq.addEventListener("click", e => {
-    const b = e.target.closest("button"); if (!b || b.classList.contains("off")) return;
+    const b = e.target.closest("button"); if (!b || b.classList.contains("off") || b.dataset.off) return;
     ld.verdict[sp] = b.dataset.v; ldRender();
   });
   const fq = el.querySelector("#ldFq");
@@ -4809,6 +4865,35 @@ function ldBack(){
   ld.step = 3; ld.a.forEach(arr => { arr[2] = null; }); ld.verdict = [null,null]; ld.fhist = [[],[]]; ld.cur = 0; ld.warned = [false,false];
   ldRender();
 }
+/* Deadman peek (spectator mode): hold the LIE DETECTOR title to overlay the
+   full magician view of the current step; release to hide. */
+function ldPeekHTML(){
+  if (ld.step >= 1 && ld.step <= 3){
+    const r = ld.step - 1;
+    let h = ldRoundInfoHTML(r);
+    (ld.sp2 ? [0,1] : [0]).forEach(sp => {
+      const f = (r === 2 && ld.a[sp][0] === ld.a[sp][1]) ? !ld.a[sp][0] : null;
+      if (f !== null) h += '<div class="ld-banner">' + (ld.sp2 ? 'Spectator ' + (sp+1) + ': ' : '') + '3rd answer must be <b>' + (f ? 'YES' : 'NO') + '</b>' + (ldAcesIn() ? '' : ' &mdash; if they insist otherwise, it&rsquo;s an ace (double-tap accepts)') + '.</div>';
+    });
+    return h;
+  }
+  if (ld.step === 4){
+    const sp = ld.cur;
+    return (ld.verdict[sp] === null ? ldVerdictHTML(sp) : ldFishHTML(sp))
+      .replace(/ id="ld(Vq|Fq|Restart)"/g, "");   // display-only copy: no duplicate ids, dead controls
+  }
+  return '<div class="hint" style="text-align:center;margin-top:30px">Nothing to peek on this screen.</div>';
+}
+function ldPeekShow(){
+  if (!ld.spec || ld.step < 1) return;
+  $("liePeek").innerHTML = ldPeekHTML();
+  $("liePeek").style.display = "block";
+}
+function ldPeekHide(){ $("liePeek").style.display = "none"; }
+$("lieTitle").addEventListener("pointerdown", e => { e.preventDefault(); ldPeekShow(); });
+$("lieTitle").addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("pointerup", ldPeekHide);
+document.addEventListener("pointercancel", ldPeekHide);
 function ldShow(){
   $("app").style.display = "none"; $("settings").style.display = "none";
   $("ddScreen").style.display = "none"; $("spellScreen").style.display = "none";
