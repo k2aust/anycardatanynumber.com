@@ -4453,7 +4453,7 @@ const LD_SYM = {C:"&#9827;", D:"&#9830;", H:"&#9829;", S:"&#9824;"};
 const LD_SUITNAME = {C:"Club", D:"Diamond", H:"Heart", S:"Spade"};
 const LD_VNAME = v => ({J:"Jack", Q:"Queen", K:"King"}[v] || v);
 const LD_SCHEME_NAMES = { highlow:"Combined", aronson:"Aronson", mnemonica:"Mnemonica", custom:"Last read (live)" };
-const ld = { step:0, sp2:false, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
+const ld = { step:0, sp2:false, split:true, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
 function ldReset(){ ld.step=0; ld.a=[[null,null,null],[null,null,null]]; ld.verdict=[null,null]; ld.fhist=[[],[]]; ld.cur=0; ld.warned=[false,false]; }
 const ldIsRed = c => /[HD]$/.test(c);
 const ldVal = c => c.slice(0,-1);
@@ -4465,12 +4465,15 @@ const ldSections = () => { const b = ldBounds(); return [0,1,2,3,4,5].map(i => R
 const ldOrderAt = r => { const s = ld.sizes, k = (r>=1 ? s[0]+s[1] : 0) + (r>=2 ? s[2]+s[3] : 0);
   return RD_STACK.slice(k).concat(RD_STACK.slice(0,k)); };
 const ldPat = sp => (ld.a[sp][0]?4:0) + (ld.a[sp][1]?2:0) + (ld.a[sp][2]?1:0);
+// value pool per spectator: split mode ties spectator 1 to number cards and
+// spectator 2 to picture cards (the classic two-person framing); otherwise free
+const ldPoolVals = sp => (ld.sp2 && ld.split) ? (sp ? RD_VORDER.slice(9,12) : RD_VORDER.slice(0,9)) : RD_VORDER.slice(0,12);
 function ldCands(sp){
-  const secs = ldSections(), p = ldPat(sp);
+  const secs = ldSections(), p = ldPat(sp), pool = ldPoolVals(sp);
   const bySec = l => { const i = LD_LABEL.indexOf(l); return i < 0 ? [] : secs[i]; };
   return { p,
-    R: bySec(p).filter(ldIsRed),
-    B: bySec(7-p).filter(c => !ldIsRed(c)) };
+    R: bySec(p).filter(c => ldIsRed(c) && pool.includes(ldVal(c))),
+    B: bySec(7-p).filter(c => !ldIsRed(c) && pool.includes(ldVal(c))) };
 }
 const ldFinalPos = c => { const s = ld.sizes; return ((RD_STACK.indexOf(c) + s[4] + s[5]) % 48) + 1; };   // after the two cuts
 /* Boundary optimizer: search all section-size compositions (5–11 each, sum 48)
@@ -4481,6 +4484,10 @@ function ldOptimize(){
   if (RD_STACK.length !== 48) return [8,8,8,8,8,8];
   const isRed = RD_STACK.map(ldIsRed), vIdx = RD_STACK.map(c => RD_VORDER.indexOf(ldVal(c)));
   const qx = n => n <= 3 ? 0 : n <= 6 ? 1 : 2;
+  // in split mode, optimize for BOTH pools at once (per-card weight = 1/pool size)
+  const pools = (ld.sp2 && ld.split)
+    ? [{lo:0, hi:8, tot:36, nv:9}, {lo:9, hi:11, tot:12, nv:3}]
+    : [{lo:0, hi:11, tot:48, nv:12}];
   let best = [8,8,8,8,8,8], bestCost = Infinity;
   const sizes = [0,0,0,0,0,0];
   const evalSizes = () => {
@@ -4488,10 +4495,12 @@ function ldOptimize(){
     let cost = 0;
     for (let p = 1; p <= 6; p++){
       const iR = LD_LABEL.indexOf(p), iB = LD_LABEL.indexOf(7-p);
-      const vals = new Set(); let nR = 0, nB = 0;
-      for (let j = b[iR]; j < b[iR+1]; j++) if (isRed[j]){ nR++; vals.add(vIdx[j]); }
-      for (let j = b[iB]; j < b[iB+1]; j++) if (!isRed[j]){ nB++; vals.add(vIdx[j]); }
-      cost += nR/48*qx(nR) + nB/48*qx(nB) + 0.02*(nR+nB)/48*Math.min(vals.size, 12 - vals.size);
+      for (const pl of pools){
+        const vals = new Set(); let nR = 0, nB = 0;
+        for (let j = b[iR]; j < b[iR+1]; j++) if (isRed[j] && vIdx[j] >= pl.lo && vIdx[j] <= pl.hi){ nR++; vals.add(vIdx[j]); }
+        for (let j = b[iB]; j < b[iB+1]; j++) if (!isRed[j] && vIdx[j] >= pl.lo && vIdx[j] <= pl.hi){ nB++; vals.add(vIdx[j]); }
+        cost += nR/pl.tot*qx(nR) + nB/pl.tot*qx(nB) + 0.02*(nR+nB)/pl.tot*Math.min(vals.size, pl.nv - vals.size);
+      }
     }
     for (let i = 0; i < 6; i++) cost += 0.001*Math.abs(sizes[i]-8);
     if (cost < bestCost){ bestCost = cost; best = sizes.slice(); }
@@ -4565,19 +4574,25 @@ function ldRenderSetup(el){
     '<div class="ld-sub">Works on <b>any</b> stack the app knows &mdash; including a genuinely shuffled, live-read deck. Current stack: <b>' + (LD_SCHEME_NAMES[rdScheme] || rdScheme) + '</b>. The deck must match the order below, uncut, aces out.</div>'
     + (rdExcluded.size ? '<div class="ld-warn">&#9888; ' + rdExcluded.size + ' flagged card(s) from the live read (marked <i>?</i>) &mdash; identities uncertain.</div>' : '')
     + '<div class="ld-panel"><div class="h">The setup</div><ol class="ld-steps">'
-    + '<li><b>&ldquo;Think of any card in the deck &mdash; any value, any suit. Don&rsquo;t say it.&rdquo;</b> (The aces are out and they watched them leave &mdash; and if they think of one anyway, the app catches it.)</li>'
+    + (ld.sp2 && ld.split
+        ? '<li><b>&ldquo;You &mdash; think of a number card: 2 through 10, any suit. And you &mdash; a picture card: Jack, Queen or King, any suit.&rdquo;</b></li>'
+        : '<li><b>&ldquo;Think of any card in the deck &mdash; any value, any suit. Don&rsquo;t say it.&rdquo;</b> (The aces are out and they watched them leave &mdash; and if they think of one anyway, the app catches it.)</li>')
     + '<li><b>&ldquo;Do you have a good poker face? You&rsquo;ll need it.&rdquo;</b></li>'
     + '<li><b>&ldquo;If your card is RED, you tell the truth every time I ask. If it&rsquo;s BLACK &mdash; you lie. Every single time.&rdquo;</b></li>'
     + '</ol></div>'
     + '<div class="ld-panel"><div class="h">2nd spectator</div><div class="seg" id="ldSp2Seg">'
-    +   '<button class="segopt' + (ld.sp2 ? '' : ' active') + '" data-v="0">Off</button>'
-    +   '<button class="segopt' + (ld.sp2 ? ' active' : '') + '" data-v="1">On<small>they think of their own card</small></button>'
-    + '</div><div class="hint" style="margin-top:6px">Both answer every question through the same red&nbsp;=&nbsp;truth / black&nbsp;=&nbsp;lie rule; the app tracks both at once.</div></div>'
+    +   '<button class="segopt' + (ld.sp2 ? '' : ' active') + '" data-v="off">Off</button>'
+    +   '<button class="segopt' + (ld.sp2 && ld.split ? ' active' : '') + '" data-v="split">Number + picture<small>Sp&nbsp;1 a number card, Sp&nbsp;2 a picture card</small></button>'
+    +   '<button class="segopt' + (ld.sp2 && !ld.split ? ' active' : '') + '" data-v="free">Both free<small>each thinks of any card</small></button>'
+    + '</div><div class="hint" style="margin-top:6px">Both answer every question through the same red&nbsp;=&nbsp;truth / black&nbsp;=&nbsp;lie rule; the app tracks both at once. Number&nbsp;+&nbsp;picture is the sharpest: smaller pools mean shorter questions and less fishing (the picture side usually lands on 1&ndash;2 cards instantly).</div></div>'
     + '<div class="ld-panel"><div class="h">The six sections (top &rarr; bottom) &mdash; sizes ' + ld.sizes.join('&middot;') + '</div><div class="ld-secs">'
     + secs.map((s, i) => '<div class="ld-sec"><span class="tag">' + (b[i]+1) + '&ndash;' + b[i+1] + '</span><span>' + s.map(c => ldChip(c)).join('') + '</span></div>').join('')
     + '</div><div class="hint" style="margin-top:8px">Boundaries are <b>optimized for this stack</b> to minimize fishing. Each round you show the top 3 sections, then cut 2 sections to the bottom &mdash; the next screens name the exact counts and boundary cards as you go.</div></div>'
     + '<button class="ld-go" id="ldStart">Start &mdash; question 1</button>';
-  $("ldSp2Seg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; ld.sp2 = b.dataset.v === "1"; ldRender(); });
+  $("ldSp2Seg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return;
+    ld.sp2 = b.dataset.v !== "off"; ld.split = b.dataset.v === "split";
+    ld.sizes = ldOptimize();   // boundaries are pool-aware — re-optimize on mode change
+    ldRender(); });
   $("ldStart").addEventListener("click", () => { ld.step = 1; ldRender(); });
 }
 function ldRenderRound(el, r){
@@ -4597,7 +4612,8 @@ function ldRenderRound(el, r){
     + '</ol></div>'
     + spects.map(sp => {
         const f = forced(sp), a = ld.a[sp][r];
-        return '<div class="ld-panel"><div class="h">' + (ld.sp2 ? 'Spectator ' + (sp+1) : 'Their answer') + '</div>'
+        const spLbl = ld.sp2 ? 'Spectator ' + (sp+1) + (ld.split ? (sp ? ' (picture card)' : ' (number card)') : '') : 'Their answer';
+        return '<div class="ld-panel"><div class="h">' + spLbl + '</div>'
           + (f !== null ? '<div class="ld-banner">Only six sections &mdash; after two ' + (ld.a[sp][0] ? 'yeses' : 'nos') + ' the third answer <b>must be ' + (f ? 'YES' : 'NO') + '</b>. Say it for them: &ldquo;and this time you ' + (f ? 'did' : 'didn&rsquo;t') + ' see it.&rdquo;'
               + (ld.warned[sp] ? '<br><b>They insist on ' + (f ? 'NO' : 'YES') + '?</b> Then they&rsquo;re thinking of a card that isn&rsquo;t in play &mdash; an ace. Tap it again to accept.' : '')
               + '</div>' : '')
@@ -4639,8 +4655,8 @@ function ldVerdictHTML(sp){
     return '<div class="ld-warn">These answers don&rsquo;t point at any card &mdash; an answer (or the stack read) slipped somewhere. Use Back to rewind.</div>'
       + '<button class="ld-mini" id="ldRestart">&#8635; Start over</button>';
   const union = ldValsOf(R.concat(B));
-  const comp = RD_VORDER.slice(0,12).filter(v => !union.includes(v));
-  const askComp = union.length > 6 && comp.length > 0;   // ask about the shorter list; honest answer flips to NO
+  const comp = ldPoolVals(sp).filter(v => !union.includes(v));   // complement WITHIN this spectator's pool
+  const askComp = comp.length > 0 && comp.length < union.length; // ask the shorter list; honest answer flips to NO
   const askVals = askComp ? comp : union;
   const yesV = askComp ? "lie" : "truth", noV = askComp ? "truth" : "lie";
   const cnt = v => v === "truth" ? R.length : B.length;
@@ -4648,7 +4664,11 @@ function ldVerdictHTML(sp){
   let h = '<div class="ld-panel"><div class="h">Candidates &mdash; truth reads section ' + p + ', lie reads section ' + (7-p) + '</div>'
     + '<div style="margin-bottom:6px"><span class="hint">If telling the truth (red):</span><br>' + (R.length ? R.map(c => ldChip(c)).join('') : '<span class="hint">none possible</span>') + '</div>'
     + '<div><span class="hint">If lying (black):</span><br>' + (B.length ? B.map(c => ldChip(c)).join('') : '<span class="hint">none possible</span>') + '</div></div>';
-  h += '<div class="ld-panel"><div class="h">The tease (optional)</div><div class="ld-q" style="font-weight:600">' + ldTease(R.concat(B)) + '</div></div>';
+  h += '<div class="ld-panel"><div class="h">The tease (optional)</div><div class="ld-q" style="font-weight:600">'
+    + (ld.sp2 && ld.split && sp === 1
+        ? '&ldquo;Repeat after me: Jack&hellip; Queen&hellip; King.&rdquo; Study them, then: &ldquo;Interesting&hellip; don&rsquo;t give anything away.&rdquo;'
+        : ldTease(R.concat(B)))
+    + '</div></div>';
   if (!R.length || !B.length){
     const lie = !R.length;
     const expect = (lie ? noV === "lie" : noV === "truth") ? 'NO' : 'YES';
@@ -4718,7 +4738,8 @@ function ldRenderResult(el){
   const sp = ld.cur;
   let html = "";
   if (ld.sp2) html += '<div class="ld-tabs">' + [0,1].map(s =>
-    '<button data-sp="' + s + '"' + (s === sp ? ' class="active"' : '') + '>Spectator ' + (s+1) + (ld.verdict[s] ? ' &#10003;' : '') + '</button>').join('') + '</div>';
+    '<button data-sp="' + s + '"' + (s === sp ? ' class="active"' : '') + '>Spectator ' + (s+1)
+    + (ld.split ? (s ? ' &middot; picture' : ' &middot; number') : '') + (ld.verdict[s] ? ' &#10003;' : '') + '</button>').join('') + '</div>';
   html += ld.verdict[sp] === null ? ldVerdictHTML(sp) : ldFishHTML(sp);
   el.innerHTML = html;
   const tabs = el.querySelector(".ld-tabs");
