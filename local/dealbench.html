@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench</title>
+<title>deal bench v3</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -197,45 +197,67 @@ function scoreFinal(){
   log(`scored: ${correct}/52 correct, ${com-correct} wrong`);
 }
 
+let replayMode=false;
+async function step(v, tMs){
+  scanN++;
+  const {frac,cx,cy}=feats(v);
+  lastFrac=frac;
+  if(scanN%20===0) render();   // keep live ink/base readout fresh
+  if(base===null) base=frac;
+  const openThr=base*INK_OPEN+INK_ABS, closeThr=base*INK_CLOSE+INK_ABS;
+  if(!inEvent) base=(1-BASE_ALPHA)*base+BASE_ALPHA*frac;
+  if(frac>(inEvent?closeThr:openThr)){
+    if(!inEvent){ inEvent=true; event_=[]; eventScans=0; }
+    eventScans++;
+    if(event_.length<MAX_CLASSIFY && (replayMode || tMs-lastClassifyT>120)){
+      lastClassifyT=tMs;
+      const r=await classify(v,cx,cy);
+      if(r.neg-r.conf<NEG_MARGIN) event_.push({t:tMs,cls:r.cls,conf:r.conf});
+    }
+  } else if(inEvent){
+    inEvent=false;
+    if(eventScans>=MIN_EVENT){ commits.push(...settle()); render(); }
+  }
+}
 async function loop(){
   const v=$("v");
   if(!running) return;
-  if(v.readyState>=2){
-    scanN++;
-    const {frac,cx,cy}=feats(v);
-    lastFrac=frac;
-    if(scanN%20===0) render();   // keep live ink/base readout fresh
-    if(base===null) base=frac;
-    const openThr=base*INK_OPEN+INK_ABS, closeThr=base*INK_CLOSE+INK_ABS;
-    if(!inEvent) base=(1-BASE_ALPHA)*base+BASE_ALPHA*frac;
-    if(frac>(inEvent?closeThr:openThr)){
-      if(!inEvent){ inEvent=true; event_=[]; eventScans=0; }
-      eventScans++;
-      const now=performance.now();
-      if(event_.length<MAX_CLASSIFY && now-lastClassifyT>120){
-        lastClassifyT=now;
-        const r=await classify(v,cx,cy);
-        if(r.neg-r.conf<NEG_MARGIN) event_.push({t:now,cls:r.cls,conf:r.conf});
-      }
-    } else if(inEvent){
-      inEvent=false;
-      if(eventScans>=MIN_EVENT){ commits.push(...settle()); render(); }
-    }
-  }
+  if(v.readyState>=2) await step(v, performance.now());
   requestAnimationFrame(loop);
+}
+async function replayLoop(){       // deterministic seek-driven replay
+  const v=$("v"); v.pause();
+  const dt=2/30;                   // stride-2 @30fps equivalent
+  for(let t=0; t<v.duration && running; t+=dt){
+    await new Promise(res=>{ v.onseeked=res; v.currentTime=t; });
+    await step(v, t*1000);
+  }
+  if(running) $("stop").click();
 }
 
 $("start").onclick=async()=>{
   if(!sess){ log("model not ready yet"); return; }
-  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
-    width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
-  $("v").srcObject=stream;
-  try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
-  const track=stream.getVideoTracks()[0];
-  log("camera: "+JSON.stringify(track.getSettings()));
-  try{ const caps=track.getCapabilities();
-       if(caps.exposureTime) log("exposureTime supported: "+JSON.stringify(caps.exposureTime));
-  }catch(e){}
+  const qs=new URLSearchParams(location.search), replay=qs.get("replay");
+  if(replay){                       // debug: seek-driven replay of a video file
+    replayMode=true;
+    const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
+    await new Promise(res=>{ v.onloadedmetadata=res; });
+    log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
+    base=null; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+    running=true; $("start").classList.add("on");
+    replayLoop();
+    return;
+  } else {
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
+      width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
+    $("v").srcObject=stream;
+    try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+    const track=stream.getVideoTracks()[0];
+    log("camera: "+JSON.stringify(track.getSettings()));
+    try{ const caps=track.getCapabilities();
+         if(caps.exposureTime) log("exposureTime supported: "+JSON.stringify(caps.exposureTime));
+    }catch(e){}
+  }
   base=null; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
   running=true; $("start").classList.add("on");
   loop();
@@ -256,7 +278,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v3 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
