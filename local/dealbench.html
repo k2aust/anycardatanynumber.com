@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v5</title>
+<title>deal bench v6</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -40,6 +40,7 @@
     <option value="none">Truth: none (just read)</option>
   </select>
   <button id="dl">⇩ Session</button>
+  <button id="rec">⏺ Rec</button>
   <video id="v" autoplay playsinline muted></video>
 </div>
 
@@ -77,7 +78,7 @@ const NET_IN=192, CROP_FRAC=0.356;  // crop = 384/1080 of the SHORT side
 const $=id=>document.getElementById(id);
 const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,8000);};
 
-let sess=null, stream=null, running=false, wakeLock=null;
+let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
 let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
 let scanN=0, infN=0, infMs=0, lastFrac=0;
 
@@ -303,6 +304,22 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
   inEvent=false; await drain(); render(); scoreFinal(); };
 $("fill").onclick=()=>document.body.classList.toggle("fill");
+$("rec").onclick=()=>{
+  if(recorder && recorder.state==="recording"){
+    recorder.stop(); $("rec").classList.remove("on"); return;
+  }
+  if(!stream){ log("start the camera first, then Rec"); return; }
+  recChunks=[];
+  recorder=new MediaRecorder(stream,{mimeType:"video/webm;codecs=vp8",videoBitsPerSecond:8_000_000});
+  recorder.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
+  recorder.onstop=()=>{
+    const blob=new Blob(recChunks,{type:"video/webm"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="dealbench_rec.webm"; a.click();
+    log("recording saved ("+(blob.size/1e6).toFixed(1)+" MB)");
+  };
+  recorder.start(); $("rec").classList.add("on"); log("recording…");
+};
 $("dl").onclick=()=>{
   const blob=new Blob([JSON.stringify({when:new Date().toISOString(),
     truth:$("truth").value, commits:uniq(commits)},null,1)],{type:"application/json"});
@@ -315,7 +332,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("BENCH v5 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v6 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
