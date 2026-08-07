@@ -63,14 +63,14 @@ const pretty = c => c ? c.slice(0,-1)+SYM[c.slice(-1)] : "??";
 
 const INK_OPEN=1.4, INK_CLOSE=1.15, INK_ABS=0.001, MIN_EVENT=3, MAX_CLASSIFY=6,
       NEG_MARGIN=0.5, VOTE_MIN=1.2, SOLO_MIN=0.97, BASE_ALPHA=0.02, GAP_SPLIT_MS=700;
-const NET_IN=192, CROP_FRAC=0.20;   // crop = 20% of frame width (384/1920)
+const NET_IN=192, CROP_FRAC=0.356;  // crop = 384/1080 of the SHORT side
 
 const $=id=>document.getElementById(id);
 const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,8000);};
 
 let sess=null, stream=null, running=false, wakeLock=null;
 let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
-let scanN=0, infN=0, infMs=0;
+let scanN=0, infN=0, infMs=0, lastFrac=0;
 
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
   const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
@@ -79,21 +79,32 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
     c.width=W; c.height=H;
     g.drawImage(v,0,0,W,H);
     const y0=Math.round(H*0.10), y1=Math.round(H*0.78), x0=Math.round(W*0.05), x1=Math.round(W*0.95);
-    const d=g.getImageData(x0,y0,x1-x0,y1-y0).data, n=d.length/4;
+    const d=g.getImageData(x0,y0,x1-x0,y1-y0).data, n=d.length/4, w=x1-x0, h=y1-y0;
     const grays=new Float32Array(n);
     for(let i=0;i<n;i++) grays[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
     const sorted=Float32Array.from(grays).sort();
     const bthr=Math.max(120, sorted[Math.floor(n*0.72)]);
-    let ink=0, sx=0, sy=0, cnt=0; const w=x1-x0;
+    // dilated bright mask (port of cv2.dilate 9x9 at /4 scale ≈ radius 2 here)
+    const bright=new Uint8Array(n), bd=new Uint8Array(n);
+    for(let i=0;i<n;i++) bright[i]=grays[i]>bthr?1:0;
+    const R=2;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      let v=0;
+      for(let dy=-R;dy<=R&&!v;dy++){ const yy=y+dy; if(yy<0||yy>=h) continue;
+        for(let dx=-R;dx<=R;dx++){ const xx=x+dx;
+          if(xx>=0&&xx<w&&bright[yy*w+xx]){ v=1; break; } } }
+      bd[y*w+x]=v;
+    }
+    let ink=0, sx=0, sy=0, cnt=0;
     for(let i=0;i<n;i++){
+      if(!bd[i]) continue;
       const r=d[i*4], gg=d[i*4+1], b=d[i*4+2], gray=grays[i];
       const mx=Math.max(r,gg,b), mn=Math.min(r,gg,b);
       const sat=mx?(mx-mn)/mx*255:0;
       let hue=0;
       if(mx!==mn){ if(mx===r) hue=(60*(gg-b)/(mx-mn)+360)%360; else if(mx===gg) hue=60*(b-r)/(mx-mn)+120; else hue=60*(r-gg)/(mx-mn)+240; }
-      const dark=gray<95, red=sat>90 && (hue<30||hue>330);
-      if((dark||red) && gray<bthr+900){  // bright-neighborhood approx: accept, model gates rest
-        if(dark||red){ ink++; sx+=i%w; sy+=Math.floor(i/w); cnt++; }
+      if(gray<95 || (sat>90 && (hue<30||hue>330))){
+        ink++; sx+=i%w; sy+=Math.floor(i/w); cnt++;
       }
     }
     const frac=ink/n;
@@ -107,7 +118,7 @@ cropCanvas.width=NET_IN; cropCanvas.height=NET_IN;
 const cropCtx=cropCanvas.getContext("2d",{willReadFrequently:true});
 
 async function classify(v, cx, cy){
-  const vw=v.videoWidth, vh=v.videoHeight, C=Math.round(vw*CROP_FRAC);
+  const vw=v.videoWidth, vh=v.videoHeight, C=Math.round(Math.min(vw,vh)*CROP_FRAC);
   const offs=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16]];  // ±300/1920 of width
   const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
   offs.forEach(([ox,oy],k)=>{
@@ -167,7 +178,8 @@ function render(){
     : `<span class="u">·?·</span>`).join(" ");
   const com=cs.filter(c=>c.card).length;
   $("stats").textContent=`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
-    `scans ${scanN} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms`;
+    `scans ${scanN} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
+    `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} ${inEvent?"EVENT":""}`;
 }
 
 function scoreFinal(){
@@ -191,6 +203,8 @@ async function loop(){
   if(v.readyState>=2){
     scanN++;
     const {frac,cx,cy}=feats(v);
+    lastFrac=frac;
+    if(scanN%20===0) render();   // keep live ink/base readout fresh
     if(base===null) base=frac;
     const openThr=base*INK_OPEN+INK_ABS, closeThr=base*INK_CLOSE+INK_ABS;
     if(!inEvent) base=(1-BASE_ALPHA)*base+BASE_ALPHA*frac;
