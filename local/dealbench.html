@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v4</title>
+<title>deal bench v5</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -70,8 +70,8 @@ const CODES = ["10C","10D","10H","10S","2C","2D","2H","2S","3C","3D","3H","3S","
 const SYM = {S:"♠",H:"♥",D:"♦",C:"♣"};
 const pretty = c => c ? c.slice(0,-1)+SYM[c.slice(-1)] : "??";
 
-const INK_OPEN=1.4, INK_CLOSE=1.15, INK_ABS=0.001, MIN_EVENT=3, MAX_CLASSIFY=6,
-      NEG_MARGIN=0.5, VOTE_MIN=1.2, SOLO_MIN=0.97, BASE_ALPHA=0.02, GAP_SPLIT_MS=700;
+const INK_OPEN=1.25, INK_CLOSE=1.1, INK_ABS=0.0005, MIN_EVENT=3, MAX_CLASSIFY=6,
+      NEG_MARGIN=0.5, VOTE_MIN=1.0, SOLO_MIN=0.9, BASE_ALPHA=0.02, GAP_SPLIT_MS=700;
 const NET_IN=192, CROP_FRAC=0.356;  // crop = 384/1080 of the SHORT side
 
 const $=id=>document.getElementById(id);
@@ -163,7 +163,7 @@ async function infer(data){
 }
 
 const pending=[]; let procBusy=false;
-const KEEP_FRAMES=4;               // classify top-K ink frames per event
+const KEEP_FRAMES=5;               // classify top-K ink frames per event
 async function processPending(){
   if(procBusy) return; procBusy=true;
   while(pending.length){
@@ -315,7 +315,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("BENCH v4 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v5 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
