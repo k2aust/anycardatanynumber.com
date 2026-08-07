@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v6</title>
+<title>deal bench v7</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -41,6 +41,7 @@
   </select>
   <button id="dl">⇩ Session</button>
   <button id="rec">⏺ Rec</button>
+  <button id="exp">Exp: auto</button>
   <video id="v" autoplay playsinline muted></video>
 </div>
 
@@ -164,7 +165,7 @@ async function infer(data){
 }
 
 const pending=[]; let procBusy=false;
-const KEEP_FRAMES=5;               // classify top-K ink frames per event
+const KEEP_FRAMES=7;               // classify top-K ink frames per event
 async function processPending(){
   if(procBusy) return; procBusy=true;
   while(pending.length){
@@ -245,8 +246,15 @@ async function step(v, tMs){
   if(frac>(inEvent?closeThr:openThr)){
     if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; }
     eventScans++;
-    if(eventBuf.length<10)      // buffer crops at full frame rate; infer later
-      eventBuf.push({t:tMs, ink:frac, data:extractCrops(v,cx,cy)});
+    const entry={t:tMs, ink:frac, data:extractCrops(v,cx,cy)};
+    if(eventBuf.length<12) eventBuf.push(entry);
+    else{                        // keep the best-ink frames of long events
+      let mi=0; for(let i=1;i<eventBuf.length;i++) if(eventBuf[i].ink<eventBuf[mi].ink) mi=i;
+      if(entry.ink>eventBuf[mi].ink) eventBuf[mi]=entry;
+    }
+    if(eventScans%45===0){       // force-split mega events (hovering hand)
+      pending.push(eventBuf.sort((a,b)=>a.t-b.t)); eventBuf=[]; processPending();
+    }
   } else if(inEvent){
     inEvent=false;
     if(eventScans>=MIN_EVENT && eventBuf.length){
@@ -300,6 +308,24 @@ $("start").onclick=async()=>{
   running=true; $("start").classList.add("on");
   loop();
 };
+const EXPS=[["auto",null],["1/120",83],["1/250",40],["1/500",20]];
+let expIdx=0;
+$("exp").onclick=async()=>{
+  if(!stream) return;
+  const track=stream.getVideoTracks()[0];
+  expIdx=(expIdx+1)%EXPS.length;
+  const [label,val]=EXPS[expIdx];
+  try{
+    if(val===null){
+      await track.applyConstraints({advanced:[{exposureMode:"continuous"}]});
+    }else{
+      await track.applyConstraints({advanced:[{exposureMode:"manual", exposureTime:val}]});
+      try{ await track.applyConstraints({advanced:[{focusMode:"manual", focusDistance:0.15}]}); }catch(e){}
+    }
+    $("exp").textContent="Exp: "+label;
+    log("exposure set: "+label+" -> "+JSON.stringify({e:track.getSettings().exposureTime,f:track.getSettings().focusDistance}));
+  }catch(e){ log("exposure not applied: "+e); }
+};
 $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
   inEvent=false; await drain(); render(); scoreFinal(); };
@@ -332,7 +358,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("BENCH v6 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v7 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
