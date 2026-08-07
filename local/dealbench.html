@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
+<title>deal bench</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #0b0b0f; color: #ddd; font: 15px/1.45 -apple-system, Roboto, sans-serif;
+         padding: 10px; padding-bottom: 40px; }
+  body.fill { background: #fff; }
+  body.fill .panel { opacity: .2; }
+  h1 { font-size: 16px; color: #9ab; margin-bottom: 6px; }
+  .panel { background: #15151c; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+  video { width: 100%; max-height: 30vh; border-radius: 10px; background: #000; object-fit: contain; }
+  button, select { background: #2a2a36; color: #eee; border: 0; border-radius: 10px;
+           padding: 11px 14px; font-size: 15px; margin: 3px 5px 3px 0; }
+  button.on { background: #2e7d32; }
+  #reads { font: 14px/1.6 ui-monospace, monospace; letter-spacing: 1px; word-break: break-all; }
+  #reads .u { color: #666; }
+  #reads .red { color: #ff6b6b; }
+  #stats { font: 12px/1.5 ui-monospace, monospace; color: #8a9; }
+  #score { font-size: 15px; font-weight: 600; margin-top: 4px; }
+  #log { font: 11px/1.45 ui-monospace, monospace; color: #9a9; max-height: 22vh;
+         overflow-y: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Deal bench — live CNN read, no order prior</h1>
+
+<div class="panel">
+  <button id="start">▶ Start</button>
+  <button id="fill">💡 Fill</button>
+  <button id="stop">■ Stop + score</button>
+  <select id="truth">
+    <option value="ndo">Truth: NDO</option>
+    <option value="rev">Truth: reversed NDO</option>
+    <option value="none">Truth: none (just read)</option>
+  </select>
+  <button id="dl">⇩ Session</button>
+  <video id="v" autoplay playsinline muted></video>
+</div>
+
+<div class="panel">
+  <div id="reads">—</div>
+  <div id="score"></div>
+  <div id="stats">idle</div>
+</div>
+
+<div class="panel"><div id="log">loading model…</div></div>
+
+<script src="ort.min.js"></script>
+<script>
+/* Port of livesim.py — causal live deal reader. Same constants. */
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const SEQ = [...RANKS.map(r=>r+"H"), ...RANKS.map(r=>r+"C"),
+             ...[...RANKS].reverse().map(r=>r+"D"), ...[...RANKS].reverse().map(r=>r+"S")];
+const CODES = ["10C","10D","10H","10S","2C","2D","2H","2S","3C","3D","3H","3S","4C","4D","4H","4S","5C","5D","5H","5S","6C","6D","6H","6S","7C","7D","7H","7S","8C","8D","8H","8S","9C","9D","9H","9S","AC","AD","AH","AS","JC","JD","JH","JS","KC","KD","KH","KS","QC","QD","QH","QS"];
+const SYM = {S:"♠",H:"♥",D:"♦",C:"♣"};
+const pretty = c => c ? c.slice(0,-1)+SYM[c.slice(-1)] : "??";
+
+const INK_OPEN=1.4, INK_CLOSE=1.15, INK_ABS=0.001, MIN_EVENT=3, MAX_CLASSIFY=6,
+      NEG_MARGIN=0.5, VOTE_MIN=1.2, SOLO_MIN=0.97, BASE_ALPHA=0.02, GAP_SPLIT_MS=700;
+const NET_IN=192, CROP_FRAC=0.20;   // crop = 20% of frame width (384/1920)
+
+const $=id=>document.getElementById(id);
+const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,8000);};
+
+let sess=null, stream=null, running=false, wakeLock=null;
+let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
+let scanN=0, infN=0, infMs=0;
+
+const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
+  const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
+  return v=>{
+    const W=240, H=Math.round(W*v.videoHeight/v.videoWidth)||135;
+    c.width=W; c.height=H;
+    g.drawImage(v,0,0,W,H);
+    const y0=Math.round(H*0.10), y1=Math.round(H*0.78), x0=Math.round(W*0.05), x1=Math.round(W*0.95);
+    const d=g.getImageData(x0,y0,x1-x0,y1-y0).data, n=d.length/4;
+    const grays=new Float32Array(n);
+    for(let i=0;i<n;i++) grays[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+    const sorted=Float32Array.from(grays).sort();
+    const bthr=Math.max(120, sorted[Math.floor(n*0.72)]);
+    let ink=0, sx=0, sy=0, cnt=0; const w=x1-x0;
+    for(let i=0;i<n;i++){
+      const r=d[i*4], gg=d[i*4+1], b=d[i*4+2], gray=grays[i];
+      const mx=Math.max(r,gg,b), mn=Math.min(r,gg,b);
+      const sat=mx?(mx-mn)/mx*255:0;
+      let hue=0;
+      if(mx!==mn){ if(mx===r) hue=(60*(gg-b)/(mx-mn)+360)%360; else if(mx===gg) hue=60*(b-r)/(mx-mn)+120; else hue=60*(r-gg)/(mx-mn)+240; }
+      const dark=gray<95, red=sat>90 && (hue<30||hue>330);
+      if((dark||red) && gray<bthr+900){  // bright-neighborhood approx: accept, model gates rest
+        if(dark||red){ ink++; sx+=i%w; sy+=Math.floor(i/w); cnt++; }
+      }
+    }
+    const frac=ink/n;
+    const cx=cnt? (x0+sx/cnt)/W : 0.5, cy=cnt? (y0+sy/cnt)/H : 0.5;  // fractional coords
+    return {frac, cx, cy};
+  };
+})();
+
+const cropCanvas=document.createElement("canvas");
+cropCanvas.width=NET_IN; cropCanvas.height=NET_IN;
+const cropCtx=cropCanvas.getContext("2d",{willReadFrequently:true});
+
+async function classify(v, cx, cy){
+  const vw=v.videoWidth, vh=v.videoHeight, C=Math.round(vw*CROP_FRAC);
+  const offs=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16]];  // ±300/1920 of width
+  const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
+  offs.forEach(([ox,oy],k)=>{
+    let x0=Math.round(cx*vw+ox*vw-C/2), y0=Math.round(cy*vh+oy*vw-C/2);
+    x0=Math.max(0,Math.min(vw-C,x0)); y0=Math.max(0,Math.min(vh-C,y0));
+    cropCtx.drawImage(v,x0,y0,C,C,0,0,NET_IN,NET_IN);
+    const d=cropCtx.getImageData(0,0,NET_IN,NET_IN).data;
+    const o=k*3*NET_IN*NET_IN, plane=NET_IN*NET_IN;
+    for(let i=0;i<plane;i++){       // BGR order to match cv2 training
+      data[o+i]        =(d[i*4+2]/255-0.55)/0.25;
+      data[o+plane+i]  =(d[i*4+1]/255-0.55)/0.25;
+      data[o+2*plane+i]=(d[i*4]  /255-0.55)/0.25;
+    }
+  });
+  const t0=performance.now();
+  const out=await sess.run({input:new ort.Tensor("float32",data,[offs.length,3,NET_IN,NET_IN])});
+  infMs+=(performance.now()-t0); infN++;
+  const logits=out.logits.data, NC=53;
+  let best={conf:-1,cls:0,neg:1};
+  for(let k=0;k<offs.length;k++){
+    const row=logits.subarray(k*NC,(k+1)*NC);
+    const mx=Math.max(...row); const ex=[...row].map(x=>Math.exp(x-mx));
+    const s=ex.reduce((a,b)=>a+b,0); const p=ex.map(x=>x/s);
+    let ci=0; for(let i=1;i<52;i++) if(p[i]>p[ci]) ci=i;
+    if(p[ci]>best.conf) best={conf:p[ci],cls:ci,neg:p[52]};
+  }
+  return best;
+}
+
+function settle(){
+  const out=[]; let i=0;
+  while(i<event_.length){
+    let j=i;
+    while(j+1<event_.length && event_[j+1].cls===event_[i].cls
+          && event_[j+1].t-event_[j].t<=GAP_SPLIT_MS) j++;
+    const cl=event_.slice(i,j+1);
+    const vote=cl.reduce((a,b)=>a+b.conf,0), top=Math.max(...cl.map(x=>x.conf));
+    if(vote>=VOTE_MIN && (cl.length>=2 || top>=SOLO_MIN))
+      out.push({t:cl[0].t, card:CODES[cl[0].cls], conf:+vote.toFixed(2), n:cl.length});
+    i=j+1;
+  }
+  if(!out.length && event_.length)
+    out.push({t:event_[0].t, card:null, conf:0, n:event_.length});
+  return out;
+}
+
+function uniq(cs){
+  const best={};
+  cs.forEach((c,i)=>{ if(c.card && (!(c.card in best)||c.conf>cs[best[c.card]].conf)) best[c.card]=i; });
+  return cs.map((c,i)=>c.card && best[c.card]!==i ? {...c,card:null} : c);
+}
+
+function render(){
+  const cs=uniq(commits);
+  $("reads").innerHTML=cs.map(c=>c.card
+    ? `<span class="${"HD".includes(c.card.slice(-1))?"red":""}">${pretty(c.card)}</span>`
+    : `<span class="u">·?·</span>`).join(" ");
+  const com=cs.filter(c=>c.card).length;
+  $("stats").textContent=`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
+    `scans ${scanN} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms`;
+}
+
+function scoreFinal(){
+  const cs=uniq(commits);
+  const t=$("truth").value;
+  if(t==="none"){ $("score").textContent="(no truth selected)"; return; }
+  const seq=t==="rev"?[...SEQ].reverse():SEQ;
+  const reads=cs.map(c=>c.card);
+  const n=reads.length, m=52, dp=Array.from({length:n+1},()=>new Int16Array(m+1));
+  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++)
+    dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]+(reads[i-1]===seq[j-1]?1:0));
+  const correct=dp[n][m], com=reads.filter(Boolean).length;
+  $("score").textContent=`SCORE: ${correct} correct, ${com-correct} wrong, `+
+    `${n-com} flagged-unknown, ${52-correct} missed`;
+  log(`scored: ${correct}/52 correct, ${com-correct} wrong`);
+}
+
+async function loop(){
+  const v=$("v");
+  if(!running) return;
+  if(v.readyState>=2){
+    scanN++;
+    const {frac,cx,cy}=feats(v);
+    if(base===null) base=frac;
+    const openThr=base*INK_OPEN+INK_ABS, closeThr=base*INK_CLOSE+INK_ABS;
+    if(!inEvent) base=(1-BASE_ALPHA)*base+BASE_ALPHA*frac;
+    if(frac>(inEvent?closeThr:openThr)){
+      if(!inEvent){ inEvent=true; event_=[]; eventScans=0; }
+      eventScans++;
+      const now=performance.now();
+      if(event_.length<MAX_CLASSIFY && now-lastClassifyT>120){
+        lastClassifyT=now;
+        const r=await classify(v,cx,cy);
+        if(r.neg-r.conf<NEG_MARGIN) event_.push({t:now,cls:r.cls,conf:r.conf});
+      }
+    } else if(inEvent){
+      inEvent=false;
+      if(eventScans>=MIN_EVENT){ commits.push(...settle()); render(); }
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+$("start").onclick=async()=>{
+  if(!sess){ log("model not ready yet"); return; }
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
+    width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
+  $("v").srcObject=stream;
+  try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+  const track=stream.getVideoTracks()[0];
+  log("camera: "+JSON.stringify(track.getSettings()));
+  try{ const caps=track.getCapabilities();
+       if(caps.exposureTime) log("exposureTime supported: "+JSON.stringify(caps.exposureTime));
+  }catch(e){}
+  base=null; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+  running=true; $("start").classList.add("on");
+  loop();
+};
+$("stop").onclick=()=>{ running=false; $("start").classList.remove("on");
+  if(inEvent && eventScans>=MIN_EVENT){ commits.push(...settle()); }
+  inEvent=false; render(); scoreFinal(); };
+$("fill").onclick=()=>document.body.classList.toggle("fill");
+$("dl").onclick=()=>{
+  const blob=new Blob([JSON.stringify({when:new Date().toISOString(),
+    truth:$("truth").value, commits:uniq(commits)},null,1)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="dealbench_session.json"; a.click();
+};
+
+(async()=>{
+  try{
+    ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
+    sess=await ort.InferenceSession.create("dealread_v14.onnx",
+      {executionProviders:["wasm"]});
+    log("model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+  }catch(e){ log("MODEL LOAD FAILED: "+e); }
+})();
+</script>
+</body>
+</html>
