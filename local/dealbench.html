@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v3</title>
+<title>deal bench v4</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -54,6 +54,15 @@
 <script src="ort.min.js"></script>
 <script>
 /* Port of livesim.py — causal live deal reader. Same constants. */
+// COOP/COEP via service worker -> multithreaded wasm on GitHub Pages
+if ("serviceWorker" in navigator && !crossOriginIsolated
+    && !sessionStorage.getItem("coiReloaded")) {
+  navigator.serviceWorker.register("coi-sw.js").then(async () => {
+    await navigator.serviceWorker.ready;
+    sessionStorage.setItem("coiReloaded", "1");
+    location.reload();
+  }).catch(()=>{});
+}
 const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 const SEQ = [...RANKS.map(r=>r+"H"), ...RANKS.map(r=>r+"C"),
              ...[...RANKS].reverse().map(r=>r+"D"), ...[...RANKS].reverse().map(r=>r+"S")];
@@ -117,9 +126,9 @@ const cropCanvas=document.createElement("canvas");
 cropCanvas.width=NET_IN; cropCanvas.height=NET_IN;
 const cropCtx=cropCanvas.getContext("2d",{willReadFrequently:true});
 
-async function classify(v, cx, cy){
+function extractCrops(v, cx, cy){   // fast: canvas work only, no inference
   const vw=v.videoWidth, vh=v.videoHeight, C=Math.round(Math.min(vw,vh)*CROP_FRAC);
-  const offs=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16]];  // ±300/1920 of width
+  const offs=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16]];
   const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
   offs.forEach(([ox,oy],k)=>{
     let x0=Math.round(cx*vw+ox*vw-C/2), y0=Math.round(cy*vh+oy*vw-C/2);
@@ -133,12 +142,17 @@ async function classify(v, cx, cy){
       data[o+2*plane+i]=(d[i*4]  /255-0.55)/0.25;
     }
   });
+  return data;
+}
+
+async function infer(data){
   const t0=performance.now();
-  const out=await sess.run({input:new ort.Tensor("float32",data,[offs.length,3,NET_IN,NET_IN])});
+  const n=data.length/(3*NET_IN*NET_IN);
+  const out=await sess.run({input:new ort.Tensor("float32",data,[n,3,NET_IN,NET_IN])});
   infMs+=(performance.now()-t0); infN++;
   const logits=out.logits.data, NC=53;
   let best={conf:-1,cls:0,neg:1};
-  for(let k=0;k<offs.length;k++){
+  for(let k=0;k<n;k++){
     const row=logits.subarray(k*NC,(k+1)*NC);
     const mx=Math.max(...row); const ex=[...row].map(x=>Math.exp(x-mx));
     const s=ex.reduce((a,b)=>a+b,0); const p=ex.map(x=>x/s);
@@ -146,6 +160,27 @@ async function classify(v, cx, cy){
     if(p[ci]>best.conf) best={conf:p[ci],cls:ci,neg:p[52]};
   }
   return best;
+}
+
+const pending=[]; let procBusy=false;
+const KEEP_FRAMES=4;               // classify top-K ink frames per event
+async function processPending(){
+  if(procBusy) return; procBusy=true;
+  while(pending.length){
+    const buf=pending.shift();
+    buf.sort((a,b)=>b.ink-a.ink);
+    const picks=buf.slice(0,KEEP_FRAMES).sort((a,b)=>a.t-b.t);
+    const results=[];
+    for(const p of picks){
+      const r=await infer(p.data);
+      if(r.neg-r.conf<NEG_MARGIN) results.push({t:p.t,cls:r.cls,conf:r.conf});
+    }
+    event_=results;                 // reuse settle() on this event's results
+    commits.push(...(results.length?settle():
+      [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}]));
+    render();
+  }
+  procBusy=false;
 }
 
 function settle(){
@@ -197,7 +232,7 @@ function scoreFinal(){
   log(`scored: ${correct}/52 correct, ${com-correct} wrong`);
 }
 
-let replayMode=false;
+let replayMode=false, eventBuf=[];
 async function step(v, tMs){
   scanN++;
   const {frac,cx,cy}=feats(v);
@@ -207,18 +242,19 @@ async function step(v, tMs){
   const openThr=base*INK_OPEN+INK_ABS, closeThr=base*INK_CLOSE+INK_ABS;
   if(!inEvent) base=(1-BASE_ALPHA)*base+BASE_ALPHA*frac;
   if(frac>(inEvent?closeThr:openThr)){
-    if(!inEvent){ inEvent=true; event_=[]; eventScans=0; }
+    if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; }
     eventScans++;
-    if(event_.length<MAX_CLASSIFY && (replayMode || tMs-lastClassifyT>120)){
-      lastClassifyT=tMs;
-      const r=await classify(v,cx,cy);
-      if(r.neg-r.conf<NEG_MARGIN) event_.push({t:tMs,cls:r.cls,conf:r.conf});
-    }
+    if(eventBuf.length<10)      // buffer crops at full frame rate; infer later
+      eventBuf.push({t:tMs, ink:frac, data:extractCrops(v,cx,cy)});
   } else if(inEvent){
     inEvent=false;
-    if(eventScans>=MIN_EVENT){ commits.push(...settle()); render(); }
+    if(eventScans>=MIN_EVENT && eventBuf.length){
+      pending.push(eventBuf); eventBuf=[];
+      processPending();
+    }
   }
 }
+async function drain(){ while(procBusy||pending.length) await new Promise(r=>setTimeout(r,150)); }
 async function loop(){
   const v=$("v");
   if(!running) return;
@@ -232,6 +268,7 @@ async function replayLoop(){       // deterministic seek-driven replay
     await new Promise(res=>{ v.onseeked=res; v.currentTime=t; });
     await step(v, t*1000);
   }
+  await drain();
   if(running) $("stop").click();
 }
 
@@ -262,9 +299,9 @@ $("start").onclick=async()=>{
   running=true; $("start").classList.add("on");
   loop();
 };
-$("stop").onclick=()=>{ running=false; $("start").classList.remove("on");
-  if(inEvent && eventScans>=MIN_EVENT){ commits.push(...settle()); }
-  inEvent=false; render(); scoreFinal(); };
+$("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
+  if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
+  inEvent=false; await drain(); render(); scoreFinal(); };
 $("fill").onclick=()=>document.body.classList.toggle("fill");
 $("dl").onclick=()=>{
   const blob=new Blob([JSON.stringify({when:new Date().toISOString(),
@@ -278,7 +315,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("BENCH v3 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v4 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
