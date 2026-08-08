@@ -327,7 +327,7 @@ function render(){
     : `<span class="u">·?·</span>`).join(" ");
   const com=cs.filter(c=>c.card).length;
   $("stats").textContent=`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
-    `scans ${scanN} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
+    `scans ${scanN} | crops ${NCROPS} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
     `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} z ${((lastFrac-(base||0))/Math.max(Math.sqrt(Math.max(varInk,1e-12)),1e-6)).toFixed(1)} ${inEvent?"EVENT":""}`;
 }
 
@@ -500,7 +500,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH v13 (model v15, adaptive ink, assignment commit) | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v13 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
