@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v10</title>
+<title>deal bench v11</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -72,8 +72,12 @@ const CODES = ["10C","10D","10H","10S","2C","2D","2H","2S","3C","3D","3H","3S","
 const SYM = {S:"♠",H:"♥",D:"♦",C:"♣"};
 const pretty = c => c ? c.slice(0,-1)+SYM[c.slice(-1)] : "??";
 
-const INK_OPEN=1.25, INK_CLOSE=1.1, INK_ABS=0.0005, MIN_EVENT=3, MAX_CLASSIFY=6,
-      NEG_MARGIN=0.5, VOTE_MIN=1.0, SOLO_MIN=0.9, BASE_ALPHA=0.02, GAP_SPLIT_MS=700;
+// z-score trigger: fires on ink rising Z sigmas above the room's rolling
+// baseline — adapts across rooms/exposures where a fixed multiplier fails.
+// Tuned on 3 rooms (bench2 49 / kroom1 48 / exam4 58 events vs 52 dealt).
+const Z_OPEN=1.2, Z_CLOSE=0.5, BASE_ALPHA=0.02, VAR_ALPHA=0.02,
+      MIN_EVENT=2, FORCE_SPLIT=12,
+      NEG_MARGIN=0.5, VOTE_MIN=1.0, SOLO_MIN=0.9, GAP_SPLIT_MS=700;
 const NET_IN=192, CROP_FRAC=0.356;  // crop = 384/1080 of the SHORT side
 
 const $=id=>document.getElementById(id);
@@ -81,7 +85,7 @@ const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,800
 
 let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
 let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
-let scanN=0, infN=0, infMs=0, lastFrac=0;
+let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
 
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
   const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
@@ -216,7 +220,7 @@ function render(){
   const com=cs.filter(c=>c.card).length;
   $("stats").textContent=`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
     `scans ${scanN} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
-    `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} ${inEvent?"EVENT":""}`;
+    `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} z ${((lastFrac-(base||0))/Math.max(Math.sqrt(Math.max(varInk,1e-12)),1e-6)).toFixed(1)} ${inEvent?"EVENT":""}`;
 }
 
 function scoreFinal(){
@@ -240,10 +244,12 @@ async function step(v, tMs){
   const {frac,cx,cy}=feats(v);
   lastFrac=frac;
   if(scanN%20===0) render();   // keep live ink/base readout fresh
-  if(base===null) base=frac;
-  const openThr=base*INK_OPEN+INK_ABS, closeThr=base*INK_CLOSE+INK_ABS;
-  if(!inEvent) base=(1-BASE_ALPHA)*base+BASE_ALPHA*frac;
-  if(frac>(inEvent?closeThr:openThr)){
+  if(base===null){ base=frac; varInk=0; }
+  const sd=Math.sqrt(Math.max(varInk,1e-12));
+  const z=(frac-base)/Math.max(sd,1e-6);
+  const fire = z > (inEvent?Z_CLOSE:Z_OPEN);
+  if(!inEvent){ const d=frac-base; base+=BASE_ALPHA*d; varInk=(1-VAR_ALPHA)*varInk+VAR_ALPHA*d*d; }
+  if(fire){
     if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; }
     eventScans++;
     const entry={t:tMs, ink:frac, data:extractCrops(v,cx,cy)};
@@ -252,7 +258,7 @@ async function step(v, tMs){
       let mi=0; for(let i=1;i<eventBuf.length;i++) if(eventBuf[i].ink<eventBuf[mi].ink) mi=i;
       if(entry.ink>eventBuf[mi].ink) eventBuf[mi]=entry;
     }
-    if(eventScans%45===0){       // force-split mega events (hovering hand)
+    if(eventScans%FORCE_SPLIT===0){       // force-split mega events (hovering hand)
       pending.push(eventBuf.sort((a,b)=>a.t-b.t)); eventBuf=[]; processPending();
     }
   } else if(inEvent){
@@ -289,7 +295,7 @@ $("start").onclick=async()=>{
     const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
-    base=null; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+    base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
     running=true; $("start").classList.add("on");
     replayLoop();
     return;
@@ -318,7 +324,7 @@ $("start").onclick=async()=>{
          if(caps.exposureTime) log("exposureTime supported: "+JSON.stringify(caps.exposureTime));
     }catch(e){}
   }
-  base=null; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+  base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
   running=true; $("start").classList.add("on");
   loop();
 };
@@ -376,7 +382,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH v10 (model v15) | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v11 (model v15, z-trigger) | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
