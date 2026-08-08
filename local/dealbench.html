@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v12</title>
+<title>deal bench v13</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -79,12 +79,29 @@ const Z_OPEN=1.2, Z_CLOSE=0.5, BASE_ALPHA=0.02, VAR_ALPHA=0.02,
       MIN_EVENT=2, FORCE_SPLIT=12,
       NEG_MARGIN=0.5, VOTE_MIN=1.0, SOLO_MIN=0.9, GAP_SPLIT_MS=700;
 const NET_IN=192, CROP_FRAC=0.356;  // crop = 384/1080 of the SHORT side
+// Crop offsets per frame (fractions of frame width). More crops cover cards
+// that sit off the ink centroid (hand/hair pollute it); more FRAMES cover a
+// card that is only briefly readable. Both cost inference, so this set and
+// KEEP_FRAMES are budget-matched against each other — see livesim2.py CROPS.
+const ALL_OFFS=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16],
+                [-0.16,-0.16],[0.16,-0.16],[-0.16,0.16],[0.16,0.16]];
+// 5 is what the phone can sustain DURING the deal (~300ms/batch). Budget-matched
+// offline test: 5 crops x 7 frames = 132 correct/8 wrong beats 9 crops x 4
+// frames = 123/8 — frames matter more than crops. ?crops=9 spends ~1.8x and
+// scores 142/4, at the cost of the queue draining for ~1-2 min after Stop.
+const NCROPS=+(new URLSearchParams(location.search).get("crops")||5);
+const CROP_OFFS=ALL_OFFS.slice(0,NCROPS);
+// Commit gates, re-swept on cached evidence AT THIS CROP COUNT (they are not
+// transferable between budgets — fewer crops lower the vector magnitudes).
+const G={5:[0.0,0.95,0.25], 9:[0.5,0.95,0.25]}[NCROPS]||[0.0,0.95,0.25];
+const MIN_SCORE=G[0], MIN_RATIO=G[1], MIN_MARGIN=G[2];
 
 const $=id=>document.getElementById(id);
 const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,8000);};
 
 let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
 let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
+let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
 
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
@@ -153,7 +170,7 @@ const cropCtx=cropCanvas.getContext("2d",{willReadFrequently:true});
 
 function extractCrops(v, cx, cy){   // fast: canvas work only, no inference
   const vw=v.videoWidth, vh=v.videoHeight, C=Math.round(Math.min(vw,vh)*CROP_FRAC);
-  const offs=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16]];
+  const offs=CROP_OFFS;
   const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
   offs.forEach(([ox,oy],k)=>{
     let x0=Math.round(cx*vw+ox*vw-C/2), y0=Math.round(cy*vh+oy*vw-C/2);
@@ -177,14 +194,79 @@ async function infer(data){
   infMs+=(performance.now()-t0); infN++;
   const logits=out.logits.data, NC=53;
   let best={conf:-1,cls:0,neg:1};
+  // vec[c] = max prob of class c over this frame's crops. The old code kept
+  // only the argmax and threw away the other 51 numbers — that discarded
+  // evidence is exactly what the assignment pass below needs, and it is free.
+  const vec=new Float32Array(52);
   for(let k=0;k<n;k++){
     const row=logits.subarray(k*NC,(k+1)*NC);
     const mx=Math.max(...row); const ex=[...row].map(x=>Math.exp(x-mx));
     const s=ex.reduce((a,b)=>a+b,0); const p=ex.map(x=>x/s);
     let ci=0; for(let i=1;i<52;i++) if(p[i]>p[ci]) ci=i;
+    for(let i=0;i<52;i++) if(p[i]>vec[i]) vec[i]=p[i];
     if(p[ci]>best.conf) best={conf:p[ci],cls:ci,neg:p[52]};
   }
+  best.vec=vec;
   return best;
+}
+
+/* ---- global event->card assignment (port of livesim2.py) -----------------
+   Hungarian / Kuhn-Munkres, O(n^2 m). Rows must be <= cols, so when there are
+   more events than cards we solve the transpose. Deck uniqueness only: each
+   card is claimed at most once. No deal-order prior anywhere. */
+function hungarian(cost, n, m){          // cost[i*m+j], n<=m; returns colOf[i]
+  const INF=1e18;
+  const u=new Float64Array(n+1), v=new Float64Array(m+1);
+  const p=new Int32Array(m+1), way=new Int32Array(m+1);
+  for(let i=1;i<=n;i++){
+    p[0]=i; let j0=0;
+    const minv=new Float64Array(m+1).fill(INF);
+    const used=new Uint8Array(m+1);
+    do{
+      used[j0]=1; const i0=p[j0]; let delta=INF, j1=0;
+      for(let j=1;j<=m;j++) if(!used[j]){
+        const cur=cost[(i0-1)*m+(j-1)]-u[i0]-v[j];
+        if(cur<minv[j]){ minv[j]=cur; way[j]=j0; }
+        if(minv[j]<delta){ delta=minv[j]; j1=j; }
+      }
+      for(let j=0;j<=m;j++){
+        if(used[j]){ u[p[j]]+=delta; v[j]-=delta; }
+        else minv[j]-=delta;
+      }
+      j0=j1;
+    } while(p[j0]!==0);
+    do{ const j1=way[j0]; p[j0]=p[j1]; j0=j1; } while(j0);
+  }
+  const colOf=new Int32Array(n).fill(-1);
+  for(let j=1;j<=m;j++) if(p[j]) colOf[p[j]-1]=j-1;
+  return colOf;
+}
+
+function assignCommits(evs){             // evs: [{t, vec:Float32Array(52), n}]
+  const E=evs.length; if(!E) return [];
+  const flip = E>52;                     // rows must be <= cols
+  const R=flip?52:E, C=flip?E:52;
+  const cost=new Float64Array(R*C);
+  for(let i=0;i<R;i++) for(let j=0;j<C;j++)
+    cost[i*C+j] = -(flip ? evs[j].vec[i] : evs[i].vec[j]);
+  const colOf=hungarian(cost,R,C);
+  const cardOf=new Int32Array(E).fill(-1);
+  for(let i=0;i<R;i++){
+    const j=colOf[i]; if(j<0) continue;
+    if(flip) cardOf[j]=i; else cardOf[i]=j;
+  }
+  return evs.map((e,k)=>{
+    const j=cardOf[k];
+    let card=null, conf=0;
+    if(j>=0){
+      const s=e.vec[j];
+      let t1=-1,t2=-1;
+      for(let i=0;i<52;i++){ const x=e.vec[i]; if(x>t1){ t2=t1; t1=x; } else if(x>t2) t2=x; }
+      const ratio = t1>0 ? s/t1 : 0;
+      if(s>=MIN_SCORE && ratio>=MIN_RATIO && (t1-t2)>=MIN_MARGIN){ card=CODES[j]; conf=s; }
+    }
+    return {t:e.t, card, conf:+conf.toFixed(2), n:e.n};
+  });
 }
 
 const pending=[]; let procBusy=false;
@@ -196,12 +278,19 @@ async function processPending(){
     buf.sort((a,b)=>b.ink-a.ink);
     const picks=buf.slice(0,KEEP_FRAMES).sort((a,b)=>a.t-b.t);
     const results=[];
+    const acc=new Float32Array(52); let accN=0;
     for(const p of picks){
       const r=await infer(p.data);
-      if(r.neg-r.conf<NEG_MARGIN) results.push({t:p.t,cls:r.cls,conf:r.conf});
+      if(r.neg-r.conf<NEG_MARGIN){
+        results.push({t:p.t,cls:r.cls,conf:r.conf});
+        for(let i=0;i<52;i++) acc[i]+=r.vec[i];   // evidence for the final pass
+        accN++;
+      }
     }
-    event_=results;                 // reuse settle() on this event's results
-    commits.push(...(results.length?settle():
+    // one evidence vector per event, for the assignment run at Stop
+    eventVecs.push({t:picks[0]?.t||0, vec:acc, n:accN});
+    event_=results;                 // settle() still drives the LIVE readout —
+    commits.push(...(results.length?settle():   // it is causal, assignment is not
       [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}]));
     render();
   }
@@ -232,7 +321,7 @@ function uniq(cs){
 }
 
 function render(){
-  const cs=uniq(commits);
+  const cs=finalCommits||uniq(commits);
   $("reads").innerHTML=cs.map(c=>c.card
     ? `<span class="${"HD".includes(c.card.slice(-1))?"red":""}">${pretty(c.card)}</span>`
     : `<span class="u">·?·</span>`).join(" ");
@@ -243,7 +332,7 @@ function render(){
 }
 
 function scoreFinal(){
-  const cs=uniq(commits);
+  const cs=finalCommits||uniq(commits);
   const t=$("truth").value;
   if(t==="none"){ $("score").textContent="(no truth selected)"; return; }
   const seq=t==="rev"?[...SEQ].reverse():SEQ;
@@ -315,6 +404,7 @@ $("start").onclick=async()=>{
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
     base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+    eventVecs=[]; finalCommits=null;
     running=true; $("start").classList.add("on");
     replayLoop();
     return;
@@ -344,6 +434,7 @@ $("start").onclick=async()=>{
     }catch(e){}
   }
   base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+    eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   loop();
 };
@@ -371,7 +462,15 @@ $("exp").onclick=async()=>{
 $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   try{ screen.orientation.unlock(); document.exitFullscreen(); }catch(e){}
   if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
-  inEvent=false; await drain(); render(); scoreFinal(); };
+  inEvent=false; await drain();
+  if(eventVecs.length){
+    const t0=performance.now();
+    finalCommits=assignCommits(eventVecs);
+    const com=finalCommits.filter(c=>c.card).length;
+    log(`assignment: ${eventVecs.length} events -> ${com} committed `+
+        `(${(performance.now()-t0).toFixed(0)}ms)`);
+  }
+  render(); scoreFinal(); };
 $("fill").onclick=()=>document.body.classList.toggle("fill");
 $("rec").onclick=()=>{
   if(recorder && recorder.state==="recording"){
@@ -401,7 +500,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH v12 (model v15, z-trigger, adaptive ink) | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v13 (model v15, adaptive ink, assignment commit) | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
