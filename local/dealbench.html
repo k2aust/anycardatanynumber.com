@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v7</title>
+<title>deal bench v8</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -294,8 +294,16 @@ $("start").onclick=async()=>{
     replayLoop();
     return;
   } else {
+    try{                                   // force landscape like the training footage
+      await document.documentElement.requestFullscreen();
+      await screen.orientation.lock("landscape");
+      log("landscape locked");
+    }catch(e){ log("landscape lock unavailable: "+e.message); }
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
-      width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
+      width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
+      frameRate:{ideal:30}},audio:false});
+    const st=stream.getVideoTracks()[0].getSettings();
+    log("stream "+st.width+"x"+st.height);
     $("v").srcObject=stream;
     try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
     const track=stream.getVideoTracks()[0];
@@ -327,6 +335,7 @@ $("exp").onclick=async()=>{
   }catch(e){ log("exposure not applied: "+e); }
 };
 $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
+  try{ screen.orientation.unlock(); document.exitFullscreen(); }catch(e){}
   if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
   inEvent=false; await drain(); render(); scoreFinal(); };
 $("fill").onclick=()=>document.body.classList.toggle("fill");
@@ -358,7 +367,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("BENCH v7 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v8 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
