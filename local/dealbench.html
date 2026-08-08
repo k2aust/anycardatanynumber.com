@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v8</title>
+<title>deal bench v9</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -301,9 +301,15 @@ $("start").onclick=async()=>{
     }catch(e){ log("landscape lock unavailable: "+e.message); }
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
       width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
-      frameRate:{ideal:30}},audio:false});
-    const st=stream.getVideoTracks()[0].getSettings();
-    log("stream "+st.width+"x"+st.height);
+      frameRate:{ideal:60}},audio:false});
+    const tr0=stream.getVideoTracks()[0];
+    try{ const cp=tr0.getCapabilities();
+         if(cp.zoom) await tr0.applyConstraints({advanced:[{zoom:cp.zoom.min}]});
+         if(cp.resizeMode) await tr0.applyConstraints({advanced:[{resizeMode:"none"}]});
+         log("CAPS: "+JSON.stringify(cp));
+    }catch(e){}
+    const st=tr0.getSettings();
+    log("stream "+st.width+"x"+st.height+" @"+st.frameRate+"fps");
     $("v").srcObject=stream;
     try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
     const track=stream.getVideoTracks()[0];
@@ -328,6 +334,9 @@ $("exp").onclick=async()=>{
       await track.applyConstraints({advanced:[{exposureMode:"continuous"}]});
     }else{
       await track.applyConstraints({advanced:[{exposureMode:"manual", exposureTime:val}]});
+      try{ const cp=track.getCapabilities();
+           if(cp.iso) await track.applyConstraints({advanced:[{iso:Math.min(cp.iso.max,800)}]});
+      }catch(e){}
       try{ await track.applyConstraints({advanced:[{focusMode:"manual", focusDistance:0.15}]}); }catch(e){}
     }
     $("exp").textContent="Exp: "+label;
@@ -367,7 +376,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx",
       {executionProviders:["wasm"]});
-    log("BENCH v8 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v9 | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
