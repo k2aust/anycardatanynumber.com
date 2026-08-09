@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v23</title>
+<title>deal bench page-v24</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -256,13 +256,27 @@ function hungarian(cost, n, m){          // cost[i*m+j], n<=m; returns colOf[i]
   return colOf;
 }
 
+const BETA=0.5;   // concentration exponent — the anti-attractor filter
 function assignCommits(evs){             // evs: [{t, vec:Float32Array(52), n}]
   const E=evs.length; if(!E) return [];
+  // CONCENTRATION WEIGHTING. A real card concentrates its evidence in one
+  // event; an attractor (3H/6C/8H in dark backlit rooms) fires weakly across
+  // dozens. Scale each event-card score by (event's share of that card's
+  // total)^BETA: dispersed evidence is crushed, concentrated evidence kept.
+  const W=evs.map(e=>Float64Array.from(e.vec));
+  if(BETA>0){
+    const tot=new Float64Array(52);
+    for(const v of W) for(let j=0;j<52;j++) tot[j]+=v[j];
+    for(const v of W) for(let j=0;j<52;j++){
+      const t=tot[j]+1e-9;
+      v[j]=v[j]*Math.pow(v[j]/t,BETA);
+    }
+  }
   const flip = E>52;                     // rows must be <= cols
   const R=flip?52:E, C=flip?E:52;
   const cost=new Float64Array(R*C);
   for(let i=0;i<R;i++) for(let j=0;j<C;j++)
-    cost[i*C+j] = -(flip ? evs[j].vec[i] : evs[i].vec[j]);
+    cost[i*C+j] = -(flip ? W[j][i] : W[i][j]);
   const colOf=hungarian(cost,R,C);
   const cardOf=new Int32Array(E).fill(-1);
   for(let i=0;i<R;i++){
@@ -273,9 +287,10 @@ function assignCommits(evs){             // evs: [{t, vec:Float32Array(52), n}]
     const j=cardOf[k];
     let card=null, conf=0;
     if(j>=0){
-      const s=e.vec[j];
+      const v=W[k];
+      const s=v[j];
       let t1=-1,t2=-1;
-      for(let i=0;i<52;i++){ const x=e.vec[i]; if(x>t1){ t2=t1; t1=x; } else if(x>t2) t2=x; }
+      for(let i=0;i<52;i++){ const x=v[i]; if(x>t1){ t2=t1; t1=x; } else if(x>t2) t2=x; }
       const ratio = t1>0 ? s/t1 : 0;
       if(s>=MIN_SCORE && ratio>=MIN_RATIO && (t1-t2)>=MIN_MARGIN){ card=CODES[j]; conf=s; }
     }
@@ -588,7 +603,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v23 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v24 (model v15, anti-attractor) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
