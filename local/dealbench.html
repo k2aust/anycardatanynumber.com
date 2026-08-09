@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v27</title>
+<title>deal bench page-v28</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -130,8 +130,9 @@ let scanT0=0, scanFps=0;   // achieved scan rate — low means the camera is bei
 
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
   const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
-  return v=>{
-    const W=240, H=Math.round(W*v.videoHeight/v.videoWidth)||135;
+  return v0=>{
+    const v=frameSource(v0);
+    const W=240, H=Math.round(W*srcH(v)/srcW(v))||135;
     c.width=W; c.height=H;
     g.drawImage(v,0,0,W,H);
     const y0=Math.round(H*0.10), y1=Math.round(H*0.78), x0=Math.round(W*0.05), x1=Math.round(W*0.95);
@@ -188,12 +189,29 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
   };
 })();
 
+// ---- portrait-stream normalisation --------------------------------------
+const ROT_DIR=(new URLSearchParams(location.search).get("rot")||"cw");
+const rotCanvas=document.createElement("canvas");
+const rotCtx=rotCanvas.getContext("2d",{willReadFrequently:true});
+function frameSource(v){
+  const vw=v.videoWidth||v.width, vh=v.videoHeight||v.height;
+  if(vh<=vw) return v;                       // already landscape
+  rotCanvas.width=vh; rotCanvas.height=vw;   // rotate 90° -> landscape
+  rotCtx.save();
+  if(ROT_DIR==="ccw"){ rotCtx.translate(0,vw); rotCtx.rotate(-Math.PI/2); }
+  else               { rotCtx.translate(vh,0); rotCtx.rotate( Math.PI/2); }
+  rotCtx.drawImage(v,0,0);
+  rotCtx.restore();
+  return rotCanvas;
+}
+const srcW=x=>x.videoWidth||x.width, srcH=x=>x.videoHeight||x.height;
 const cropCanvas=document.createElement("canvas");
 cropCanvas.width=NET_IN; cropCanvas.height=NET_IN;
 const cropCtx=cropCanvas.getContext("2d",{willReadFrequently:true});
 
-function extractCrops(v, cx, cy){   // fast: canvas work only, no inference
-  const vw=v.videoWidth, vh=v.videoHeight, C=Math.round(Math.min(vw,vh)*CROP_FRAC);
+function extractCrops(v0, cx, cy){   // fast: canvas work only, no inference
+  const v=frameSource(v0);
+  const vw=srcW(v), vh=srcH(v), C=Math.round(Math.min(vw,vh)*CROP_FRAC);
   const offs=CROP_OFFS;
   const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
   offs.forEach(([ox,oy],k)=>{
@@ -368,11 +386,11 @@ function render(){
   const com=cs.filter(c=>c.card).length;
   const v_=$("v");
   const slow = infN>5 && (infMs/infN)>800;
-  const portrait = v_.videoHeight>v_.videoWidth;
+  const portrait = false;  // portrait streams are auto-rotated (frameSource)
   const oneThread = typeof ort!=="undefined" && ort.env.wasm.numThreads<=1;
   const warn = (oneThread?"⚠️ 1-THREAD MODE — close and reopen this tab (not a hard refresh)  ":"")
              + (slow&&!oneThread?"⚠️ PHONE SLOW (hot or low battery — reads will be missed)  ":"")
-             + (portrait?"⚠️ HOLD PHONE LANDSCAPE  ":"");
+             + (v_.videoHeight>v_.videoWidth?"↻ portrait stream auto-rotated ("+ROT_DIR+")  ":"");
   $("stats").textContent=warn+`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
     `scans ${scanN} (${scanFps.toFixed(1)}/s) | crops ${NCROPS} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
     `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} z ${((lastFrac-(base||0))/Math.max(Math.sqrt(Math.max(varInk,1e-12)),1e-6)).toFixed(1)} ${inEvent?"EVENT":""}`;
@@ -630,7 +648,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v27 (model v15, anti-attractor, order-refine) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v28 (model v15, anti-attractor, order-refine, auto-rotate) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
