@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v24</title>
+<title>deal bench page-v25</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -115,6 +115,7 @@ const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,800
 let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
 let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
+let frameReads=[];   // {t, cls, conf} per classified frame — for order refinement at Stop
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
 let scanT0=0, scanFps=0;   // achieved scan rate — low means the camera is being starved
 
@@ -312,6 +313,7 @@ async function processPending(){
       const r=await infer(p.data);
       if(r.neg-r.conf<NEG_MARGIN){
         results.push({t:p.t,cls:r.cls,conf:r.conf});
+        if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
         for(let i=0;i<52;i++) acc[i]+=r.vec[i];   // evidence for the final pass
         accN++;
       }
@@ -436,7 +438,7 @@ $("start").onclick=async()=>{
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
     base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
-    eventVecs=[]; finalCommits=null;
+    eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
     replayLoop();
     return;
@@ -532,6 +534,15 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   if(eventVecs.length){
     const t0=performance.now();
     finalCommits=assignCommits(eventVecs);
+    const committed=finalCommits.filter(c=>c.card);
+    for(const c of committed){
+      const near=frameReads.filter(r=>CODES[r.cls]===c.card && Math.abs(r.t-c.t)<=3000);
+      if(near.length){
+        const ts=near.map(r=>r.t).sort((x,y)=>x-y);
+        c.t=ts[Math.floor(ts.length/2)];    // windowed median sighting time
+      }
+    }
+    finalCommits.sort((a,b)=>(a.t)-(b.t));
     const com=finalCommits.filter(c=>c.card).length;
     log(`assignment: ${eventVecs.length} events -> ${com} committed `+
         `(${(performance.now()-t0).toFixed(0)}ms)`);
@@ -603,7 +614,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v24 (model v15, anti-attractor) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v25 (model v15, anti-attractor, order-refine) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
