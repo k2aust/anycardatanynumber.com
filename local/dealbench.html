@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v30</title>
+<title>deal bench page-v31</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -128,6 +128,30 @@ let frameReads=[];   // {t, cls, conf} per classified frame — for order refine
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
 let scanT0=0, scanFps=0;   // achieved scan rate — low means the camera is being starved
 
+// ---- room calibration (2s on Start) --------------------------------------
+// Learns the room's STATIC dark clutter (fixtures, wallpaper pattern, a face
+// at the frame edge) and subtracts it from the ink signal — the live port of
+// extract_holds.static_ink_mask, which solved the chandelier room offline.
+// Without it, busy rooms inflate the trigger baseline ~16x and the crops aim
+// at furniture instead of cards.
+let staticMask=null, CAL={active:false,until:0,counts:null,n:0,dims:""};
+function calStart(t){ staticMask=null; CAL={active:true,until:t+2000,counts:null,n:0,dims:""}; }
+function calAccum(mask,w,h){
+  const key=w+"x"+h;
+  if(!CAL.counts||CAL.dims!==key){ CAL.counts=new Float32Array(w*h); CAL.dims=key; CAL.n=0; }
+  for(let i=0;i<mask.length;i++) CAL.counts[i]+=mask[i];
+  CAL.n++;
+}
+function calFinish(){
+  CAL.active=false;
+  if(!CAL.counts||CAL.n<8) { log("calibration skipped (too few frames)"); return; }
+  staticMask=new Uint8Array(CAL.counts.length);
+  let on=0;
+  for(let i=0;i<CAL.counts.length;i++){ if(CAL.counts[i]/CAL.n>0.6){ staticMask[i]=1; on++; } }
+  const pct=(on/staticMask.length*100);
+  log("room calibrated — static clutter masked: "+pct.toFixed(1)+"%"+
+      (pct>15?"  ⚠️ busy background: reposition if reads are poor":""));
+}
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
   const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
   return v0=>{
@@ -181,6 +205,9 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
       const i=y*w+x;
       op[i]=(er[i]||(x&&er[i-1])||(y&&er[i-w])||(x&&y&&er[i-w-1]))?1:0;
     }
+    if(CAL.active) calAccum(op,w,h);
+    else if(staticMask && staticMask.length===n)
+      for(let i=0;i<n;i++) if(staticMask[i]) op[i]=0;
     let ink=0, sx=0, sy=0, cnt=0;
     for(let i=0;i<n;i++) if(op[i]){ ink++; sx+=i%w; sy+=Math.floor(i/w); cnt++; }
     const frac=ink/n;
@@ -413,6 +440,11 @@ function scoreFinal(){
 
 let replayMode=false, eventBuf=[];
 async function step(v, tMs){
+  if(CAL.active){
+    feats(v);                      // accumulates the mask, no events yet
+    if(tMs>=CAL.until){ calFinish(); base=null; varInk=0; }
+    return;
+  }
   scanN++;
   if(!scanT0) scanT0=tMs; else if(tMs>scanT0) scanFps=scanN*1000/(tMs-scanT0);
   const {frac,cx,cy}=feats(v);
@@ -522,7 +554,8 @@ $("start").onclick=async()=>{
   base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
-  log(SCAN_ON ? "running — deal when ready"
+  if(SCAN_ON) calStart(performance.now());
+  log(SCAN_ON ? "calibrating room (2s) — keep the dealing area clear…"
               : "CAPTURE-ONLY mode: recording, no live reading. Press Rec, deal, then Stop.");
   // Watchdog: if no frame has been scanned after 4s, say why rather than
   // sitting there looking frozen.
@@ -667,7 +700,7 @@ let EP="?";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v29 (model v17, anti-attractor, order-refine, auto-rotate) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v31 (model v17, room-calib, anti-attractor, order-refine, auto-rotate) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
