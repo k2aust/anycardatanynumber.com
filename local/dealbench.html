@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v13</title>
+<title>deal bench v14</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -396,7 +396,9 @@ async function replayLoop(){       // deterministic seek-driven replay
 }
 
 $("start").onclick=async()=>{
-  if(!sess){ log("model not ready yet"); return; }
+  log("▶ start pressed");
+  if(!sess){ log("model not ready yet — wait for 'model loaded ✓' then press again"); return; }
+  try{
   const qs=new URLSearchParams(location.search), replay=qs.get("replay");
   if(replay){                       // debug: seek-driven replay of a video file
     replayMode=true;
@@ -414,9 +416,15 @@ $("start").onclick=async()=>{
       await screen.orientation.lock("landscape");
       log("landscape locked");
     }catch(e){ log("landscape lock unavailable: "+e.message); }
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
-      width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
-      frameRate:{ideal:60}},audio:false});
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
+        width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
+        frameRate:{ideal:60}},audio:false});
+    }catch(e){
+      // Don't die silently if the phone refuses these constraints — retry bare.
+      log("camera constraints refused ("+e.name+"), retrying basic…");
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
+    }
     const tr0=stream.getVideoTracks()[0];
     try{ const cp=tr0.getCapabilities();
          if(cp.zoom) await tr0.applyConstraints({advanced:[{zoom:cp.zoom.min}]});
@@ -434,9 +442,15 @@ $("start").onclick=async()=>{
     }catch(e){}
   }
   base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
-    eventVecs=[]; finalCommits=null;
+  eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
+  log("running — deal when ready");
   loop();
+  }catch(e){
+    // A silent async rejection here is why Start looked dead: no error, no log.
+    log("START FAILED: "+(e&&e.name)+" — "+(e&&e.message));
+    running=false; $("start").classList.remove("on");
+  }
 };
 const EXPS=[["auto",null],["1/120",83],["1/250",40],["1/500",20]];
 let expIdx=0;
@@ -500,7 +514,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH v13 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH v14 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
