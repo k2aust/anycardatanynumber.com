@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v18</title>
+<title>deal bench page-v19</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -90,6 +90,9 @@ const ALL_OFFS=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16],
 // frames = 123/8 — frames matter more than crops. ?crops=9 spends ~1.8x and
 // scores 142/4, at the cost of the queue draining for ~1-2 min after Stop.
 const NCROPS=+(new URLSearchParams(location.search).get("crops")||5);
+// ?scan=0 -> record only, never classify. Inference starves the camera
+// pipeline on this phone; a clean recording is worth more than a live read.
+const SCAN_ON=(new URLSearchParams(location.search).get("scan")||"1")!=="0";
 const CROP_OFFS=ALL_OFFS.slice(0,NCROPS);
 // Commit gates, re-swept on cached evidence AT THIS CROP COUNT (they are not
 // transferable between budgets — fewer crops lower the vector magnitudes).
@@ -391,7 +394,7 @@ async function drain(){ while(procBusy||pending.length) await new Promise(r=>set
 async function loop(){
   const v=$("v");
   if(!running) return;
-  if(v.readyState>=2) await step(v, performance.now());
+  if(SCAN_ON && v.readyState>=2) await step(v, performance.now());
   requestAnimationFrame(loop);
 }
 async function replayLoop(){       // deterministic seek-driven replay
@@ -466,7 +469,8 @@ $("start").onclick=async()=>{
   base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
-  log("running — deal when ready");
+  log(SCAN_ON ? "running — deal when ready"
+              : "CAPTURE-ONLY mode: recording, no live reading. Press Rec, deal, then Stop.");
   // Watchdog: if no frame has been scanned after 4s, say why rather than
   // sitting there looking frozen.
   setTimeout(()=>{
@@ -545,7 +549,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v18 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v19 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
