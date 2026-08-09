@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench v14</title>
+<title>deal bench page-v15</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -411,20 +411,27 @@ $("start").onclick=async()=>{
     replayLoop();
     return;
   } else {
+    // CAMERA FIRST, THEN FULLSCREEN. Going fullscreen first can hide or suppress
+    // Chrome's camera permission prompt on Android, so the await never settles
+    // and Start looks hung after "start pressed" with no error.
+    log("requesting camera…");
+    const nag=setTimeout(()=>log("still waiting — look for a camera permission prompt, or check the padlock in the address bar"),5000);
+    try{
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
+          width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
+          frameRate:{ideal:60}},audio:false});
+      }catch(e){
+        log("camera constraints refused ("+e.name+"), retrying basic…");
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
+      }
+    } finally { clearTimeout(nag); }
+    log("camera granted ✓");
     try{                                   // force landscape like the training footage
       await document.documentElement.requestFullscreen();
       await screen.orientation.lock("landscape");
       log("landscape locked");
     }catch(e){ log("landscape lock unavailable: "+e.message); }
-    try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
-        width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
-        frameRate:{ideal:60}},audio:false});
-    }catch(e){
-      // Don't die silently if the phone refuses these constraints — retry bare.
-      log("camera constraints refused ("+e.name+"), retrying basic…");
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
-    }
     const tr0=stream.getVideoTracks()[0];
     try{ const cp=tr0.getCapabilities();
          if(cp.zoom) await tr0.applyConstraints({advanced:[{zoom:cp.zoom.min}]});
@@ -514,7 +521,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH v14 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v15 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
