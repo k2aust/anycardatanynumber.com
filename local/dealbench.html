@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v15</title>
+<title>deal bench page-v16</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -441,6 +441,10 @@ $("start").onclick=async()=>{
     const st=tr0.getSettings();
     log("stream "+st.width+"x"+st.height+" @"+st.frameRate+"fps");
     $("v").srcObject=stream;
+    // Force playback. If the element never reaches readyState>=2 the scan loop
+    // silently spins with no frames — which looks exactly like "Start did nothing".
+    try{ await $("v").play(); log("video playing"); }
+    catch(e){ log("video play blocked: "+e.name+" — "+e.message); }
     try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
     const track=stream.getVideoTracks()[0];
     log("camera: "+JSON.stringify(track.getSettings()));
@@ -452,6 +456,15 @@ $("start").onclick=async()=>{
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   log("running — deal when ready");
+  // Watchdog: if no frame has been scanned after 4s, say why rather than
+  // sitting there looking frozen.
+  setTimeout(()=>{
+    if(running && scanN===0){
+      const v=$("v");
+      log("NO FRAMES after 4s — readyState "+v.readyState+", size "+v.videoWidth+"x"+v.videoHeight
+          +(v.paused?" , video is PAUSED":"")+". Try reloading; if it persists, tell Claude this line.");
+    }
+  },4000);
   loop();
   }catch(e){
     // A silent async rejection here is why Start looked dead: no error, no log.
@@ -521,7 +534,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v15 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v16 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
