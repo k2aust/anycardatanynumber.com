@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v17</title>
+<title>deal bench page-v18</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -111,6 +111,7 @@ let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChun
 let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT=0;
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
+let scanT0=0, scanFps=0;   // achieved scan rate — low means the camera is being starved
 
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
   const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
@@ -335,7 +336,7 @@ function render(){
     : `<span class="u">·?·</span>`).join(" ");
   const com=cs.filter(c=>c.card).length;
   $("stats").textContent=`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
-    `scans ${scanN} | crops ${NCROPS} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
+    `scans ${scanN} (${scanFps.toFixed(1)}/s) | crops ${NCROPS} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
     `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} z ${((lastFrac-(base||0))/Math.max(Math.sqrt(Math.max(varInk,1e-12)),1e-6)).toFixed(1)} ${inEvent?"EVENT":""}`;
 }
 
@@ -357,6 +358,7 @@ function scoreFinal(){
 let replayMode=false, eventBuf=[];
 async function step(v, tMs){
   scanN++;
+  if(!scanT0) scanT0=tMs; else if(tMs>scanT0) scanFps=scanN*1000/(tMs-scanT0);
   const {frac,cx,cy}=feats(v);
   lastFrac=frac;
   if(scanN%20===0) render();   // keep live ink/base readout fresh
@@ -428,7 +430,7 @@ $("start").onclick=async()=>{
       try{
         stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
           width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
-          frameRate:{ideal:60}},audio:false});
+          frameRate:{ideal:30}},audio:false});
       }catch(e){
         log("camera constraints refused ("+e.name+"), retrying basic…");
         stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
@@ -521,7 +523,7 @@ $("rec").onclick=()=>{
   }
   if(!stream){ log("start the camera first, then Rec"); return; }
   recChunks=[];
-  recorder=new MediaRecorder(stream,{mimeType:"video/webm;codecs=vp8",videoBitsPerSecond:8_000_000});
+  recorder=new MediaRecorder(stream,{mimeType:"video/webm;codecs=vp8",videoBitsPerSecond:2_500_000});
   recorder.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
   recorder.onstop=()=>{
     const blob=new Blob(recChunks,{type:"video/webm"});
@@ -543,7 +545,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v17 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v18 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
