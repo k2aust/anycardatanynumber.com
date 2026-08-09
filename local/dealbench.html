@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v21</title>
+<title>deal bench page-v22</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -41,6 +41,7 @@
   </select>
   <button id="dl">⇩ Session</button>
   <button id="rec">⏺ Rec</button>
+  <button id="mode">Mode: live read</button>
   <button id="exp">Exp: auto</button>
   <video id="v" autoplay playsinline muted></video>
 </div>
@@ -92,7 +93,7 @@ const ALL_OFFS=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16],
 const NCROPS=+(new URLSearchParams(location.search).get("crops")||5);
 // ?scan=0 -> record only, never classify. Inference starves the camera
 // pipeline on this phone; a clean recording is worth more than a live read.
-const SCAN_ON=(new URLSearchParams(location.search).get("scan")||"1")!=="0";
+let SCAN_ON=(new URLSearchParams(location.search).get("scan")||"1")!=="0";
 const CROP_OFFS=ALL_OFFS.slice(0,NCROPS);
 // Commit gates, re-swept on cached evidence AT THIS CROP COUNT (they are not
 // transferable between budgets — fewer crops lower the vector magnitudes).
@@ -521,6 +522,13 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   }
   render(); scoreFinal(); };
 $("fill").onclick=()=>document.body.classList.toggle("fill");
+$("mode").onclick=()=>{
+  SCAN_ON=!SCAN_ON;
+  $("mode").textContent="Mode: "+(SCAN_ON?"live read":"RECORD ONLY");
+  $("mode").classList.toggle("on",!SCAN_ON);
+  log(SCAN_ON ? "live read ON — the phone reads cards while you deal"
+              : "RECORD ONLY — no reading, so the video records cleanly");
+};
 $("rec").onclick=async()=>{
   if(recorder && recorder.state==="recording"){
     recorder.stop(); $("rec").classList.remove("on"); return;
@@ -571,7 +579,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v21 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v22 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
