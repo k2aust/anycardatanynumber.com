@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v25</title>
+<title>deal bench page-v26</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -357,7 +357,12 @@ function render(){
     ? `<span class="${"HD".includes(c.card.slice(-1))?"red":""}">${pretty(c.card)}</span>`
     : `<span class="u">·?·</span>`).join(" ");
   const com=cs.filter(c=>c.card).length;
-  $("stats").textContent=`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
+  const v_=$("v");
+  const slow = infN>5 && (infMs/infN)>800;
+  const portrait = v_.videoHeight>v_.videoWidth;
+  const warn = (slow?"⚠️ PHONE SLOW (hot or low battery — reads will be missed)  ":"")
+             + (portrait?"⚠️ HOLD PHONE LANDSCAPE  ":"");
+  $("stats").textContent=warn+`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
     `scans ${scanN} (${scanFps.toFixed(1)}/s) | crops ${NCROPS} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
     `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} z ${((lastFrac-(base||0))/Math.max(Math.sqrt(Math.max(varInk,1e-12)),1e-6)).toFixed(1)} ${inEvent?"EVENT":""}`;
 }
@@ -614,7 +619,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v25 (model v15, anti-attractor, order-refine) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v26 (model v15, anti-attractor, order-refine) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
