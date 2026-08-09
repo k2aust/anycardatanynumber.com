@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v16</title>
+<title>deal bench page-v17</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -97,6 +97,14 @@ const G={5:[0.0,0.95,0.25], 9:[0.5,0.95,0.25]}[NCROPS]||[0.0,0.95,0.25];
 const MIN_SCORE=G[0], MIN_RATIO=G[1], MIN_MARGIN=G[2];
 
 const $=id=>document.getElementById(id);
+// A promise that never settles cannot be caught by try/catch. Android Chrome's
+// requestFullscreen() can hang (rather than reject) when the user gesture was
+// consumed by the camera prompt — that hung the whole Start path after
+// "camera granted". Nothing optional in startup may block indefinitely.
+const withTimeout=(p,ms,label)=>Promise.race([
+  Promise.resolve(p),
+  new Promise((_,rej)=>setTimeout(()=>rej(new Error(label+" timed out after "+ms+"ms")),ms)),
+]);
 const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,8000);};
 
 let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
@@ -428,10 +436,10 @@ $("start").onclick=async()=>{
     } finally { clearTimeout(nag); }
     log("camera granted ✓");
     try{                                   // force landscape like the training footage
-      await document.documentElement.requestFullscreen();
-      await screen.orientation.lock("landscape");
+      await withTimeout(document.documentElement.requestFullscreen(),1500,"fullscreen");
+      await withTimeout(screen.orientation.lock("landscape"),1500,"orientation lock");
       log("landscape locked");
-    }catch(e){ log("landscape lock unavailable: "+e.message); }
+    }catch(e){ log("landscape lock skipped: "+e.message+" (harmless — hold the phone landscape yourself)"); }
     const tr0=stream.getVideoTracks()[0];
     try{ const cp=tr0.getCapabilities();
          if(cp.zoom) await tr0.applyConstraints({advanced:[{zoom:cp.zoom.min}]});
@@ -445,7 +453,8 @@ $("start").onclick=async()=>{
     // silently spins with no frames — which looks exactly like "Start did nothing".
     try{ await $("v").play(); log("video playing"); }
     catch(e){ log("video play blocked: "+e.name+" — "+e.message); }
-    try{ wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+    try{ wakeLock=await withTimeout(navigator.wakeLock.request("screen"),1500,"wake lock"); }
+    catch(e){ log("wake lock skipped: "+e.message); }
     const track=stream.getVideoTracks()[0];
     log("camera: "+JSON.stringify(track.getSettings()));
     try{ const caps=track.getCapabilities();
@@ -534,7 +543,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v16 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v17 (model v15, adaptive ink, assignment commit) | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
