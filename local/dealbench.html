@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v26</title>
+<title>deal bench page-v27</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -58,14 +58,23 @@
 <script>
 /* Port of livesim.py — causal live deal reader. Same constants. */
 // COOP/COEP via service worker -> multithreaded wasm on GitHub Pages
-if ("serviceWorker" in navigator && !crossOriginIsolated
-    && !sessionStorage.getItem("coiReloaded")) {
-  navigator.serviceWorker.register("coi-sw.js").then(async () => {
-    await navigator.serviceWorker.ready;
-    sessionStorage.setItem("coiReloaded", "1");
-    location.reload();
-  }).catch(()=>{});
-}
+// 4-thread wasm needs crossOriginIsolated, injected by the coi service
+// worker. A HARD REFRESH bypasses service workers, and the old one-shot
+// "coiReloaded" flag then blocked self-repair — leaving the page silently in
+// 1-thread mode: inference ~4x slower (380ms -> ~1500ms), scans collapse, and
+// it looks exactly like a bad model or a slow phone. Retry up to 2 reloads;
+// clear the counter once isolation is achieved.
+if ("serviceWorker" in navigator && !crossOriginIsolated) {
+  const n=+(sessionStorage.getItem("coiTries")||0);
+  if(n<2){
+    navigator.serviceWorker.register("coi-sw.js").then(async () => {
+      await navigator.serviceWorker.ready;
+      sessionStorage.setItem("coiTries", String(n+1));
+      location.reload();
+    }).catch(()=>{});
+  }
+} else if (crossOriginIsolated)
+  sessionStorage.removeItem("coiTries");
 const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 const SEQ = [...RANKS.map(r=>r+"H"), ...RANKS.map(r=>r+"C"),
              ...[...RANKS].reverse().map(r=>r+"D"), ...[...RANKS].reverse().map(r=>r+"S")];
@@ -360,7 +369,9 @@ function render(){
   const v_=$("v");
   const slow = infN>5 && (infMs/infN)>800;
   const portrait = v_.videoHeight>v_.videoWidth;
-  const warn = (slow?"⚠️ PHONE SLOW (hot or low battery — reads will be missed)  ":"")
+  const oneThread = typeof ort!=="undefined" && ort.env.wasm.numThreads<=1;
+  const warn = (oneThread?"⚠️ 1-THREAD MODE — close and reopen this tab (not a hard refresh)  ":"")
+             + (slow&&!oneThread?"⚠️ PHONE SLOW (hot or low battery — reads will be missed)  ":"")
              + (portrait?"⚠️ HOLD PHONE LANDSCAPE  ":"");
   $("stats").textContent=warn+`events ${cs.length} | committed ${com} | unknown ${cs.length-com} | `+
     `scans ${scanN} (${scanFps.toFixed(1)}/s) | crops ${NCROPS} | inf ${infN} avg ${infN?(infMs/infN).toFixed(0):0}ms | `+
@@ -619,7 +630,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v26 (model v15, anti-attractor, order-refine) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v27 (model v15, anti-attractor, order-refine) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
