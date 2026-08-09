@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v19</title>
+<title>deal bench page-v20</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -527,12 +527,34 @@ $("rec").onclick=()=>{
   }
   if(!stream){ log("start the camera first, then Rec"); return; }
   recChunks=[];
-  recorder=new MediaRecorder(stream,{mimeType:"video/webm;codecs=vp8",videoBitsPerSecond:2_500_000});
+  // The camera preview is smooth until recording starts, so the ENCODER is the
+  // bottleneck, not inference: this phone cannot software-encode 1080p VP8 in
+  // real time (~70% duplicate frames). Two mitigations:
+  //   1. drop the camera to 720p while recording (4x less pixel work than 1080p
+  //      is 720p vs 1080p ~ 44%); ?rec=1080 keeps full res if you want it
+  //   2. prefer a codec the device can encode in HARDWARE. H.264 is hardware
+  //      accelerated on essentially every Android phone; VP8/VP9 often are not.
+  const recRes=+(new URLSearchParams(location.search).get("rec")||720);
+  if(recRes<1080){
+    try{ await stream.getVideoTracks()[0].applyConstraints(
+           {width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}});
+         const st2=stream.getVideoTracks()[0].getSettings();
+         log("recording res set to "+st2.width+"x"+st2.height+" @"+st2.frameRate+"fps");
+    }catch(e){ log("could not lower resolution: "+e.message); }
+  }
+  const prefer=["video/mp4;codecs=avc1.42E01E","video/mp4","video/webm;codecs=h264",
+                "video/webm;codecs=vp8","video/webm"];
+  const mime=prefer.find(m=>MediaRecorder.isTypeSupported(m))||"";
+  log("recorder codec: "+(mime||"(browser default)"));
+  recorder=new MediaRecorder(stream, mime?{mimeType:mime,videoBitsPerSecond:2_500_000}
+                                         :{videoBitsPerSecond:2_500_000});
   recorder.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
   recorder.onstop=()=>{
-    const blob=new Blob(recChunks,{type:"video/webm"});
+    const type=recorder.mimeType||"video/webm";
+    const ext=type.includes("mp4")?"mp4":"webm";
+    const blob=new Blob(recChunks,{type});
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-    a.download="dealbench_rec.webm"; a.click();
+    a.download="dealbench_rec."+ext; a.click();
     log("recording saved ("+(blob.size/1e6).toFixed(1)+" MB)");
   };
   recorder.start(); $("rec").classList.add("on"); log("recording…");
@@ -549,7 +571,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v19 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v20 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
