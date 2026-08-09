@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v22</title>
+<title>deal bench page-v23</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -93,6 +93,7 @@ const ALL_OFFS=[[0,0],[-0.16,0],[0.16,0],[0,-0.16],[0,0.16],
 const NCROPS=+(new URLSearchParams(location.search).get("crops")||5);
 // ?scan=0 -> record only, never classify. Inference starves the camera
 // pipeline on this phone; a clean recording is worth more than a live read.
+let scanWasOn=true;
 let SCAN_ON=(new URLSearchParams(location.search).get("scan")||"1")!=="0";
 const CROP_OFFS=ALL_OFFS.slice(0,NCROPS);
 // Commit gates, re-swept on cached evidence AT THIS CROP COUNT (they are not
@@ -433,7 +434,7 @@ $("start").onclick=async()=>{
     try{
       try{
         stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
-          width:{ideal:1920},height:{ideal:1080},aspectRatio:{ideal:16/9},
+          width:{exact:1280},height:{exact:720},
           frameRate:{ideal:30}},audio:false});
       }catch(e){
         log("camera constraints refused ("+e.name+"), retrying basic…");
@@ -531,7 +532,12 @@ $("mode").onclick=()=>{
 };
 $("rec").onclick=async()=>{
   if(recorder && recorder.state==="recording"){
-    recorder.stop(); $("rec").classList.remove("on"); return;
+    recorder.stop(); $("rec").classList.remove("on");
+    SCAN_ON=scanWasOn;
+    $("mode").textContent="Mode: "+(SCAN_ON?"live read":"RECORD ONLY");
+    $("mode").classList.toggle("on",!SCAN_ON);
+    log("recording stopped — reading "+(SCAN_ON?"resumed":"still off"));
+    return;
   }
   if(!stream){ log("start the camera first, then Rec"); return; }
   recChunks=[];
@@ -565,7 +571,10 @@ $("rec").onclick=async()=>{
     a.download="dealbench_rec."+ext; a.click();
     log("recording saved ("+(blob.size/1e6).toFixed(1)+" MB)");
   };
-  recorder.start(); $("rec").classList.add("on"); log("recording…");
+  scanWasOn=SCAN_ON; SCAN_ON=false;
+  $("mode").textContent="Mode: RECORD ONLY (auto)"; $("mode").classList.add("on");
+  recorder.start(); $("rec").classList.add("on");
+  log("recording… — reading paused automatically (this phone cannot do both)");
 };
 $("dl").onclick=()=>{
   const blob=new Blob([JSON.stringify({when:new Date().toISOString(),
@@ -579,7 +588,7 @@ $("dl").onclick=()=>{
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     sess=await ort.InferenceSession.create("dealread_v14.onnx?v=15",
       {executionProviders:["wasm"]});
-    log("BENCH page-v22 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
+    log("BENCH page-v23 (model v15) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ (44MB fp32, wasm "+ort.env.wasm.numThreads+" threads)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
