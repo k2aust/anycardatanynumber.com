@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v32</title>
+<title>deal bench page-v33</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -670,13 +670,38 @@ $("rec").onclick=async()=>{
   log("recording… — reading paused automatically (this phone cannot do both)");
 };
 $("dl").onclick=()=>{
-  const blob=new Blob([JSON.stringify({when:new Date().toISOString(),
-    truth:$("truth").value, commits:uniq(commits)},null,1)],{type:"application/json"});
+  // Full run report — replaces sending screenshots. Everything needed to
+  // diagnose a run without the video: engine, timings, calibration, trigger
+  // stats, the committed sequence, and the scored result.
+  const cs=finalCommits||uniq(commits);
+  const com=cs.filter(c=>c.card);
+  const v_=$("v");
+  const rep={
+    when:new Date().toISOString(),
+    page:document.title, model:MODEL_ID,
+    engine:EP, crops:NCROPS, gates:G,
+    stream:{w:v_.videoWidth,h:v_.videoHeight,
+            rotated:v_.videoHeight>v_.videoWidth?ROT_DIR:"none"},
+    calibration:{masked_pct: staticMask
+      ? +(staticMask.reduce((a,b)=>a+b,0)/staticMask.length*100).toFixed(2) : null},
+    perf:{scans:scanN, scans_per_s:+scanFps.toFixed(1),
+          inferences:infN, avg_ms:infN?+(infMs/infN).toFixed(0):null},
+    trigger:{ink:+lastFrac.toFixed(4), base:+(base||0).toFixed(4)},
+    truth:$("truth").value,
+    score:$("score").textContent,
+    events:cs.length, committed:com.length, unknown:cs.length-com.length,
+    sequence:com.map(c=>c.card),
+    commits:cs,
+    log:$("log").textContent.split("\n").slice(0,40),
+  };
+  const blob=new Blob([JSON.stringify(rep,null,1)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-  a.download="dealbench_session.json"; a.click();
+  a.download="dealbench_session_"+new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")+".json";
+  a.click();
+  log("session report saved — upload this file instead of a screenshot");
 };
 
-let EP="?";
+let EP="?"; let MODEL_ID="";
 (async()=>{
   try{
     // ORT 1.27 webgpu bundle. GPU inference is the single biggest live-mode
@@ -684,7 +709,7 @@ let EP="?";
     // device supports WebGPU. Explicit graceful fallback to wasm otherwise.
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     ort.env.wasm.wasmPaths="./";
-    const MODEL="dealread_v14.onnx?v=19";
+    const MODEL="dealread_v14.onnx?v=19"; MODEL_ID=MODEL;
     if("gpu" in navigator){
       try{
         sess=await ort.InferenceSession.create(MODEL,{executionProviders:["webgpu"]});
@@ -700,7 +725,7 @@ let EP="?";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v31 (model v19, room-calib, anti-attractor, order-refine, auto-rotate) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v31 (model v19, room-calib, session-report, anti-attractor, order-refine, auto-rotate) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
