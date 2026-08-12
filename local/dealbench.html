@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v37</title>
+<title>deal bench page-v38</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -586,13 +586,21 @@ $("start").onclick=async()=>{
     log("requesting camera…");
     const nag=setTimeout(()=>log("still waiting — look for a camera permission prompt, or check the padlock in the address bar"),5000);
     try{
+      // facingMode MUST be exact. A bare "user" is only a soft preference,
+      // while the exact width/height are hard requirements — so when the
+      // front camera cannot deliver exact 1280x720 (or another camera ranks
+      // better on fitness), Chrome silently satisfies the hard constraints
+      // with the BACK camera. Observed on the phone 2026-08-12. With
+      // {exact:"user"} the facing is non-negotiable and resolution degrades
+      // instead, which is the right trade: the whole rig assumes the front
+      // camera.
       try{
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"user"},
           width:{exact:1280},height:{exact:720},
           frameRate:{ideal:30}},audio:false});
       }catch(e){
-        log("camera constraints refused ("+e.name+"), retrying basic…");
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
+        log("camera constraints refused ("+e.name+"), retrying front-cam only…");
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"user"}},audio:false});
       }
     } finally { clearTimeout(nag); }
     log("camera granted ✓");
@@ -960,7 +968,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v37 (model v20, skin-masked trigger, pip-ranked frames, robust z, dual-truth score) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v38 (model v20, front-cam pinned, pip-ranked frames, robust z, dual-truth score) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
