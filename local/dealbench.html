@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v33</title>
+<title>deal bench page-v35</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -43,6 +43,7 @@
   <button id="rec">⏺ Rec</button>
   <button id="mode">Mode: live read</button>
   <button id="exp">Exp: auto</button>
+  <button id="focus">Focus: auto</button>
   <video id="v" autoplay playsinline muted></video>
 </div>
 
@@ -550,6 +551,15 @@ $("start").onclick=async()=>{
     try{ const caps=track.getCapabilities();
          if(caps.exposureTime) log("exposureTime supported: "+JSON.stringify(caps.exposureTime));
     }catch(e){}
+    // Re-pin a calibrated focus on every run. The card is at a FIXED distance
+    // every pass, so once swept there is never a reason to let the lens hunt —
+    // and this must not be tied to the Exp button, or an auto-exposure run
+    // silently throws the calibration away.
+    if(FOCUS!==null) await applyFocus(track);
+    // Re-apply the remembered shutter too, or a remembered setting
+    // that never reaches the camera is worse than none: the button
+    // would read 1/250 while the sensor sat on auto.
+    if(expIdx!==0) await applyExposure(track, expIdx);
   }
   base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
@@ -574,25 +584,159 @@ $("start").onclick=async()=>{
   }
 };
 const EXPS=[["auto",null],["1/120",83],["1/250",40],["1/500",20]];
-let expIdx=0;
-$("exp").onclick=async()=>{
-  if(!stream) return;
-  const track=stream.getVideoTracks()[0];
-  expIdx=(expIdx+1)%EXPS.length;
-  const [label,val]=EXPS[expIdx];
+// Remembered across sessions, like focus. This used to reset to auto on every
+// page load, so the setting survived only as long as you remembered to press
+// it — and on 2026-08-12 five clips were shot on auto because it was
+// forgotten, four of which were unusable. A setting you must re-enter every
+// session is a setting that will be missing from the footage you care about.
+const EXP_KEY="dealbench.expIdx";
+let expIdx=(()=>{ const s=+(localStorage.getItem(EXP_KEY)||0);
+                  return (s>=0 && s<4) ? s : 0; })();
+
+// ---- manual focus -------------------------------------------------------
+// The card sits at the SAME distance every pass — it is held up to the lens,
+// not moved through a range — so focus is a constant to be measured once per
+// rig, not something to leave hunting. Card size in the footage puts that
+// distance at roughly 0.19-0.25 m, which is right at this lens's near limit
+// (focusDistance.min = 0.20), so the old hard-coded 0.15 was BELOW the
+// supported range: an unsatisfiable advanced constraint is silently dropped,
+// which is why every session logged focusMode "continuous" and focusDistance
+// 0 despite this code. Never hard-code it again — clamp to caps, and prefer
+// a swept value (Focus button) stored per device.
+const FOCUS_KEY="dealbench.focusDistance";
+let FOCUS=(()=>{ const q=new URLSearchParams(location.search).get("focus");
+                 if(q) return +q;
+                 const s=localStorage.getItem(FOCUS_KEY);
+                 return s===null?null:+s; })();
+
+async function applyFocus(track, d){
+  try{
+    const cp=track.getCapabilities();
+    if(!cp.focusDistance) return log("focus: device exposes no focusDistance");
+    const want=(d!==undefined?d:FOCUS);
+    // No calibration yet -> the near limit, the closest this lens can lock,
+    // which the measured card distance sits at or just inside.
+    const v=Math.max(cp.focusDistance.min,
+                     Math.min(cp.focusDistance.max,
+                              want===null?cp.focusDistance.min:want));
+    await track.applyConstraints({advanced:[{focusMode:"manual", focusDistance:v}]});
+    const got=track.getSettings().focusDistance;
+    if(d===undefined)
+      log("focus: manual "+v.toFixed(2)+"m (device reports "+got+
+          (want===null?", uncalibrated — run Focus":"")+")");
+    return got;
+  }catch(e){ log("focus not applied: "+e); }
+}
+
+// Sharpness of the CARD only, not the frame. A whole-frame measure peaks
+// wherever the background happens to be sharp — and the background is metres
+// away, so it would calibrate focus to the ceiling. Measure in a model-sized
+// box on the ink centroid instead.
+// Two focus measures, because no single one does both jobs (measured on
+// synthetic pip fields, 0-30px blur):
+//   grad: 7.07 -> 1.72, smooth and monotonic the whole way. Something to
+//         hill-climb when the lens is nowhere near focus.
+//   lap:  753 -> 7.7 by 2px and flat 0 past 5px. Useless for searching,
+//         unbeatable for picking the exact winner once you are close.
+// Coarse pass uses grad, fine pass uses lap.
+const shpCanvas=document.createElement("canvas");
+const shpCtx=shpCanvas.getContext("2d",{willReadFrequently:true});
+function cardSharpness(v0, cx, cy, mode){
+  const v=frameSource(v0), vw=srcW(v), vh=srcH(v);
+  const C=Math.round(Math.min(vw,vh)*CROP_FRAC), N=192;
+  let x0=Math.round(cx*vw-C/2), y0=Math.round(cy*vh-C/2);
+  x0=Math.max(0,Math.min(vw-C,x0)); y0=Math.max(0,Math.min(vh-C,y0));
+  shpCanvas.width=N; shpCanvas.height=N;
+  shpCtx.drawImage(v,x0,y0,C,C,0,0,N,N);
+  const d=shpCtx.getImageData(0,0,N,N).data;
+  const g=new Float32Array(N*N);
+  for(let i=0;i<N*N;i++) g[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+  let mean=0; for(let i=0;i<N*N;i++) mean+=g[i]; mean/=N*N;
+  let acc=0;
+  for(let y=1;y<N-1;y++) for(let x=1;x<N-1;x++){
+    const i=y*N+x;
+    if(mode==="lap"){ const l=4*g[i]-g[i-1]-g[i+1]-g[i-N]-g[i+N]; acc+=l*l; }
+    else{ acc+=Math.abs(g[i+1]-g[i-1])+Math.abs(g[i+N]-g[i-N]); }
+  }
+  // normalise by brightness so a dim frame does not read as blurrier
+  return acc/(N*N)/Math.max(mean,1)*100;
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function focusSweep(){
+  if(!stream) return log("focus sweep: start the camera first");
+  const track=stream.getVideoTracks()[0], cp=track.getCapabilities();
+  if(!cp.focusDistance) return log("focus sweep: device exposes no focusDistance");
+  const v=$("v"), lo=cp.focusDistance.min, hi=cp.focusDistance.max;
+  log("focus sweep: hold ONE card still where you normally show it…");
+  await sleep(1500);
+  let sawCard=false;
+  const measure=async (d,mode)=>{
+    await applyFocus(track,d);
+    await sleep(420);                        // let the lens settle
+    let best=0;
+    for(let k=0;k<5;k++){
+      const f=feats(v);                       // gives the ink centroid
+      if(f.frac>0.002){ sawCard=true;
+        best=Math.max(best,cardSharpness(v,f.cx,f.cy,mode)); }
+      await sleep(70);
+    }
+    return best;
+  };
+  const scan=async (ds,mode)=>{
+    const out=[];
+    for(const d of ds){ const s=await measure(d,mode); out.push([d,s]);
+      log("  focus "+d.toFixed(2)+"m -> "+mode+" "+s.toFixed(2)); }
+    return out;
+  };
+  const coarse=[]; for(let i=0;i<10;i++) coarse.push(lo+(hi-lo)*i/9);
+  let r=(await scan(coarse,"grad")).sort((a,b)=>b[1]-a[1]);
+  // Distinguish "no card in view" from "card in view, nothing in focus" —
+  // they need opposite responses from Kevin and used to look identical.
+  if(!sawCard) return log("focus sweep: no card seen — hold one in view and retry");
+  if(r[0][1]<=0) return log("focus sweep: card seen but no focus peak — retry with more light");
+  const c=r[0][0], step=(hi-lo)/9;
+  const fine=[c-step*0.66,c-step*0.33,c,c+step*0.33,c+step*0.66]
+             .filter(d=>d>=lo&&d<=hi);
+  let r2=(await scan(fine,"lap")).sort((a,b)=>b[1]-a[1]);
+  if(r2[0][1]<=0) r2=[[c,0]];                // lap flat -> keep the coarse pick
+  FOCUS=r2[0][0];
+  localStorage.setItem(FOCUS_KEY,String(FOCUS));
+  await applyFocus(track);
+  $("focus").textContent="Focus: "+FOCUS.toFixed(2)+"m";
+  log("focus sweep: best "+FOCUS.toFixed(2)+"m (sharpness "+r2[0][1].toFixed(1)+
+      ") — saved, reused on every run from now on");
+}
+$("focus").onclick=focusSweep;
+if(FOCUS!==null) $("focus").textContent="Focus: "+(+FOCUS).toFixed(2)+"m";
+$("exp").textContent="Exp: "+EXPS[expIdx][0];
+async function applyExposure(track, idx){
+  const [label,val]=EXPS[idx];
   try{
     if(val===null){
       await track.applyConstraints({advanced:[{exposureMode:"continuous"}]});
     }else{
       await track.applyConstraints({advanced:[{exposureMode:"manual", exposureTime:val}]});
+      // ISO headroom. The old cap was 800, which is ~a stop short of what
+      // 1/500 needs in a dim room (auto picked 33ms @ ISO100 there, and
+      // 33ms is a whole frame at 30fps — that IS the motion smear). The
+      // phone reports iso.max 19393; 3200 is as far as this sensor stays
+      // usable. Still clamped to whatever the device actually offers.
       try{ const cp=track.getCapabilities();
-           if(cp.iso) await track.applyConstraints({advanced:[{iso:Math.min(cp.iso.max,800)}]});
+           if(cp.iso) await track.applyConstraints({advanced:[{iso:Math.min(cp.iso.max,3200)}]});
       }catch(e){}
-      try{ await track.applyConstraints({advanced:[{focusMode:"manual", focusDistance:0.15}]}); }catch(e){}
+      await applyFocus(track);
     }
     $("exp").textContent="Exp: "+label;
     log("exposure set: "+label+" -> "+JSON.stringify({e:track.getSettings().exposureTime,f:track.getSettings().focusDistance}));
   }catch(e){ log("exposure not applied: "+e); }
+}
+
+$("exp").onclick=async()=>{
+  if(!stream) return;
+  expIdx=(expIdx+1)%EXPS.length;
+  localStorage.setItem(EXP_KEY, String(expIdx));
+  await applyExposure(stream.getVideoTracks()[0], expIdx);
 };
 $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   try{ screen.orientation.unlock(); document.exitFullscreen(); }catch(e){}
@@ -684,6 +828,14 @@ $("dl").onclick=()=>{
             rotated:v_.videoHeight>v_.videoWidth?ROT_DIR:"none"},
     calibration:{masked_pct: staticMask
       ? +(staticMask.reduce((a,b)=>a+b,0)/staticMask.length*100).toFixed(2) : null},
+    // Exposure/focus belong in the report: motion smear is set by shutter
+    // time, not by how fast the deal is, and a clip is only comparable to
+    // another clip shot the same way. Both earlier sessions ran at auto
+    // (25ms and 33ms) and nothing recorded it — it had to be inferred.
+    camera:(()=>{ try{ const s=stream.getVideoTracks()[0].getSettings();
+      return {exposureMode:s.exposureMode, exposureTime:s.exposureTime,
+              iso:s.iso, focusMode:s.focusMode, focusDistance:s.focusDistance,
+              exp_label:EXPS[expIdx][0]}; }catch(e){ return null; } })(),
     perf:{scans:scanN, scans_per_s:+scanFps.toFixed(1),
           inferences:infN, avg_ms:infN?+(infMs/infN).toFixed(0):null},
     trigger:{ink:+lastFrac.toFixed(4), base:+(base||0).toFixed(4)},
@@ -709,7 +861,7 @@ let EP="?"; let MODEL_ID="";
     // device supports WebGPU. Explicit graceful fallback to wasm otherwise.
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     ort.env.wasm.wasmPaths="./";
-    const MODEL="dealread_v14.onnx?v=19"; MODEL_ID=MODEL;
+    const MODEL="dealread_v20.onnx?v=20"; MODEL_ID=MODEL;
     if("gpu" in navigator){
       try{
         sess=await ort.InferenceSession.create(MODEL,{executionProviders:["webgpu"]});
@@ -725,7 +877,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v31 (model v19, room-calib, session-report, anti-attractor, order-refine, auto-rotate) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v35 (model v20 cleaned-realset, room-calib, focus-sweep, iso-3200) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
