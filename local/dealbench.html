@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v35</title>
+<title>deal bench page-v36</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -787,10 +787,23 @@ $("rec").onclick=async()=>{
   //      accelerated on essentially every Android phone; VP8/VP9 often are not.
   const recRes=+(new URLSearchParams(location.search).get("rec")||720);
   if(recRes<1080){
-    try{ await stream.getVideoTracks()[0].applyConstraints(
+    try{ const trk=stream.getVideoTracks()[0];
+         await trk.applyConstraints(
            {width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}});
-         const st2=stream.getVideoTracks()[0].getSettings();
+         const st2=trk.getSettings();
          log("recording res set to "+st2.width+"x"+st2.height+" @"+st2.frameRate+"fps");
+         // applyConstraints REPLACES the constraint set, so this resolution
+         // change silently drops the advanced constraints that pinned manual
+         // focus and exposure — the camera reverts to continuous autofocus and
+         // auto exposure at the exact moment recording starts, and then hunts
+         // focus through the whole deal. Every recording made before this fix
+         // was auto-exposure no matter what the Exp button said. Re-pin both
+         // AFTER the resolution change, never before.
+         if(expIdx!==0) await applyExposure(trk, expIdx);
+         if(FOCUS!==null) await applyFocus(trk);
+         const st3=trk.getSettings();
+         log("re-pinned for recording: exposure "+st3.exposureMode+"/"+st3.exposureTime+
+             "  focus "+st3.focusMode+"/"+st3.focusDistance);
     }catch(e){ log("could not lower resolution: "+e.message); }
   }
   const prefer=["video/mp4;codecs=avc1.42E01E","video/mp4","video/webm;codecs=h264",
@@ -877,7 +890,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v35 (model v20 cleaned-realset, room-calib, focus-sweep, iso-3200) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v36 (model v20, focus/exposure survive Rec, focus-sweep, iso-3200) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
