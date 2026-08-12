@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v36</title>
+<title>deal bench page-v37</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -127,7 +127,8 @@ let base=null, inEvent=false, event_=[], eventScans=0, commits=[], lastClassifyT
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
 let frameReads=[];   // {t, cls, conf} per classified frame — for order refinement at Stop
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
-let scanT0=0, scanFps=0;   // achieved scan rate — low means the camera is being starved
+let scanT0=0, scanFps=0, warmN=0;
+const SD_FLOOR=0.0012, WARMUP_SCANS=12;   // achieved scan rate — low means the camera is being starved
 
 // ---- room calibration (2s on Start) --------------------------------------
 // Learns the room's STATIC dark clutter (fixtures, wallpaper pattern, a face
@@ -206,16 +207,54 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
       const i=y*w+x;
       op[i]=(er[i]||(x&&er[i-1])||(y&&er[i-w])||(x&&y&&er[i-w-1]))?1:0;
     }
+    // NO COLOR SKIN MASK HERE, deliberately. It was tried (port of the
+    // offline features_skin) and at this 240px scale it cannot work: red
+    // pips blend into card-white when downscaled, so the CARD reads as skin
+    // (kroom2 card frames scored 0.20 vs arm 0.03 on the skin test) and the
+    // dilation then swallowed every pip — ink went identically 0 and no
+    // event could ever open. Full-res crops are a different regime; do not
+    // re-add a color test at this scale without measuring card-vs-arm
+    // separation first. Arm robustness comes instead from pip-blob frame
+    // ranking below, the NEG class, and the assignment gates.
     if(CAL.active) calAccum(op,w,h);
     else if(staticMask && staticMask.length===n)
       for(let i=0;i<n;i++) if(staticMask[i]) op[i]=0;
-    let ink=0, sx=0, sy=0, cnt=0;
-    for(let i=0;i<n;i++) if(op[i]){ ink++; sx+=i%w; sy+=Math.floor(i/w); cnt++; }
+    // Pip-sized connected blobs: how card-like the frame is, and where the
+    // CARD is. The plain ink centroid is dominated by any large dark mass;
+    // the median of pip-blob centroids points at the face of the card.
+    const lbl=new Int32Array(n); let nb=0;
+    const bxs=[], bys=[], bsz=[];
+    const stack=new Int32Array(n);
+    for(let i=0;i<n;i++){
+      if(!op[i]||lbl[i]) continue;
+      nb++; let sp=0; stack[sp++]=i; lbl[i]=nb;
+      let sz=0, sx2=0, sy2=0;
+      while(sp){
+        const q=stack[--sp], qx=q%w, qy=(q-qx)/w;
+        sz++; sx2+=qx; sy2+=qy;
+        if(qx>0   && op[q-1]&&!lbl[q-1]){ lbl[q-1]=nb; stack[sp++]=q-1; }
+        if(qx<w-1 && op[q+1]&&!lbl[q+1]){ lbl[q+1]=nb; stack[sp++]=q+1; }
+        if(qy>0   && op[q-w]&&!lbl[q-w]){ lbl[q-w]=nb; stack[sp++]=q-w; }
+        if(qy<h-1 && op[q+w]&&!lbl[q+w]){ lbl[q+w]=nb; stack[sp++]=q+w; }
+      }
+      bxs.push(sx2/sz); bys.push(sy2/sz); bsz.push(sz);
+    }
+    let ink=0; for(let i=0;i<n;i++) if(op[i]) ink++;
     const frac=ink/n;
-    const cx=cnt? (x0+sx/cnt)/W : 0.5, cy=cnt? (y0+sy/cnt)/H : 0.5;  // fractional coords
-    return {frac, cx, cy};
+    const px=[], py=[];
+    for(let k=0;k<bsz.length;k++) if(bsz[k]>=2&&bsz[k]<=130){ px.push(bxs[k]); py.push(bys[k]); }
+    const med=a=>{ const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
+    let cx=0.5, cy=0.5;
+    if(px.length){ cx=(x0+med(px))/W; cy=(y0+med(py))/H; }
+    else if(ink>0){
+      let sx=0, sy=0;
+      for(let i=0;i<n;i++) if(op[i]){ sx+=i%w; sy+=Math.floor(i/w); }
+      cx=(x0+sx/ink)/W; cy=(y0+sy/ink)/H;
+    }
+    return {frac, cx, cy, pips:px.length};
   };
 })();
+window._feats=feats;   // debug hook
 
 // ---- portrait-stream normalisation --------------------------------------
 const ROT_DIR=(new URLSearchParams(location.search).get("rot")||"cw");
@@ -360,7 +399,7 @@ async function processPending(){
   if(procBusy) return; procBusy=true;
   while(pending.length){
     const buf=pending.shift();
-    buf.sort((a,b)=>b.ink-a.ink);
+    buf.sort((a,b)=>(b.pips-a.pips)||(b.ink-a.ink));
     const picks=buf.slice(0,KEEP_FRAMES).sort((a,b)=>a.t-b.t);
     const results=[];
     const acc=new Float32Array(52); let accN=0;
@@ -428,15 +467,23 @@ function scoreFinal(){
   const cs=finalCommits||uniq(commits);
   const t=$("truth").value;
   if(t==="none"){ $("score").textContent="(no truth selected)"; return; }
-  const seq=t==="rev"?[...SEQ].reverse():SEQ;
+  // Score BOTH directions and take the better. The deck reverses every
+  // run-through, so consecutive runs alternate NDO / reversed — a dropdown
+  // that must be flipped by hand each run WILL eventually be wrong, and a
+  // wrong direction does not look wrong (the rank sequence is a palindrome).
   const reads=cs.map(c=>c.card);
-  const n=reads.length, m=52, dp=Array.from({length:n+1},()=>new Int16Array(m+1));
-  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++)
-    dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]+(reads[i-1]===seq[j-1]?1:0));
-  const correct=dp[n][m], com=reads.filter(Boolean).length;
-  $("score").textContent=`SCORE: ${correct} correct, ${com-correct} wrong, `+
-    `${n-com} flagged-unknown, ${52-correct} missed`;
-  log(`scored: ${correct}/52 correct, ${com-correct} wrong`);
+  const lcs=seq=>{
+    const n=reads.length, m=52, dp=Array.from({length:n+1},()=>new Int16Array(m+1));
+    for(let i=1;i<=n;i++) for(let j=1;j<=m;j++)
+      dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]+(reads[i-1]===seq[j-1]?1:0));
+    return dp[n][m];
+  };
+  const fwd=lcs(SEQ), rev=lcs([...SEQ].reverse());
+  const correct=Math.max(fwd,rev), dir=fwd>=rev?"NDO":"reversed";
+  const com=reads.filter(Boolean).length;
+  $("score").textContent=`SCORE: ${correct} correct (${dir}), ${com-correct} wrong, `+
+    `${cs.length-com} flagged-unknown, ${52-correct} missed`;
+  log(`scored: ${correct}/52 correct (${dir}; other direction ${Math.min(fwd,rev)}), ${com-correct} wrong`);
 }
 
 let replayMode=false, eventBuf=[];
@@ -448,22 +495,41 @@ async function step(v, tMs){
   }
   scanN++;
   if(!scanT0) scanT0=tMs; else if(tMs>scanT0) scanFps=scanN*1000/(tMs-scanT0);
-  const {frac,cx,cy}=feats(v);
+  const {frac,cx,cy,pips}=feats(v);
   lastFrac=frac;
   if(scanN%20===0) render();   // keep live ink/base readout fresh
-  if(base===null){ base=frac; varInk=0; }
-  const sd=Math.sqrt(Math.max(varInk,1e-12));
-  const z=(frac-base)/Math.max(sd,1e-6);
-  const fire = z > (inEvent?Z_CLOSE:Z_OPEN);
-  if(!inEvent){ const d=frac-base; base+=BASE_ALPHA*d; varInk=(1-VAR_ALPHA)*varInk+VAR_ALPHA*d*d; }
+  if(base===null){ base=frac; varInk=0; warmN=0; }
+  warmN++;
+  // SD_FLOOR fixes both failure modes of this estimator. Right after
+  // calibration varInk is 0, sd collapses to 1e-6 and the first noise twitch
+  // fires z in the hundreds — that is the spurious pre-deal commit (a 4D
+  // committed 0.5s after Start, before any card existed). And with no floor,
+  // a MISSED event feeds its large deltas into varInk, inflating sd until
+  // nothing can ever fire again — replayed kroom2 produced 0 events from 52
+  // clean passes that way. Clipping the variance update at 3 sigma stops
+  // card passes from poisoning the noise estimate.
+  const sd=Math.max(Math.sqrt(Math.max(varInk,1e-12)), SD_FLOOR);
+  const z=(frac-base)/sd;
+  const fire = warmN>WARMUP_SCANS && z > (inEvent?Z_CLOSE:Z_OPEN);
+  if(!inEvent){
+    const d=frac-base;
+    const dc=Math.sign(d)*Math.min(Math.abs(d), 3*sd);
+    base+=BASE_ALPHA*dc; varInk=(1-VAR_ALPHA)*varInk+VAR_ALPHA*dc*dc;
+  }
   if(fire){
     if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; }
     eventScans++;
-    const entry={t:tMs, ink:frac, data:extractCrops(v,cx,cy)};
+    const entry={t:tMs, ink:frac, pips, data:extractCrops(v,cx,cy)};
     if(eventBuf.length<12) eventBuf.push(entry);
     else{                        // keep the best-ink frames of long events
-      let mi=0; for(let i=1;i<eventBuf.length;i++) if(eventBuf[i].ink<eventBuf[mi].ink) mi=i;
-      if(entry.ink>eventBuf[mi].ink) eventBuf[mi]=entry;
+      // evict by PIP COUNT (ink ties): ink ranks the incoming hand, pips
+      // rank the visible card face — measured offline, ink-ranked holds put a
+      // finger across 40/52 cards, pip-ranked 51/52.
+      let mi=0; for(let i=1;i<eventBuf.length;i++)
+        if(eventBuf[i].pips<eventBuf[mi].pips ||
+           (eventBuf[i].pips===eventBuf[mi].pips && eventBuf[i].ink<eventBuf[mi].ink)) mi=i;
+      if(entry.pips>eventBuf[mi].pips ||
+         (entry.pips===eventBuf[mi].pips && entry.ink>eventBuf[mi].ink)) eventBuf[mi]=entry;
     }
     if(eventScans%FORCE_SPLIT===0){       // force-split mega events (hovering hand)
       pending.push(eventBuf.sort((a,b)=>a.t-b.t)); eventBuf=[]; processPending();
@@ -507,6 +573,10 @@ $("start").onclick=async()=>{
     base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
     eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
+    // Calibrate over the clip's first 2s exactly as a live run would — replay
+    // used to skip this, which left the face unmasked AND (before SD_FLOOR)
+    // deadlocked the trigger: 0 events from 52 clean passes on kroom2.
+    if(SCAN_ON) calStart(0);
     replayLoop();
     return;
   } else {
@@ -890,7 +960,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v36 (model v20, focus/exposure survive Rec, focus-sweep, iso-3200) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v37 (model v20, skin-masked trigger, pip-ranked frames, robust z, dual-truth score) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
