@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v38</title>
+<title>deal bench page-v39</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -156,6 +156,18 @@ function calFinish(){
 }
 const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_feats
   const c=document.createElement("canvas"), g=c.getContext("2d",{willReadFrequently:true});
+  // Buffers reused across scans. Allocating them per call (~700KB of typed
+  // arrays each scan, incl. the blob-labelling pass) showed up on the phone:
+  // scan rate fell 8.5/s -> ~2.6/s in Kevin's first v38 sessions.
+  let BUF=null, BUFN=0;
+  const bufs=n=>{
+    if(BUFN!==n){ BUF={grays:new Float32Array(n), tmp:new Float32Array(n),
+                       bg:new Float32Array(n), raw:new Uint8Array(n),
+                       er:new Uint8Array(n), op:new Uint8Array(n),
+                       lbl:new Int32Array(n), stack:new Int32Array(n)}; BUFN=n; }
+    else { BUF.lbl.fill(0); BUF.er.fill(0); }   // erode loop skips last row/col
+    return BUF;
+  };
   return v0=>{
     const v=frameSource(v0);
     const W=240, H=Math.round(W*srcH(v)/srcW(v))||135;
@@ -163,7 +175,7 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
     g.drawImage(v,0,0,W,H);
     const y0=Math.round(H*0.10), y1=Math.round(H*0.78), x0=Math.round(W*0.05), x1=Math.round(W*0.95);
     const d=g.getImageData(x0,y0,x1-x0,y1-y0).data, n=d.length/4, w=x1-x0, h=y1-y0;
-    const grays=new Float32Array(n);
+    const {grays,tmp,bg,raw,er,op,lbl,stack}=bufs(n);
     for(let i=0;i<n;i++) grays[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
     // LOCAL-ADAPTIVE ink gate (port of frame_feats_adaptive). The old global
     // "brighter than p72" gate assumed the card is the brightest thing in
@@ -171,7 +183,7 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
     // threshold lands above the card's own white, and ink goes hard zero —
     // no event can ever open. Compare each pixel to its LOCAL background.
     const R=10, DELTA=28;              // R ≈ python K=41 at this scale
-    const tmp=new Float32Array(n), bg=new Float32Array(n);
+
     for(let y=0;y<h;y++){              // horizontal box pass
       let acc=0;
       for(let x=-R;x<=R;x++) acc+=grays[y*w+Math.min(w-1,Math.max(0,x))];
@@ -190,7 +202,7 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
         acc+=tmp[Math.min(h-1,Math.max(0,y+R+1))*w+x];
       }
     }
-    const raw=new Uint8Array(n);
+
     for(let i=0;i<n;i++){
       const r=d[i*4], gg=d[i*4+1], b=d[i*4+2], gray=grays[i];
       const mx=Math.max(r,gg,b), mn=Math.min(r,gg,b);
@@ -200,7 +212,7 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
       raw[i]=(gray<bg[i]-DELTA || (sat>90 && (hue<30||hue>330) && gray<bg[i]-10))?1:0;
     }
     // 2x2 morphological open — drops isolated speckle, keeps pip blobs
-    const er=new Uint8Array(n), op=new Uint8Array(n);
+
     for(let y=0;y<h-1;y++) for(let x=0;x<w-1;x++)
       er[y*w+x]=(raw[y*w+x]&&raw[y*w+x+1]&&raw[(y+1)*w+x]&&raw[(y+1)*w+x+1])?1:0;
     for(let y=0;y<h;y++) for(let x=0;x<w;x++){
@@ -222,9 +234,9 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
     // Pip-sized connected blobs: how card-like the frame is, and where the
     // CARD is. The plain ink centroid is dominated by any large dark mass;
     // the median of pip-blob centroids points at the face of the card.
-    const lbl=new Int32Array(n); let nb=0;
+    let nb=0;
     const bxs=[], bys=[], bsz=[];
-    const stack=new Int32Array(n);
+
     for(let i=0;i<n;i++){
       if(!op[i]||lbl[i]) continue;
       nb++; let sp=0; stack[sp++]=i; lbl[i]=nb;
@@ -754,8 +766,15 @@ async function focusSweep(){
     await sleep(420);                        // let the lens settle
     let best=0;
     for(let k=0;k<5;k++){
-      const f=feats(v);                       // gives the ink centroid
-      if(f.frac>0.002){ sawCard=true;
+      const f=feats(v);
+      // Gate on PIP BLOBS, not raw ink. Kevin's real sweeps exposed the
+      // flaw in the frac gate: when the lens racks far, the card defocuses
+      // into invisibility, the ink centroid drifts onto background clutter,
+      // and the ROOM at ~1m out-sharpens the card — his sweeps saved 0.83m
+      // (sharpness 124) and 1.08m over the true 0.27-0.35m (57-65). Pip
+      // blobs only exist while the card face is resolvable, so far-focus
+      // frames score zero instead of scoring the wallpaper.
+      if(f.pips>=2){ sawCard=true;
         best=Math.max(best,cardSharpness(v,f.cx,f.cy,mode)); }
       await sleep(70);
     }
@@ -767,15 +786,20 @@ async function focusSweep(){
       log("  focus "+d.toFixed(2)+"m -> "+mode+" "+s.toFixed(2)); }
     return out;
   };
-  const coarse=[]; for(let i=0;i<10;i++) coarse.push(lo+(hi-lo)*i/9);
+  // The card is HAND-HELD OVER THE PHONE — that geometry is the whole rig,
+  // so nothing past ~0.6m can be the card. Capping the sweep denies the
+  // background the chance to win outright and doubles sampling density
+  // where the card actually lives.
+  const hiCap=Math.min(hi, 0.6);
+  const coarse=[]; for(let i=0;i<10;i++) coarse.push(lo+(hiCap-lo)*i/9);
   let r=(await scan(coarse,"grad")).sort((a,b)=>b[1]-a[1]);
   // Distinguish "no card in view" from "card in view, nothing in focus" —
   // they need opposite responses from Kevin and used to look identical.
   if(!sawCard) return log("focus sweep: no card seen — hold one in view and retry");
   if(r[0][1]<=0) return log("focus sweep: card seen but no focus peak — retry with more light");
-  const c=r[0][0], step=(hi-lo)/9;
+  const c=r[0][0], step=(hiCap-lo)/9;
   const fine=[c-step*0.66,c-step*0.33,c,c+step*0.33,c+step*0.66]
-             .filter(d=>d>=lo&&d<=hi);
+             .filter(d=>d>=lo&&d<=hiCap);
   let r2=(await scan(fine,"lap")).sort((a,b)=>b[1]-a[1]);
   if(r2[0][1]<=0) r2=[[c,0]];                // lap flat -> keep the coarse pick
   FOCUS=r2[0][0];
@@ -787,6 +811,10 @@ async function focusSweep(){
 }
 $("focus").onclick=focusSweep;
 if(FOCUS!==null) $("focus").textContent="Focus: "+(+FOCUS).toFixed(2)+"m";
+if(FOCUS!==null && FOCUS>0.6){
+  log("⚠️ stored focus "+(+FOCUS).toFixed(2)+"m is beyond arm's reach — an old sweep "+
+      "locked onto the BACKGROUND, not the card. Press Focus to re-calibrate.");
+}
 $("exp").textContent="Exp: "+EXPS[expIdx][0];
 async function applyExposure(track, idx){
   const [label,val]=EXPS[idx];
@@ -968,7 +996,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v38 (model v20, front-cam pinned, pip-ranked frames, robust z, dual-truth score) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v39 (model v20, front-cam pinned, pip-gated focus sweep, robust z, dual-truth score) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
