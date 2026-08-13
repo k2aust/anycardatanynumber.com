@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v43</title>
+<title>deal bench page-v44</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -657,10 +657,27 @@ $("start").onclick=async()=>{
         catch(e){ lastErr=e; }
       }
       if(!stream) throw lastErr;
-      { const st0=stream.getVideoTracks()[0].getSettings();
-        if(st0.width===st0.height)
-          log("⚠️ SQUARE "+st0.width+"x"+st0.height+" stream — wide axis cropped, expect edge cards to be missed. Tell Claude.");
-      }
+      // The ladder above is NOT sufficient on Kevin's phone: its Chrome maps
+      // getUserMedia size constraints to the sensor frame, so both exact
+      // tiers fail in portrait and the ideal tier fitness-matches a SQUARE
+      // 1080x1080 (~16% of the wide axis cropped — the axis the dealt card
+      // lives on; sessions on it scored 26, 31, 43 of 52 with wrongs).
+      // Renegotiate the LIVE TRACK instead — the same mechanism the Rec
+      // button already uses successfully on this phone.
+      { const trk=stream.getVideoTracks()[0];
+        let st0=trk.getSettings();
+        if(st0.width===st0.height){
+          for(const dims of [{width:{exact:1280},height:{exact:720}},
+                             {width:{exact:720},height:{exact:1280}},
+                             {width:{ideal:1280},height:{ideal:720}}]){
+            try{ await trk.applyConstraints(dims); }catch(e){ continue; }
+            st0=trk.getSettings();
+            if(st0.width!==st0.height) break;
+          }
+          log(st0.width===st0.height
+            ? "⚠️ stream stuck SQUARE "+st0.width+"x"+st0.height+" — wide axis cropped, edge cards will be missed. Tell Claude."
+            : "stream renegotiated to "+st0.width+"x"+st0.height+" (was square)");
+        } }
     } finally { clearTimeout(nag); }
     log("camera granted ✓");
     // No forced fullscreen/landscape. The phone stays in PORTRAIT — the
@@ -1050,7 +1067,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v43 (model v22, region-capture scan path) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v44 (model v22, track-renegotiated wide stream) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
