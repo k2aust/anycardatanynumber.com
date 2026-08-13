@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v46</title>
+<title>deal bench page-v47</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -483,9 +483,8 @@ async function processPending(){
     event_=results;                 // settle() still drives the LIVE readout —
     commits.push(...(results.length?settle():   // it is causal, assignment is not
       [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}]));
-    // deal resumed with a READ card -> the peek has served its purpose
-    if(PERFORM && running && commits.length && commits[commits.length-1].card)
-      $("peek").textContent="";
+    // every event moves the countdown, and a card-bearing one moves the peek
+    performLive();
     render();
   }
   procBusy=false;
@@ -555,41 +554,52 @@ function scoreFinal(){
   log(`scored: ${correct}/52 correct (${dir}; other direction ${Math.min(fwd,rev)}), ${com-correct} wrong`);
 }
 
-/* ---- perform mode (?perform=1) — phase 1: capture + stop-peek + summary.
+/* ---- perform mode (?perform=1) — phase 1: capture + live readout + summary.
    The bench IS the engine; this is a skin plus three behaviours:
    - a fake-lockscreen-lite look (clock, near-black; the real covert skin is
      a later phase),
-   - STOP-PEEK: when no event lands for PEEK_MS after at least one new card,
-     the spectator has said stop — show the last committed card dimly, plus
-     "+N?" if unknown events followed it (N unreadable cards are between the
-     shown card and the physical stop),
+   - LIVE READOUT: the last committed card and how many cards are still to be
+     dealt, updated the instant an event lands. It used to wait PEEK_MS of
+     card-quiet to infer a stop; the spectator's "stop" is the moment the
+     glance happens, so waiting 3s for it is exactly backwards. "+N?" still
+     rides along when unknown events landed after the shown card (N unreadable
+     cards sit between it and the last thing dealt).
    - END SUMMARY on Stop: each stop with its deal position, then the cards
      never committed. With <=2 unknowns that missing-list IS the elimination
      readout the 3-card routine needs.
-   Position counts EVERY event (committed or unknown) because each event is
+   Counts are over EVERY event (committed or unknown) because each event is
    one physically dealt card — the pile arithmetic needs physical positions,
-   not read positions. */
+   not read positions. So "left" = DECK_N minus events, and it inherits the
+   event stream's known bias: hover junk fires spurious events and reads low,
+   a wholly missed card reads high. It can go negative; that is left visible
+   on purpose, as it is the cheapest signal that the trigger over-fired. */
 const PERFORM=(new URLSearchParams(location.search).get("perform")==="1");
 const PEEK_MS=3000;
+const DECK_N=52;                   // assumed full deal length for the countdown
 let stops=[], peekSeenEvents=0;
+function performLive(){
+  if(!PERFORM||!running) return;
+  let li=commits.length-1;
+  while(li>=0 && !commits[li].card) li--;
+  const unkAfter=li<0?0:commits.length-1-li;
+  $("peek").textContent=(li<0?"":pretty(commits[li].card)+(unkAfter?" +"+unkAfter+"?":"")+"   ")
+    +(DECK_N-commits.length)+" left";
+}
 function performTick(tMs){
   if(!PERFORM||!running||!commits.length) return;
-  // Key the stop detector on CARD-BEARING commits only. During a real stop
-  // the dealing hand hovers over the phone and keeps firing unknown events —
-  // pile4's replay produced zero detected stops because those unknowns kept
-  // resetting an any-event quiet timer. Unknowns still count into "+N?" (they
-  // are physically dealt-or-hovered moments between the shown card and the
-  // stop) but they must not silence the peek.
+  // Stop RECORDING for the end summary (the display no longer waits on it).
+  // Keys on CARD-BEARING commits only: during a real stop the dealing hand
+  // hovers over the phone and keeps firing unknown events — pile4's replay
+  // produced zero detected stops because those unknowns kept resetting an
+  // any-event quiet timer.
   let li=commits.length-1;
   while(li>=0 && !commits[li].card) li--;
   if(li<0) return;
   const cardCount=commits.filter(c=>c.card).length;
   if(tMs-commits[li].t>PEEK_MS && cardCount>peekSeenEvents){
-    const unkAfter=commits.length-1-li;
-    stops.push({card:commits[li].card, pos:commits.length, unkAfter});
+    stops.push({card:commits[li].card, pos:commits.length,
+                unkAfter:commits.length-1-li});
     peekSeenEvents=cardCount;
-    $("peek").textContent=pretty(commits[li].card)+(unkAfter?"  +"+unkAfter+"?":"")
-      +"   @"+commits.length;
   }
 }
 function performSummary(){
@@ -611,7 +621,7 @@ if(PERFORM){
     $("pdate").textContent=d.toDateString(); };
   tick(); setInterval(tick,10000);
   $("pwrap").onclick=async()=>{
-    if(!running){ stops=[]; peekSeenEvents=0; $("peek").textContent="";
+    if(!running){ stops=[]; peekSeenEvents=0; $("peek").textContent=DECK_N+" left";
       $("phint").textContent=""; $("start").click(); }
     else { $("stop").click(); }
   };
@@ -1156,7 +1166,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v46 (model v22, perform mode phase 1: ?perform=1) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v47 (model v22, perform mode: live card + cards-left readout) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
