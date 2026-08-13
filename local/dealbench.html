@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v40</title>
+<title>deal bench page-v41</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -14,7 +14,10 @@
   body.fill .panel { opacity: .2; }
   h1 { font-size: 16px; color: #9ab; margin-bottom: 6px; }
   .panel { background: #15151c; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
-  video { width: 100%; max-height: 30vh; border-radius: 10px; background: #000; object-fit: contain; }
+  video { width: 100%; max-height: 30vh; border-radius: 10px; background: #000; object-fit: contain;
+          transform: scaleX(-1); /* selfie-mirror the PREVIEW only — the model
+          reads frames via canvas, which sees the unmirrored stream, so
+          training data and live reads are unaffected */ }
   button, select { background: #2a2a36; color: #eee; border: 0; border-radius: 10px;
            padding: 11px 14px; font-size: 15px; margin: 3px 5px 3px 0; }
   button.on { background: #2e7d32; }
@@ -616,11 +619,18 @@ $("start").onclick=async()=>{
       }
     } finally { clearTimeout(nag); }
     log("camera granted ✓");
-    try{                                   // force landscape like the training footage
-      await withTimeout(document.documentElement.requestFullscreen(),1500,"fullscreen");
-      await withTimeout(screen.orientation.lock("landscape"),1500,"orientation lock");
-      log("landscape locked");
-    }catch(e){ log("landscape lock skipped: "+e.message+" (harmless — hold the phone landscape yourself)"); }
+    // No forced fullscreen/landscape. The phone stays in PORTRAIT — the
+    // pipeline auto-rotates portrait streams to landscape internally
+    // (frameSource, ROT_DIR), so the model sees the same geometry either
+    // way and the phone can sit naturally on the table for the ACAAN.
+    // ?landscape=1 restores the old behaviour if ever needed.
+    if(new URLSearchParams(location.search).get("landscape")==="1"){
+      try{
+        await withTimeout(document.documentElement.requestFullscreen(),1500,"fullscreen");
+        await withTimeout(screen.orientation.lock("landscape"),1500,"orientation lock");
+        log("landscape locked");
+      }catch(e){ log("landscape lock skipped: "+e.message); }
+    }
     const tr0=stream.getVideoTracks()[0];
     try{ const cp=tr0.getCapabilities();
          if(cp.zoom) await tr0.applyConstraints({advanced:[{zoom:cp.zoom.min}]});
@@ -996,7 +1006,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v40 (model v22 pile-trained, front-cam pinned, pip-gated focus sweep) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v41 (model v22, portrait-native, mirrored preview) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
