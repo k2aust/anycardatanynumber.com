@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v45</title>
+<title>deal bench page-v46</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -28,6 +28,21 @@
   #score { font-size: 15px; font-weight: 600; margin-top: 4px; }
   #log { font: 11px/1.45 ui-monospace, monospace; color: #9a9; max-height: 22vh;
          overflow-y: auto; white-space: pre-wrap; }
+  /* ---- perform mode (?perform=1): phase-1 rehearsal skin ---- */
+  body.perform { background:#000; }
+  body.perform .panel, body.perform h1 { display:none; }
+  #pwrap { display:none; }
+  body.perform #pwrap { display:block; position:fixed; inset:0; background:#000;
+    font: 16px -apple-system, Roboto, sans-serif; user-select:none; }
+  #pclock { position:absolute; top:16vh; width:100%; text-align:center;
+    font-size:64px; font-weight:200; color:#2a2a2a; letter-spacing:2px; }
+  #pdate { position:absolute; top:calc(16vh + 76px); width:100%; text-align:center;
+    font-size:15px; color:#222; }
+  #peek { position:absolute; bottom:14vh; width:100%; text-align:center;
+    font-size:26px; color:#3a3a3a; letter-spacing:3px; min-height:34px;
+    font-family: ui-monospace, monospace; white-space:pre-wrap; }
+  #phint { position:absolute; bottom:4vh; width:100%; text-align:center;
+    font-size:12px; color:#1c1c1c; }
 </style>
 </head>
 <body>
@@ -57,6 +72,13 @@
 </div>
 
 <div class="panel"><div id="log">loading model…</div></div>
+
+<div id="pwrap">
+  <div id="pclock">--:--</div>
+  <div id="pdate"></div>
+  <div id="peek"></div>
+  <div id="phint">tap to begin</div>
+</div>
 
 <script src="ort.webgpu.min.js"></script>
 <script>
@@ -461,6 +483,9 @@ async function processPending(){
     event_=results;                 // settle() still drives the LIVE readout —
     commits.push(...(results.length?settle():   // it is causal, assignment is not
       [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}]));
+    // deal resumed with a READ card -> the peek has served its purpose
+    if(PERFORM && running && commits.length && commits[commits.length-1].card)
+      $("peek").textContent="";
     render();
   }
   procBusy=false;
@@ -530,6 +555,67 @@ function scoreFinal(){
   log(`scored: ${correct}/52 correct (${dir}; other direction ${Math.min(fwd,rev)}), ${com-correct} wrong`);
 }
 
+/* ---- perform mode (?perform=1) — phase 1: capture + stop-peek + summary.
+   The bench IS the engine; this is a skin plus three behaviours:
+   - a fake-lockscreen-lite look (clock, near-black; the real covert skin is
+     a later phase),
+   - STOP-PEEK: when no event lands for PEEK_MS after at least one new card,
+     the spectator has said stop — show the last committed card dimly, plus
+     "+N?" if unknown events followed it (N unreadable cards are between the
+     shown card and the physical stop),
+   - END SUMMARY on Stop: each stop with its deal position, then the cards
+     never committed. With <=2 unknowns that missing-list IS the elimination
+     readout the 3-card routine needs.
+   Position counts EVERY event (committed or unknown) because each event is
+   one physically dealt card — the pile arithmetic needs physical positions,
+   not read positions. */
+const PERFORM=(new URLSearchParams(location.search).get("perform")==="1");
+const PEEK_MS=3000;
+let stops=[], peekSeenEvents=0;
+function performTick(tMs){
+  if(!PERFORM||!running||!commits.length) return;
+  // Key the stop detector on CARD-BEARING commits only. During a real stop
+  // the dealing hand hovers over the phone and keeps firing unknown events —
+  // pile4's replay produced zero detected stops because those unknowns kept
+  // resetting an any-event quiet timer. Unknowns still count into "+N?" (they
+  // are physically dealt-or-hovered moments between the shown card and the
+  // stop) but they must not silence the peek.
+  let li=commits.length-1;
+  while(li>=0 && !commits[li].card) li--;
+  if(li<0) return;
+  const cardCount=commits.filter(c=>c.card).length;
+  if(tMs-commits[li].t>PEEK_MS && cardCount>peekSeenEvents){
+    const unkAfter=commits.length-1-li;
+    stops.push({card:commits[li].card, pos:commits.length, unkAfter});
+    peekSeenEvents=cardCount;
+    $("peek").textContent=pretty(commits[li].card)+(unkAfter?"  +"+unkAfter+"?":"")
+      +"   @"+commits.length;
+  }
+}
+function performSummary(){
+  if(!PERFORM) return;
+  const cs=finalCommits||uniq(commits);
+  const got=new Set(cs.filter(c=>c.card).map(c=>c.card));
+  const missing=CODES.filter(c=>!got.has(c));
+  const lines=stops.map((st,i)=>"stop "+(i+1)+": "+pretty(st.card)
+      +(st.unkAfter?" +"+st.unkAfter+"?":"")+"  @"+st.pos);
+  lines.push("read "+got.size+"/52"+(missing.length&&missing.length<=6
+      ? "   missing: "+missing.map(pretty).join(" ")
+      : missing.length ? "   ("+missing.length+" unread)" : ""));
+  $("peek").textContent=lines.join("\n");
+}
+if(PERFORM){
+  document.body.classList.add("perform");
+  const tick=()=>{ const d=new Date();
+    $("pclock").textContent=d.toTimeString().slice(0,5);
+    $("pdate").textContent=d.toDateString(); };
+  tick(); setInterval(tick,10000);
+  $("pwrap").onclick=async()=>{
+    if(!running){ stops=[]; peekSeenEvents=0; $("peek").textContent="";
+      $("phint").textContent=""; $("start").click(); }
+    else { $("stop").click(); }
+  };
+}
 let replayMode=false, eventBuf=[];
 async function step(v, tMs){
   if(CAL.active){
@@ -539,6 +625,7 @@ async function step(v, tMs){
   }
   scanN++;
   if(!scanT0) scanT0=tMs; else if(tMs>scanT0) scanFps=scanN*1000/(tMs-scanT0);
+  performTick(tMs);
   const {frac,cx,cy,pips}=feats(v);
   lastFrac=frac;
   if(scanN%20===0) render();   // keep live ink/base readout fresh
@@ -937,7 +1024,7 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
     log(`assignment: ${eventVecs.length} events -> ${com} committed `+
         `(${(performance.now()-t0).toFixed(0)}ms)`);
   }
-  render(); scoreFinal(); };
+  render(); scoreFinal(); performSummary(); };
 $("fill").onclick=()=>document.body.classList.toggle("fill");
 $("mode").onclick=()=>{
   SCAN_ON=!SCAN_ON;
@@ -1069,7 +1156,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v45 (model v22, square-stream root cause fixed) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v46 (model v22, perform mode phase 1: ?perform=1) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
