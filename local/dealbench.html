@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v44</title>
+<title>deal bench page-v45</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -657,27 +657,6 @@ $("start").onclick=async()=>{
         catch(e){ lastErr=e; }
       }
       if(!stream) throw lastErr;
-      // The ladder above is NOT sufficient on Kevin's phone: its Chrome maps
-      // getUserMedia size constraints to the sensor frame, so both exact
-      // tiers fail in portrait and the ideal tier fitness-matches a SQUARE
-      // 1080x1080 (~16% of the wide axis cropped — the axis the dealt card
-      // lives on; sessions on it scored 26, 31, 43 of 52 with wrongs).
-      // Renegotiate the LIVE TRACK instead — the same mechanism the Rec
-      // button already uses successfully on this phone.
-      { const trk=stream.getVideoTracks()[0];
-        let st0=trk.getSettings();
-        if(st0.width===st0.height){
-          for(const dims of [{width:{exact:1280},height:{exact:720}},
-                             {width:{exact:720},height:{exact:1280}},
-                             {width:{ideal:1280},height:{ideal:720}}]){
-            try{ await trk.applyConstraints(dims); }catch(e){ continue; }
-            st0=trk.getSettings();
-            if(st0.width!==st0.height) break;
-          }
-          log(st0.width===st0.height
-            ? "⚠️ stream stuck SQUARE "+st0.width+"x"+st0.height+" — wide axis cropped, edge cards will be missed. Tell Claude."
-            : "stream renegotiated to "+st0.width+"x"+st0.height+" (was square)");
-        } }
     } finally { clearTimeout(nag); }
     log("camera granted ✓");
     // No forced fullscreen/landscape. The phone stays in PORTRAIT — the
@@ -698,6 +677,29 @@ $("start").onclick=async()=>{
          if(cp.resizeMode) await tr0.applyConstraints({advanced:[{resizeMode:"none"}]});
          log("CAPS: "+JSON.stringify(cp));
     }catch(e){}
+    // THE SQUARE-STREAM CULPRIT WAS THE LINE ABOVE. In portrait, this phone
+    // synthesizes wide 16:9 by crop-scaling a native SQUARE sensor mode, so
+    // resizeMode:"none" — added long ago to avoid digital zoom — snaps the
+    // stream back to 1080x1080, cropping ~16% off the wide axis the dealt
+    // card lives on. Four sessions ran square (26, 31, 43, 40 of 52, and
+    // every multi-wrong session ever). In landscape the native mode was
+    // 16:9, which is why this never showed before portrait. A wide frame
+    // beats sensor-native purity: if the stream is square, explicitly allow
+    // crop-and-scale and renegotiate to 16:9.
+    { let stW=tr0.getSettings();
+      if(stW.width===stW.height){
+        for(const c of [
+            {resizeMode:"crop-and-scale", width:{exact:1280}, height:{exact:720}},
+            {resizeMode:"crop-and-scale", width:{exact:720}, height:{exact:1280}},
+            {width:{ideal:1280}, height:{ideal:720}, aspectRatio:{ideal:1.7778}}]){
+          try{ await tr0.applyConstraints(c); }catch(e){ continue; }
+          stW=tr0.getSettings();
+          if(stW.width!==stW.height) break;
+        }
+        log(stW.width===stW.height
+          ? "⚠️ stream stuck SQUARE "+stW.width+"x"+stW.height+" — wide axis cropped, edge cards will be missed. Tell Claude."
+          : "stream widened to "+stW.width+"x"+stW.height+" (resizeMode "+(stW.resizeMode||"?")+", was square)");
+      } }
     const st=tr0.getSettings();
     log("stream "+st.width+"x"+st.height+" @"+st.frameRate+"fps");
     $("v").srcObject=stream;
@@ -1067,7 +1069,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v44 (model v22, track-renegotiated wide stream) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v45 (model v22, square-stream root cause fixed) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
