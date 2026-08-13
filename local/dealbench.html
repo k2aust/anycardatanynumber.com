@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v47</title>
+<title>deal bench page-v48</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -1150,7 +1150,7 @@ let EP="?"; let MODEL_ID="";
     // device supports WebGPU. Explicit graceful fallback to wasm otherwise.
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     ort.env.wasm.wasmPaths="./";
-    const MODEL="dealread_v22.onnx?v=22"; MODEL_ID=MODEL;
+    const MODEL="dealread_v23.onnx?v=23"; MODEL_ID=MODEL;
     if("gpu" in navigator){
       try{
         sess=await ort.InferenceSession.create(MODEL,{executionProviders:["webgpu"]});
@@ -1166,7 +1166,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v47 (model v22, perform mode: live card + cards-left readout) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v48 (model v23, perform mode: live card + cards-left readout) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
