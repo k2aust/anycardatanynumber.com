@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v42</title>
+<title>deal bench page-v43</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -291,21 +291,50 @@ const cropCanvas=document.createElement("canvas");
 cropCanvas.width=NET_IN; cropCanvas.height=NET_IN;
 const cropCtx=cropCanvas.getContext("2d",{willReadFrequently:true});
 
-function extractCrops(v0, cx, cy){   // fast: canvas work only, no inference
+// SCAN-TIME capture is one region grab, not five crops. The old path did
+// 5x (drawImage + getImageData at 192px) PLUS a 184k-element float convert
+// on EVERY scan inside an event — that canvas+convert cost is a big part of
+// why the phone scans at ~3/s while replay does 15/s, and fewer looks per
+// card is where live misses come from. Now: one drawImage + one getImageData
+// of a region covering all five crop windows, stored as raw bytes; the five
+// tensors are cut from it with array math at CLASSIFY time, and only for the
+// KEEP_FRAMES frames that actually get classified.
+const regCanvas=document.createElement("canvas");
+const regCtx=regCanvas.getContext("2d",{willReadFrequently:true});
+function extractRegion(v0, cx, cy){
   const v=frameSource(v0);
   const vw=srcW(v), vh=srcH(v), C=Math.round(Math.min(vw,vh)*CROP_FRAC);
-  const offs=CROP_OFFS;
-  const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
-  offs.forEach(([ox,oy],k)=>{
+  const sc=NET_IN/C;                          // region stored at net scale
+  const boxes=CROP_OFFS.map(([ox,oy])=>{
     let x0=Math.round(cx*vw+ox*vw-C/2), y0=Math.round(cy*vh+oy*vw-C/2);
     x0=Math.max(0,Math.min(vw-C,x0)); y0=Math.max(0,Math.min(vh-C,y0));
-    cropCtx.drawImage(v,x0,y0,C,C,0,0,NET_IN,NET_IN);
-    const d=cropCtx.getImageData(0,0,NET_IN,NET_IN).data;
-    const o=k*3*NET_IN*NET_IN, plane=NET_IN*NET_IN;
-    for(let i=0;i<plane;i++){       // BGR order to match cv2 training
-      data[o+i]        =(d[i*4+2]/255-0.55)/0.25;
-      data[o+plane+i]  =(d[i*4+1]/255-0.55)/0.25;
-      data[o+2*plane+i]=(d[i*4]  /255-0.55)/0.25;
+    return [x0,y0];
+  });
+  const RX0=Math.min(...boxes.map(b=>b[0])), RY0=Math.min(...boxes.map(b=>b[1]));
+  const RX1=Math.max(...boxes.map(b=>b[0]))+C, RY1=Math.max(...boxes.map(b=>b[1]))+C;
+  const rw=Math.round((RX1-RX0)*sc), rh=Math.round((RY1-RY0)*sc);
+  regCanvas.width=rw; regCanvas.height=rh;
+  regCtx.drawImage(v, RX0,RY0, RX1-RX0,RY1-RY0, 0,0, rw,rh);
+  const img=regCtx.getImageData(0,0,rw,rh);
+  const offs=boxes.map(([x0,y0])=>[
+    Math.min(rw-NET_IN, Math.round((x0-RX0)*sc)),
+    Math.min(rh-NET_IN, Math.round((y0-RY0)*sc))]);
+  return {px:img.data, rw, rh, offs};
+}
+function tensorFromRegion(reg){               // classify-time only
+  const {px,rw,offs}=reg;
+  const data=new Float32Array(offs.length*3*NET_IN*NET_IN);
+  const plane=NET_IN*NET_IN;
+  offs.forEach(([dx,dy],k)=>{
+    const o=k*3*plane;
+    for(let y=0;y<NET_IN;y++){
+      const src=((dy+y)*rw+dx)*4, dst=y*NET_IN;
+      for(let x=0;x<NET_IN;x++){
+        const si=src+x*4, di=dst+x;
+        data[o+di]        =(px[si+2]/255-0.55)/0.25;   // B
+        data[o+plane+di]  =(px[si+1]/255-0.55)/0.25;   // G
+        data[o+2*plane+di]=(px[si]  /255-0.55)/0.25;   // R
+      }
     }
   });
   return data;
@@ -419,7 +448,7 @@ async function processPending(){
     const results=[];
     const acc=new Float32Array(52); let accN=0;
     for(const p of picks){
-      const r=await infer(p.data);
+      const r=await infer(tensorFromRegion(p.region));
       if(r.neg-r.conf<NEG_MARGIN){
         results.push({t:p.t,cls:r.cls,conf:r.conf});
         if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
@@ -534,7 +563,7 @@ async function step(v, tMs){
   if(fire){
     if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; }
     eventScans++;
-    const entry={t:tMs, ink:frac, pips, data:extractCrops(v,cx,cy)};
+    const entry={t:tMs, ink:frac, pips, region:extractRegion(v,cx,cy)};
     if(eventBuf.length<12) eventBuf.push(entry);
     else{                        // keep the best-ink frames of long events
       // evict by PIP COUNT (ink ties): ink ranks the incoming hand, pips
@@ -1021,7 +1050,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v42 (model v22, portrait-native w/ correct wide stream) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v43 (model v22, region-capture scan path) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
