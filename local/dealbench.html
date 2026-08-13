@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v41</title>
+<title>deal bench page-v42</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -609,13 +609,28 @@ $("start").onclick=async()=>{
       // {exact:"user"} the facing is non-negotiable and resolution degrades
       // instead, which is the right trade: the whole rig assumes the front
       // camera.
-      try{
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"user"},
-          width:{exact:1280},height:{exact:720},
-          frameRate:{ideal:30}},audio:false});
-      }catch(e){
-        log("camera constraints refused ("+e.name+"), retrying front-cam only…");
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:"user"}},audio:false});
+      // Constraint ladder. In portrait UI Chrome maps width/height onto the
+      // PRESENTED (rotated) frame, so landscape-exact 1280x720 is
+      // unsatisfiable there — and the old catch-all fallback let Chrome pick
+      // a SQUARE 1080x1080, which crops ~16% off the wide axis. That is the
+      // axis the card lives on: Kevin's first two portrait sessions ran on
+      // that square stream and collapsed (26 and 31 of 52, with wrongs).
+      // Try landscape-exact, then portrait-exact (same sensor field,
+      // rotated), and only then ideal — never a size-free request again.
+      const tries=[
+        {facingMode:{exact:"user"}, width:{exact:1280},height:{exact:720}, frameRate:{ideal:30}},
+        {facingMode:{exact:"user"}, width:{exact:720},height:{exact:1280}, frameRate:{ideal:30}},
+        {facingMode:{exact:"user"}, width:{ideal:1280},height:{ideal:720}, frameRate:{ideal:30}},
+      ];
+      let lastErr=null;
+      for(const c of tries){
+        try{ stream=await navigator.mediaDevices.getUserMedia({video:c,audio:false}); break; }
+        catch(e){ lastErr=e; }
+      }
+      if(!stream) throw lastErr;
+      { const st0=stream.getVideoTracks()[0].getSettings();
+        if(st0.width===st0.height)
+          log("⚠️ SQUARE "+st0.width+"x"+st0.height+" stream — wide axis cropped, expect edge cards to be missed. Tell Claude.");
       }
     } finally { clearTimeout(nag); }
     log("camera granted ✓");
@@ -1006,7 +1021,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v41 (model v22, portrait-native, mirrored preview) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v42 (model v22, portrait-native w/ correct wide stream) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
