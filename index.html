@@ -4470,8 +4470,16 @@ const ldOrd = n => n + (n%100>=11 && n%100<=13 ? "th" : ["th","st","nd","rd"][n%
 // aces in place — only for schemes that have one (live reads are read as 48)
 const ldAcesAvail = () => { const f = RD_SCHEMES[rdScheme].full; return !!f && f.length === 52; };
 const ldAcesIn = () => ld.aces && ldAcesAvail();
-const ldDeck = () => ldAcesIn() ? RD_SCHEMES[rdScheme].full : RD_STACK;
-const ldN = () => ldDeck().length;
+const ldStackOrder = () => ldAcesIn() ? RD_SCHEMES[rdScheme].full : RD_STACK;   // the real stack, top -> bottom
+/* The showing is done FACE-UP, spread from the face — so the first card seen is
+   the stack's bottom card and the whole stack reads in reverse. This tool works
+   entirely in that face order: sections, counts, breaks and cuts are all measured
+   from the face, and the cut sends the spread-off face cards to the BACK (which
+   is the mirror of the face-down "top to bottom" cut — same cyclic structure, so
+   the 5-4-6-2-3-1 binary math is untouched). ldFinalPos() converts back to a
+   face-down position for the deal. */
+const ldDeck = () => ldStackOrder().slice().reverse();
+const ldN = () => ldStackOrder().length;
 const ldBounds = () => { const b=[0]; for (let i=0;i<6;i++) b.push(b[i]+ld.sizes[i]); return b; };
 const ldSections = () => { const b = ldBounds(), d = ldDeck(); return [0,1,2,3,4,5].map(i => d.slice(b[i], b[i+1])); };
 const ldOrderAt = r => { const s = ld.sizes, d = ldDeck(), k = (r>=1 ? s[0]+s[1] : 0) + (r>=2 ? s[2]+s[3] : 0);
@@ -4487,7 +4495,9 @@ function ldCands(sp){
     R: bySec(p).filter(c => ldIsRed(c) && pool.includes(ldVal(c))),
     B: bySec(7-p).filter(c => !ldIsRed(c) && pool.includes(ldVal(c))) };
 }
-const ldFinalPos = c => { const s = ld.sizes; return ((ldDeck().indexOf(c) + s[4] + s[5]) % ldN()) + 1; };   // after the two cuts
+// after the two cuts: index from the FACE -> position from the TOP once the deck
+// is turned face-down for the deal (face index k of N becomes top position N-k)
+const ldFinalPos = c => { const s = ld.sizes; return ldN() - ((ldDeck().indexOf(c) + s[4] + s[5]) % ldN()); };
 /* Boundary optimizer: search all section-size compositions (5–11 each, sum 48)
    for the one minimizing expected fishing questions (final side ≤3 needs none)
    plus a small penalty for lie-question length (union of values, complement-
@@ -4581,14 +4591,37 @@ function ldFSet(sp){
 function ldRender(){
   const el = $("lieBody");
   if (RD_STACK.length !== 48){ el.innerHTML = '<div class="ld-warn">This tool needs a 48-card stack (aces out) &mdash; the current stack has ' + RD_STACK.length + ' cards.</div>'; return; }
-  if (ld.step === 0) return ldRenderSetup(el);
+  if (ld.step === 0) return ld.spec ? ldRenderSetupSpec(el) : ldRenderSetup(el);
   if (ld.step <= 3) return ldRenderRound(el, ld.step - 1);
   return ldRenderResult(el);
+}
+function ldSecsPanelHTML(){
+  const secs = ldSections(), b = ldBounds();
+  return '<div class="ld-panel"><div class="h">The six sections (face &rarr; back) &mdash; sizes ' + ld.sizes.join('&middot;') + '</div><div class="ld-secs">'
+    + secs.map((s, i) => '<div class="ld-sec"><span class="tag">' + (b[i]+1) + '&ndash;' + b[i+1] + '</span><span>' + s.map(c => ldChip(c)).join('') + '</span></div>').join('')
+    + '</div><div class="hint" style="margin-top:8px">This is the stack <b>reversed</b> &mdash; exactly what you see spreading face-up, first card at the face. Boundaries are <b>optimized for this stack</b> to minimize fishing. Each round you show the 3 sections nearest the face, then cut 2 of them to the back &mdash; the next screens name the exact counts and boundary cards as you go.</div></div>';
+}
+/* Spectator-facing setup: the rules only, phrased at the spectator — no stack,
+   no section table, no mode pads. Doubles as the magician's cue card. */
+function ldRenderSetupSpec(el){
+  el.innerHTML =
+    '<div class="ld-sub">A test of your poker face.</div>'
+    + '<div class="ld-panel"><div class="h">Before we start</div><ol class="ld-steps">'
+    + (ld.sp2 && ld.split
+        ? '<li>One of you: think of a <b>number card</b> &mdash; 2 through 10, any suit. The other: a <b>picture card</b> &mdash; Jack, Queen or King, any suit.</li>'
+        : '<li>Think of <b>any card</b> in the deck &mdash; any value, any suit. Don&rsquo;t say it out loud.</li>')
+    + '<li>You&rsquo;ll need a <b>good poker face</b>.</li>'
+    + '<li>If your card is <b>RED</b> you tell the <b>truth</b> every time I ask. If it&rsquo;s <b>BLACK</b> you <b>lie</b> &mdash; every single time.</li>'
+    + '</ol></div>'
+    + '<button class="ld-go" id="ldStart">Begin</button>'
+    + '<button class="ld-mini" id="ldSpecOff">&#9881; Setup</button>';
+  $("ldStart").addEventListener("click", () => { ld.step = 1; ldRender(); });
+  $("ldSpecOff").addEventListener("click", () => { ld.spec = false; ldRender(); });
 }
 function ldRenderSetup(el){
   const secs = ldSections(), b = ldBounds();
   el.innerHTML =
-    '<div class="ld-sub">Works on <b>any</b> stack the app knows &mdash; including a genuinely shuffled, live-read deck. Current stack: <b>' + (LD_SCHEME_NAMES[rdScheme] || rdScheme) + '</b>. The deck must match the order below, uncut &mdash; ' + (ldAcesIn() ? 'all 52 cards, aces in place' : 'aces set aside') + '.</div>'
+    '<div class="ld-sub">Works on <b>any</b> stack the app knows &mdash; including a genuinely shuffled, live-read deck. Current stack: <b>' + (LD_SCHEME_NAMES[rdScheme] || rdScheme) + '</b>, uncut &mdash; ' + (ldAcesIn() ? 'all 52 cards, aces in place' : 'aces set aside') + '. Everything below is counted <b>from the face</b>: you show by spreading the deck face-up, so the stack reads in reverse throughout.</div>'
     + (rdExcluded.size ? '<div class="ld-warn">&#9888; ' + rdExcluded.size + ' flagged card(s) from the live read (marked <i>?</i>) &mdash; identities uncertain.</div>' : '')
     + '<div class="ld-panel"><div class="h">The setup</div><ol class="ld-steps">'
     + (ld.sp2 && ld.split
@@ -4611,10 +4644,8 @@ function ldRenderSetup(el){
     + '<div class="ld-panel"><div class="h">Performance screen</div><div class="seg" id="ldSpecSeg">'
     +   '<button class="segopt' + (ld.spec ? '' : ' active') + '" data-v="0">Magician<small>full method visible</small></button>'
     +   '<button class="segopt' + (ld.spec ? ' active' : '') + '" data-v="1">Spectator-facing<small>questions only</small></button>'
-    + '</div><div class="hint" style="margin-top:6px">Spectator-facing shows just the lie-detector questions and YES/NO &mdash; safe to hold toward the audience. <b>Press and hold the LIE DETECTOR title</b> to secretly overlay the full magician view (spread/cut cards, candidates, reveal); release to hide.</div></div>'
-    + '<div class="ld-panel"><div class="h">The six sections (top &rarr; bottom) &mdash; sizes ' + ld.sizes.join('&middot;') + '</div><div class="ld-secs">'
-    + secs.map((s, i) => '<div class="ld-sec"><span class="tag">' + (b[i]+1) + '&ndash;' + b[i+1] + '</span><span>' + s.map(c => ldChip(c)).join('') + '</span></div>').join('')
-    + '</div><div class="hint" style="margin-top:8px">Boundaries are <b>optimized for this stack</b> to minimize fishing. Each round you show the top 3 sections, then cut 2 sections to the bottom &mdash; the next screens name the exact counts and boundary cards as you go.</div></div>'
+    + '</div><div class="hint" style="margin-top:6px">Spectator-facing strips every screen down to the rules, the questions and YES/NO &mdash; no stack, no sections, no settings &mdash; safe to hold toward the audience. <b>Press and hold the LIE DETECTOR title</b> to secretly overlay the full magician view (sections, spread/cut cards, candidates, reveal); release to hide. The small &#9881;&nbsp;Setup link brings this screen back.</div></div>'
+    + ldSecsPanelHTML()
     + '<button class="ld-go" id="ldStart">Start &mdash; question 1</button>';
   $("ldSp2Seg").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return;
     ld.sp2 = b.dataset.v !== "off"; ld.split = b.dataset.v === "split";
@@ -4634,9 +4665,11 @@ function ldRoundInfoHTML(r){
   const sz = i => ld.sizes[(2*r + i) % 6];               // sizes of the shown sections, in current top-down order
   const breakN = sz(0) + sz(1), showN = breakN + sz(2);
   return '<div class="ld-panel"><div class="h">Show</div><ol class="ld-steps">'
-    + '<li>Spread and show the <b>first ' + showN + ' cards</b> &mdash; stop after the <b>' + rdFullName(order[showN-1]) + '</b>.</li>'
-    + '<li>As you pass the ' + ldOrd(breakN) + ' card (<b>' + rdFullName(order[breakN-1]) + '</b>), catch a break under it.</li>'
-    + '<li>' + (r < 2 ? 'Square up and <b>cut everything above the break to the bottom</b>.' : 'Square up &mdash; <b>no cut this time</b>.') + '</li>'
+    + '<li>Deck <b>face-up</b> &mdash; spread <b>from the face</b> and show the <b>first ' + showN + ' cards</b>, stopping after the <b>' + rdFullName(order[showN-1]) + '</b>.</li>'
+    + (r < 2
+        ? '<li>As the ' + ldOrd(breakN) + ' card (<b>' + rdFullName(order[breakN-1]) + '</b>) goes by, catch a break behind it &mdash; <b>' + breakN + ' cards</b> sit on the face side of the break.</li>'
+          + '<li>Square up and <b>cut those ' + breakN + ' face cards to the back</b> &mdash; the right-hand spread simply goes underneath the left-hand packet.</li>'
+        : '<li>Square up &mdash; <b>no break, no cut this time</b>.</li>')
     + '<li>Ask: <b>&ldquo;Yes or no &mdash; did you see your card?&rdquo;</b> Watch the poker face.</li>'
     + '</ol></div>';
 }
@@ -4770,11 +4803,11 @@ function ldSpecFishHTML(sp){
 function ldRevealHTML(F){
   const s = F.slice().sort((a,b) => rdValCmp(ldVal(b), ldVal(a)) || (a < b ? -1 : 1));   // value desc
   const pos = c => ldFinalPos(c);
-  const restore = '<div class="hint" style="margin-top:8px">Everything so far was straight cuts &mdash; afterwards cut the <b>' + rdFullName(ldDeck()[0]) + '</b> back to the top and the stack is restored (minus any cards you culled).</div>';
+  const restore = '<div class="hint" style="margin-top:8px">Everything so far was straight cuts &mdash; afterwards cut the <b>' + rdFullName(ldStackOrder()[0]) + '</b> back to the top and the stack is restored (minus any cards you culled). Positions above are counted from the <b>top, deck face-down</b>.</div>';
   if (s.length === 1){
     const c = s[0];
     return '<div class="ld-panel"><div class="h">The reveal &mdash; one card</div><ol class="ld-steps">'
-      + '<li>It&rsquo;s the <b>' + rdFullName(c) + '</b>, sitting <b>' + pos(c) + ' from the top</b> right now.</li>'
+      + '<li>Turn the deck <b>face-down</b>. It&rsquo;s the <b>' + rdFullName(c) + '</b>, sitting <b>' + pos(c) + ' from the top</b>.</li>'
       + '<li>Strongest finish: name the card&hellip; then add <b>&ldquo;and it&rsquo;s exactly ' + pos(c) + ' cards down&rdquo;</b> and deal to it &mdash; a shuffled-deck miracle.</li>'
       + '</ol>' + restore + '</div>';
   }
@@ -4803,7 +4836,7 @@ function ldFishHTML(sp){
   if (!F.length) return h + '<div class="ld-warn">No candidates left &mdash; an answer got crossed. Use Back to rewind.</div>';
   h += '<div class="ld-panel"><div class="h">Their card is one of ' + F.length + '</div>'
     + F.map(c => ldChip(c, ldFinalPos(c))).join('')
-    + '<div class="hint" style="margin-top:6px">#&nbsp;= position from the top of the deck as it sits now (after the two cuts).</div>'
+    + '<div class="hint" style="margin-top:6px">#&nbsp;= position from the top once you turn the deck <b>face-down</b> (after the two cuts).</div>'
     + (F.some(c => rdExcluded.has(c)) ? '<div class="ld-warn">&#9888; a flagged (uncertain) read is among the candidates.</div>' : '')
     + '</div>';
   if (F.length > 3){
@@ -4868,6 +4901,7 @@ function ldBack(){
 /* Deadman peek (spectator mode): hold the LIE DETECTOR title to overlay the
    full magician view of the current step; release to hide. */
 function ldPeekHTML(){
+  if (ld.step === 0) return ldSecsPanelHTML();
   if (ld.step >= 1 && ld.step <= 3){
     const r = ld.step - 1;
     let h = ldRoundInfoHTML(r);
@@ -4885,7 +4919,7 @@ function ldPeekHTML(){
   return '<div class="hint" style="text-align:center;margin-top:30px">Nothing to peek on this screen.</div>';
 }
 function ldPeekShow(){
-  if (!ld.spec || ld.step < 1) return;
+  if (!ld.spec) return;
   $("liePeek").innerHTML = ldPeekHTML();
   $("liePeek").style.display = "block";
 }
