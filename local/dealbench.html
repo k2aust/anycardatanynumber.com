@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v48</title>
+<title>deal bench page-v49</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -531,6 +531,63 @@ function render(){
     `ink ${lastFrac.toFixed(4)} base ${(base||0).toFixed(4)} z ${((lastFrac-(base||0))/Math.max(Math.sqrt(Math.max(varInk,1e-12)),1e-6)).toFixed(1)} ${inEvent?"EVENT":""}`;
 }
 
+/* ---- post-scan advisor: what to do NEXT to improve the model.
+   Every finished scan is a training opportunity — the deck order is known
+   (NDO or its reverse), so a RECORDED deal is self-labeling data and the
+   session's own failures say which classes need it. This block turns the
+   score into concrete instructions instead of leaving that analysis to a
+   laptop session later. Rules mirror the actual pipeline:
+   ingest_bench_rec.py (Rec videos, --harvest after eyeballing the sheet),
+   audit_cardless.py (judge scan after every harvest), dealread.py train. */
+function advise(){
+  const cs=finalCommits||uniq(commits);
+  const reads=cs.map(c=>c.card);
+  const unknown=cs.filter(c=>!c.card).length;
+  const got=new Set(cs.filter(c=>c.card).map(c=>c.card));
+  const missing=CODES.filter(c=>!got.has(c));
+  const L=[];
+  // wrong reads only exist when a truth is selected (bench mode)
+  let wrong=[];
+  const t=$("truth").value;
+  if(t!=="none"){
+    const lcsKeep=seq=>{  // which reads survive the LCS = which are RIGHT
+      const n=reads.length,m=52,dp=Array.from({length:n+1},()=>new Int16Array(m+1));
+      for(let i=1;i<=n;i++)for(let j=1;j<=m;j++)
+        dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]+(reads[i-1]===seq[j-1]?1:0));
+      const keep=new Set(); let i=n,j=m;
+      while(i>0&&j>0){
+        if(reads[i-1]===seq[j-1]&&dp[i][j]===dp[i-1][j-1]+1){keep.add(i-1);i--;j--;}
+        else if(dp[i-1][j]>=dp[i][j-1])i--; else j--;
+      }
+      return keep;
+    };
+    const fwd=lcsKeep(SEQ), rev=lcsKeep([...SEQ].reverse());
+    const keep=fwd.size>=rev.size?fwd:rev;
+    wrong=reads.map((r,i)=>r&&!keep.has(i)?r:null).filter(Boolean);
+  }
+  L.push("── NEXT: improve the model ──");
+  if(recChunks.length||recorder)
+    L.push("1. Recording captured ✓ — it is self-labeling training data (deck");
+  else
+    L.push("1. Not recorded. Next deal press ⏺ Rec — a recorded deal is self-");
+  L.push("   labeling training data (deck order known). On the Mac:");
+  L.push("   python3 ingest_bench_rec.py <tag>   → eyeball the sheet →");
+  L.push("   --harvest  (the cardless judge now screens every crop)");
+  if(wrong.length)
+    L.push("2. Misread this run — capture these again, slower/steadier: "+
+           wrong.map(pretty).join(" "));
+  if(missing.length&&missing.length<=8)
+    L.push((wrong.length?"3":"2")+". Never seen this run: "+missing.map(pretty).join(" ")+
+           " — they were dealt but no event fired (speed or occlusion).");
+  else if(missing.length)
+    L.push((wrong.length?"3":"2")+". "+missing.length+" cards never committed — if the deal felt "+
+           "normal, that's detection recall: more Rec data from THIS rig helps most.");
+  if(unknown>6)
+    L.push("• "+unknown+" unknown events — hover junk or blur; steadier single passes.");
+  L.push("• after harvest: audit_cardless.py, then dealread.py train 8000 → export_onnx.py");
+  L.push("  (model this run: "+MV+")");
+  return L;
+}
 function scoreFinal(){
   const cs=finalCommits||uniq(commits);
   const t=$("truth").value;
@@ -552,6 +609,7 @@ function scoreFinal(){
   $("score").textContent=`SCORE: ${correct} correct (${dir}), ${com-correct} wrong, `+
     `${cs.length-com} flagged-unknown, ${52-correct} missed`;
   log(`scored: ${correct}/52 correct (${dir}; other direction ${Math.min(fwd,rev)}), ${com-correct} wrong`);
+  advise().forEach(l=>log(l));
 }
 
 /* ---- perform mode (?perform=1) — phase 1: capture + live readout + summary.
@@ -612,7 +670,7 @@ function performSummary(){
   lines.push("read "+got.size+"/52"+(missing.length&&missing.length<=6
       ? "   missing: "+missing.map(pretty).join(" ")
       : missing.length ? "   ("+missing.length+" unread)" : ""));
-  $("peek").textContent=lines.join("\n");
+  $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
 }
 if(PERFORM){
   document.body.classList.add("perform");
@@ -1111,7 +1169,7 @@ $("dl").onclick=()=>{
   const v_=$("v");
   const rep={
     when:new Date().toISOString(),
-    page:document.title, model:MODEL_ID,
+    page:document.title, model:MODEL_ID, advice:advise(),
     engine:EP, crops:NCROPS, gates:G,
     stream:{w:v_.videoWidth,h:v_.videoHeight,
             rotated:v_.videoHeight>v_.videoWidth?ROT_DIR:"none"},
@@ -1143,6 +1201,10 @@ $("dl").onclick=()=>{
 };
 
 let EP="?"; let MODEL_ID="";
+// ?model=v24 (etc.) overrides the default — the "beta link" mechanism. One
+// page, one pipeline; only the weights differ, so bench fixes apply to both
+// and an A/B on the same rig is two URLs. Top-level: advise() needs MV too.
+const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a-z0-9]/gi,"");
 (async()=>{
   try{
     // ORT 1.27 webgpu bundle. GPU inference is the single biggest live-mode
@@ -1150,7 +1212,7 @@ let EP="?"; let MODEL_ID="";
     // device supports WebGPU. Explicit graceful fallback to wasm otherwise.
     ort.env.wasm.numThreads=Math.min(4,navigator.hardwareConcurrency||2);
     ort.env.wasm.wasmPaths="./";
-    const MODEL="dealread_v23.onnx?v=23"; MODEL_ID=MODEL;
+    const MODEL="dealread_"+MV+".onnx?"+MV; MODEL_ID=MODEL;
     if("gpu" in navigator){
       try{
         sess=await ort.InferenceSession.create(MODEL,{executionProviders:["webgpu"]});
@@ -1166,7 +1228,7 @@ let EP="?"; let MODEL_ID="";
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v48 (model v23, perform mode: live card + cards-left readout) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v49 (model "+MV+", ?model= override, post-scan improve-the-model advisor) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
