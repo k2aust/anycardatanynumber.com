@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v50</title>
+<title>deal bench page-v51</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -577,12 +577,20 @@ function advise(){
     wrong=reads.map((r,i)=>r&&!keep.has(i)?r:null).filter(Boolean);
   }
   L.push("── NEXT: improve the model ──");
-  if(recChunks.length||recorder)
-    L.push("1. Recording captured ✓ — it is self-labeling training data (deck");
-  else
-    L.push("1. Not recorded. Next deal press ⏺ Rec — a recorded deal is self-");
-  L.push("   labeling training data (deck order known). On the Mac:");
-  L.push("   python3 ingest_bench_rec.py <tag>   → eyeball the sheet →");
+  // Recording and reading are mutually exclusive on this phone (Rec pauses
+  // the scanner), so a record-only run legitimately has zero reads — say so
+  // instead of letting "read 0/52" look like a model failure.
+  if((recChunks.length||recorder) && !got.size){
+    L.push("1. RECORD-ONLY run ✓ (reading pauses while recording — 0 reads is");
+    L.push("   expected). This video is the training data AND the A/B input:");
+    L.push("   replay it through BOTH models on the Mac —");
+    L.push("   dealbench.html?replay=<clip>&model=v23  vs  &model=v24");
+    L.push("   (identical frames, so any difference is purely the model)");
+  } else {
+    L.push("1. Live-read run (no video). To also harvest training data, do a");
+    L.push("   separate pass with ⏺ Rec — reads pause while recording.");
+  }
+  L.push("   ingest:  python3 ingest_bench_rec.py <tag>  → eyeball the sheet →");
   L.push("   --harvest  (the cardless judge now screens every crop)");
   if(wrong.length)
     L.push("2. Misread this run — capture these again, slower/steadier: "+
@@ -1255,7 +1263,7 @@ const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v50 (model "+MV+", perform summary shows full read order) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v51 (model "+MV+", record-only-aware advisor) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
