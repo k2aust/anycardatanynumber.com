@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v49</title>
+<title>deal bench page-v50</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -41,6 +41,16 @@
   #peek { position:absolute; bottom:14vh; width:100%; text-align:center;
     font-size:26px; color:#3a3a3a; letter-spacing:3px; min-height:34px;
     font-family: ui-monospace, monospace; white-space:pre-wrap; }
+  /* full read order at Stop — the field-test readout: hold the dealt pile and
+     compare card by card. Brighter than the covert chrome on purpose; this
+     shows only on the end summary of a rehearsal run. */
+  #porder { position:absolute; top:30vh; left:50%; transform:translateX(-50%);
+    display:none; font:15px/1.8 ui-monospace, monospace; color:#9a9a9a;
+    letter-spacing:1px; white-space:pre; text-align:left; }
+  #porder .red { color:#b06060; }
+  #porder .u { color:#555; }
+  #porder .pos { color:#4a4a4a; }
+  body.perform.psum #peek { bottom:6vh; font-size:15px; letter-spacing:1px; }
   #phint { position:absolute; bottom:4vh; width:100%; text-align:center;
     font-size:12px; color:#1c1c1c; }
 </style>
@@ -76,6 +86,7 @@
 <div id="pwrap">
   <div id="pclock">--:--</div>
   <div id="pdate"></div>
+  <div id="porder"></div>
   <div id="peek"></div>
   <div id="phint">tap to begin</div>
 </div>
@@ -670,6 +681,20 @@ function performSummary(){
   lines.push("read "+got.size+"/52"+(missing.length&&missing.length<=6
       ? "   missing: "+missing.map(pretty).join(" ")
       : missing.length ? "   ("+missing.length+" unread)" : ""));
+  // FULL READ ORDER — what the model thinks it saw, in dealt order, 13 per
+  // row with 1-based positions. This is the field-test readout Kevin asked
+  // for (2026-08-14): pick up the dealt pile, turn it over, and compare card
+  // by card — a per-position diff needs no truth dropdown and no laptop.
+  // ·?· = an event fired but nothing committed (a physically dealt card).
+  const cell=c=>c?`<span${"HD".includes(c.slice(-1))?' class="red"':''}>${pretty(c).padEnd(4)}</span>`
+                 :'<span class="u">·?· </span>';
+  let rows=[];
+  for(let i=0;i<cs.length;i+=13)
+    rows.push(`<span class="pos">${String(i+1).padStart(2)}│</span>`+
+              cs.slice(i,i+13).map(c=>cell(c.card)).join(""));
+  $("porder").innerHTML=rows.join("\n");
+  $("porder").style.display="block";
+  document.body.classList.add("psum");
   $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
 }
 if(PERFORM){
@@ -680,6 +705,8 @@ if(PERFORM){
   tick(); setInterval(tick,10000);
   $("pwrap").onclick=async()=>{
     if(!running){ stops=[]; peekSeenEvents=0; $("peek").textContent=DECK_N+" left";
+      $("porder").style.display="none"; $("porder").innerHTML="";
+      document.body.classList.remove("psum");
       $("phint").textContent=""; $("start").click(); }
     else { $("stop").click(); }
   };
@@ -1228,7 +1255,7 @@ const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v49 (model "+MV+", ?model= override, post-scan improve-the-model advisor) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v50 (model "+MV+", perform summary shows full read order) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
