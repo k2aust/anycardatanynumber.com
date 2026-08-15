@@ -3518,7 +3518,7 @@ function lkRenderCode(face) {
   if (lkCribMode) {   // crib lockscreen: once a value is chosen show its 4-suit code, else the unavailable-value range
     w.classList.remove("u");
     // camera glimpse committed: weather condition's initial = suit (Sunny=S Hazy=H Drizzly=D Cloudy=C)
-    if (lkCamCard) { w.textContent = lkWeatherTxt + "  " + LK_CAM_SUIT[lkCamCard.slice(-1)]; return; }
+    if (lkCamCard) { w.textContent = lkWeatherTxt + "  " + LK_CAM_SUIT[lkCamCard.slice(-1)] + (typeof lkDealLeft==="number" ? "  " + lkDealLeft : ""); return; }
     const validN = N >= 1 && N <= 52;
     if (validN && lkCribVal) w.innerHTML = lkWeatherTxt + "  " + acValCodesHTML(N, lkCribVal);
     else if (validN)         w.textContent = lkWeatherTxt + "  " + acUnavailRange(N);
@@ -3544,7 +3544,7 @@ function lkShowCommon() {
 }
 function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
 function lkCribShow() { lkCribMode = true;  lkShowCommon(); lkbtActive = true; lkbtAcc = 0; lkbtBuf = ""; lkbtDone = false; lkbtDotSet("armed"); lkGpStart(); }   // crib lockscreen auto-arms + polls the gamepad (Zero 2 works immediately, no arm button)
-function lkHide() { lkCribPeekHide(); lkCamStop(); lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+function lkHide() { lkCribPeekHide(); lkCamStop(); try{ lkDealCleanup(); }catch(e){} lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
 // tap the button under the fingerprint to flip between the lockscreen and the crib (stays until tapped again)
 $("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow(); });
 $("lkCribBack").addEventListener("click", lkCribPeekHide);
@@ -3697,16 +3697,63 @@ function lkCamToggle(){
   if (lkCamStream){ lkCamStop(); lkCamCard = null; lkRenderDate(); }   // reading -> abort + clear
   else { lkCamCard = null; lkRenderDate(); lkCamStart(); }             // idle/committed -> clear + re-arm
 }
-// 2026-08-15: the bottom-left corner now launches the DEAL READER (perform
-// mode, v25 on-device) instead of the cut-glimpse. Deal the deck over the
-// phone; at Stop a complete capture is written to rdCustomStack — the same
-// key the "Last read" scheme loads — so the ACAAN runs on the captured stack
-// immediately after. The perform page pins the FRONT camera ({exact:"user"})
-// and auto-rotates portrait streams, which the old cut-glimpse path did not.
-// Cut-glimpse (lkCamToggle above) is intact but unwired; re-wire deliberately
-// if that trick returns.
-function lkDealCapture(){ location.href = "local/dealbench.html?perform=1&model=v25&return=1"; }
-$("lkCam").addEventListener("click", lkDealCapture);
+// 2026-08-15: the bottom-left corner runs the DEAL READER (v25, on-device)
+// INSIDE this lockscreen — the real portrait lockscreen stays on screen the
+// whole time. The bench page runs headless in an invisible same-origin
+// iframe (?embed=1: black page, first child of #lockScreen so every
+// lockscreen element paints over it; the inner video keeps rendering under
+// the inner overlay, which avoids the Android hidden-video frame stall) and
+// reports over postMessage. Display is the established covert language:
+// day-of-month = last card's value, weather initial = suit, plus a trailing
+// cards-left count on the weather line. At Stop a complete capture (all 48
+// non-aces; ace positions never matter) is saved to rdCustomStack AND loaded
+// into the engine immediately — weather shows ✓; ✗N means N non-aces missed.
+// Corner taps: 1st = start, 2nd = stop/abort, 3rd = clear + re-arm.
+// Cut-glimpse (lkCamToggle above) is intact but unwired.
+let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
+function lkDealCleanup(){
+  if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
+  lkDealState = "idle"; lkDealLeft = null; lkCamCard = null;
+  lkCamDotSet("off"); lkRenderDate();
+}
+function lkDealToggle(){
+  if (lkDealState === "starting" || lkDealState === "reading"){
+    try{ lkDealFr.contentWindow.postMessage("db-stop", location.origin); }catch(e){ lkDealCleanup(); }
+    return;
+  }
+  if (lkDealState !== "idle"){ lkDealCleanup(); return; }                 // done/error -> clear + re-arm
+  const f = document.createElement("iframe");
+  f.id = "lkDealFrame"; f.setAttribute("allow", "camera");
+  f.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none;";
+  f.src = "local/dealbench.html?embed=1&model=v25";
+  $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
+  lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
+  lkCamDotSet("read");
+}
+window.addEventListener("message", e => {
+  if (e.origin !== location.origin || !e.data || !e.data.dbEmbed || !lkDealFr) return;
+  const d = e.data;
+  if (d.ev === "ready"){ try{ lkDealFr.contentWindow.postMessage("db-start", location.origin); }catch(err){} }
+  else if (d.ev === "tick"){
+    lkDealState = "reading";
+    lkCamCard = d.last || null; lkDealLeft = d.left;
+    lkRenderDate();
+  }
+  else if (d.ev === "done"){
+    lkDealState = "done";
+    if (d.saved){
+      try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
+           if (sv && window.__st) window.__st.rdUseCustomStack(sv.stack, sv.flags); }catch(err){}
+    }
+    lkDealLeft = null; lkCamCard = null; lkRenderDate();
+    $("lkWeather").textContent = lkWeatherTxt + "  " + (d.saved ? "✓" : "✗" + d.missing.length);
+    lkCamDotSet("off");
+    if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }  // camera off the moment we're done
+    lkDealState = "done";                                                    // corner tap clears the ✓/✗
+  }
+  else if (d.ev === "error"){ lkDealState = "error"; lkCamDotSet("err"); }
+});
+$("lkCam").addEventListener("click", lkDealToggle);
 
 /* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
    Feeds the SAME value->color->number pipeline as the on-screen keypad. Read via e.code so it's NumLock-independent

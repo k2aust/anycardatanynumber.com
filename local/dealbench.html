@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v54</title>
+<title>deal bench page-v55</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -30,7 +30,21 @@
          overflow-y: auto; white-space: pre-wrap; }
   /* ---- perform mode (?perform=1): phase-1 rehearsal skin ---- */
   body.perform { background:#000; }
-  body.perform .panel, body.perform h1 { display:none; }
+  /* The VIDEO must keep rendering. Android Chrome stalls frame delivery to a
+     display:none (or near-invisible) <video> — the lockscreen glimpse project
+     hit exactly this and its fix is documented there. Perform mode used to
+     display:none the whole panel, video included, which means perform-mode
+     LIVE reading likely never worked on the phone (all its live wins were on
+     the full bench). Keep the video's panel laid out full-screen UNDER the
+     opaque #pwrap — occlusion by another element does not stall playback —
+     and hide everything else. */
+  body.perform h1 { display:none; }
+  body.perform .panel:not(:has(#v)) { display:none; }
+  body.perform .panel:has(#v) { display:block; position:fixed; inset:0; margin:0;
+    padding:0; border:none; background:#000; z-index:0; }
+  body.perform .panel:has(#v) > :not(#v) { display:none; }
+  body.perform #v { display:block; width:100vw; height:100vh; object-fit:cover; }
+  body.perform #pwrap { z-index:2; }
   #pwrap { display:none; }
   body.perform #pwrap { display:block; position:fixed; inset:0; background:#000;
     font: 16px -apple-system, Roboto, sans-serif; user-select:none; }
@@ -650,9 +664,26 @@ function scoreFinal(){
    event stream's known bias: hover junk fires spurious events and reads low,
    a wholly missed card reads high. It can go negative; that is left visible
    on purpose, as it is the cheapest signal that the trigger over-fired. */
-const PERFORM=(new URLSearchParams(location.search).get("perform")==="1");
+// &embed=1: headless mode for the app's REAL lockscreen. The lockscreen puts
+// this page in an invisible same-origin iframe, drives it with postMessage
+// ("db-start"/"db-stop"), and renders progress in its own covert idiom from
+// the tick/done events posted back. Embed implies perform behaviours (live
+// readout state, stack save at Stop) — the skin is never seen.
+const EMBED=(new URLSearchParams(location.search).get("embed")==="1");
+const PERFORM=(new URLSearchParams(location.search).get("perform")==="1")||EMBED;
 // &return=1: launched from the app's lockscreen — offer a way back after Stop.
 const RETURN=(new URLSearchParams(location.search).get("return")==="1");
+function embedPost(o){
+  if(EMBED && window.parent!==window)
+    try{ parent.postMessage(Object.assign({dbEmbed:true},o), location.origin); }catch(e){}
+}
+if(EMBED){
+  window.addEventListener("message", e=>{
+    if(e.origin!==location.origin) return;
+    if(e.data==="db-start"){ if(!running) $("start").click(); }
+    else if(e.data==="db-stop"){ if(running) $("stop").click(); }
+  });
+}
 const PEEK_MS=3000;
 const DECK_N=52;                   // assumed full deal length for the countdown
 let stops=[], peekSeenEvents=0;
@@ -663,6 +694,8 @@ function performLive(){
   const unkAfter=li<0?0:commits.length-1-li;
   $("peek").textContent=(li<0?"":pretty(commits[li].card)+(unkAfter?" +"+unkAfter+"?":"")+"   ")
     +(DECK_N-commits.length)+" left";
+  embedPost({ev:"tick", last:li<0?null:commits[li].card, unkAfter,
+             left:DECK_N-commits.length, events:commits.length});
 }
 function performTick(tMs){
   if(!PERFORM||!running||!commits.length) return;
@@ -715,17 +748,21 @@ function performSummary(){
   const dealt=cs.filter(c=>c.card).map(c=>c.card);
   const nonAce=dealt.filter(c=>!/^A/.test(c));
   const missingNA=CODES.filter(c=>!/^A/.test(c)&&!dealt.includes(c));
+  let savedOk=false;
   if(nonAce.length===48 && new Set(nonAce).size===48){
     try{
       localStorage.setItem("rdCustomStack", JSON.stringify(
         {stack:[...nonAce].reverse(), flags:[], at:new Date().toISOString(),
          src:"deal-capture "+MV}));
+      savedOk=true;
       lines.push("STACK SAVED ✓ — app Settings → Stack → \"Last read\"");
       lines.push("(pick the dealt pile up as-is, face down)");
     }catch(e){ lines.push("stack save failed: "+e.message); }
   }else{
     lines.push("stack NOT saved — missing "+missingNA.map(pretty).join(" "));
   }
+  embedPost({ev:"done", saved:savedOk, read:got.size,
+             missing:missingNA, missingAces:CODES.filter(c=>/^A/.test(c)&&!dealt.includes(c))});
   $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
   if(RETURN){ $("phint").textContent="tap the date to open the app"; }
 }
@@ -973,6 +1010,7 @@ $("start").onclick=async()=>{
   }catch(e){
     // A silent async rejection here is why Start looked dead: no error, no log.
     log("START FAILED: "+(e&&e.name)+" — "+(e&&e.message));
+    embedPost({ev:"error", msg:(e&&e.name)+": "+(e&&e.message)});
     running=false; $("start").classList.remove("on");
   }
 };
@@ -1340,7 +1378,8 @@ const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v54 (model "+MV+", perform Stop saves the stack to the app when 48 non-aces commit) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    embedPost({ev:"ready"});
+    log("BENCH page-v55 (model "+MV+", embed mode + perform video kept live under the overlay) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
