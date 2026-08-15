@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v53</title>
+<title>deal bench page-v54</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -651,6 +651,8 @@ function scoreFinal(){
    a wholly missed card reads high. It can go negative; that is left visible
    on purpose, as it is the cheapest signal that the trigger over-fired. */
 const PERFORM=(new URLSearchParams(location.search).get("perform")==="1");
+// &return=1: launched from the app's lockscreen — offer a way back after Stop.
+const RETURN=(new URLSearchParams(location.search).get("return")==="1");
 const PEEK_MS=3000;
 const DECK_N=52;                   // assumed full deal length for the countdown
 let stops=[], peekSeenEvents=0;
@@ -703,7 +705,35 @@ function performSummary(){
   $("porder").innerHTML=rows.join("\n");
   $("porder").style.display="block";
   document.body.classList.add("psum");
+  // STACK HANDOFF to the app. The engine runs on 48 cards (aces held out as
+  // packets), so the aces' positions never matter — a capture is usable the
+  // moment all 48 non-ace cards committed, even with aces unread. Convention:
+  // cards were dealt face-down onto a pile; picking that pile up as-is makes
+  // the LAST card dealt the TOP of the deck, so stack top→bottom = reversed
+  // dealt order. Written to the same localStorage key the app's "Last read"
+  // scheme already loads (same origin) — no new loader needed over there.
+  const dealt=cs.filter(c=>c.card).map(c=>c.card);
+  const nonAce=dealt.filter(c=>!/^A/.test(c));
+  const missingNA=CODES.filter(c=>!/^A/.test(c)&&!dealt.includes(c));
+  if(nonAce.length===48 && new Set(nonAce).size===48){
+    try{
+      localStorage.setItem("rdCustomStack", JSON.stringify(
+        {stack:[...nonAce].reverse(), flags:[], at:new Date().toISOString(),
+         src:"deal-capture "+MV}));
+      lines.push("STACK SAVED ✓ — app Settings → Stack → \"Last read\"");
+      lines.push("(pick the dealt pile up as-is, face down)");
+    }catch(e){ lines.push("stack save failed: "+e.message); }
+  }else{
+    lines.push("stack NOT saved — missing "+missingNA.map(pretty).join(" "));
+  }
   $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
+  if(RETURN){ $("phint").textContent="tap the date to open the app"; }
+}
+if(PERFORM&&RETURN){
+  // stopPropagation, or the tap also reaches pwrap's start/stop toggle and
+  // kicks off a fresh run in the instant before navigation.
+  $("pdate").addEventListener("click",e=>{
+    if(!running){ e.stopPropagation(); location.href="../"; }});
 }
 if(PERFORM){
   document.body.classList.add("perform");
@@ -1310,7 +1340,7 @@ const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v53 (model "+MV+", exposure guard: pin auto-reverts on blowout, auto warns on smear) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v54 (model "+MV+", perform Stop saves the stack to the app when 48 non-aces commit) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>

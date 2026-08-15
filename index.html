@@ -3697,7 +3697,16 @@ function lkCamToggle(){
   if (lkCamStream){ lkCamStop(); lkCamCard = null; lkRenderDate(); }   // reading -> abort + clear
   else { lkCamCard = null; lkRenderDate(); lkCamStart(); }             // idle/committed -> clear + re-arm
 }
-$("lkCam").addEventListener("click", lkCamToggle);
+// 2026-08-15: the bottom-left corner now launches the DEAL READER (perform
+// mode, v25 on-device) instead of the cut-glimpse. Deal the deck over the
+// phone; at Stop a complete capture is written to rdCustomStack — the same
+// key the "Last read" scheme loads — so the ACAAN runs on the captured stack
+// immediately after. The perform page pins the FRONT camera ({exact:"user"})
+// and auto-rotates portrait streams, which the old cut-glimpse path did not.
+// Cut-glimpse (lkCamToggle above) is intact but unwired; re-wire deliberately
+// if that trick returns.
+function lkDealCapture(){ location.href = "local/dealbench.html?perform=1&model=v25&return=1"; }
+$("lkCam").addEventListener("click", lkDealCapture);
 
 /* ---- Bluetooth remote input: numpad (direct digits) + gamepad (arrow accumulator), auto-detected by key code ----
    Feeds the SAME value->color->number pipeline as the on-screen keypad. Read via e.code so it's NumLock-independent
