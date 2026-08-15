@@ -2159,6 +2159,7 @@ function renderSettings() {
     + '<button id="setOpenLkCrib" class="randombtn" style="margin:0 0 12px">&#128274; Lockscreen crib (covert peek)</button>'
     + '<button id="setOpenLie" class="randombtn" style="margin:0 0 12px">&#129317; Lie detector (any stack)</button>'
     + '<button id="setOpenDealBeta" class="randombtn" style="margin:0 0 12px">&#129514; Deal reader beta (model v25)</button>'
+    + '<button id="setOpenDealBench" class="randombtn" style="margin:0 0 12px">&#9210; Deal bench (record a session, v25)</button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -2192,6 +2193,9 @@ function renderSettings() {
   // Perform mode by default — that is the surface being field-tested (v25 =
   // the field-winning model; v23 stays the bench default until it wins).
   { const bd = $("setOpenDealBeta"); if (bd) bd.addEventListener("click", () => { location.href = "local/dealbench.html?perform=1&model=v25"; }); }
+  // Full bench (no perform skin): the Rec button lives here — perform mode
+  // hides the panel, so the beta link alone gave no way to record a session.
+  { const bd = $("setOpenDealBench"); if (bd) bd.addEventListener("click", () => { location.href = "local/dealbench.html?model=v25"; }); }
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
