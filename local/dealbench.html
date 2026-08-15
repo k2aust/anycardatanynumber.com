@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v52</title>
+<title>deal bench page-v53</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -913,6 +913,16 @@ $("start").onclick=async()=>{
     // that never reaches the camera is worse than none: the button
     // would read 1/250 while the sensor sat on auto.
     if(expIdx!==0) await applyExposure(track, expIdx);
+    // …and then sanity-check it against the actual scene. One remembered
+    // exposure spans two environments and fails loudly in both directions:
+    // 2026-08-12 five clips shot on AUTO in a dim room, four unusable from
+    // 33ms-shutter smear (why persistence exists); 2026-08-14 Kevin shot
+    // OUTDOORS with the remembered indoor pin and the clip was completely
+    // blown out. So: a pinned exposure that saturates the frame auto-reverts
+    // to auto (bright light means auto's shutter is short anyway — outdoors
+    // auto IS correct); an auto exposure whose shutter lands in smear
+    // territory warns to pin. Never silently either way.
+    setTimeout(()=>expoGuard(track), 1500);
   }
   base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
@@ -1107,6 +1117,39 @@ $("exp").onclick=async()=>{
   localStorage.setItem(EXP_KEY, String(expIdx));
   await applyExposure(stream.getVideoTracks()[0], expIdx);
 };
+
+// Scene sanity check for the remembered exposure — see the Start-flow comment.
+// Thresholds: mean luma >=200 of 255 on a pinned shutter = the frame is
+// saturating (a normal card-on-pad scene metered right sits well below that);
+// auto shutter >=25ms = the measured smear regime (auto picked 25-33ms in the
+// dim-room sessions and that IS the blur that killed them).
+async function expoGuard(track){
+  try{
+    const v=$("v");
+    if(!running || !v.videoWidth) return;
+    const c=document.createElement("canvas"); c.width=64; c.height=64;
+    const g=c.getContext("2d",{willReadFrequently:true});
+    g.drawImage(v,0,0,64,64);
+    const d=g.getImageData(0,0,64,64).data;
+    let s=0;
+    for(let i=0;i<d.length;i+=4) s+=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    const luma=s/(d.length/4);
+    const st=track.getSettings();
+    if(expIdx!==0 && luma>=200){
+      const was=EXPS[expIdx][0];
+      expIdx=0; localStorage.setItem(EXP_KEY,"0");
+      await applyExposure(track,0);
+      log("⚠️ EXPOSURE GUARD: pinned "+was+" is blowing out (luma "+luma.toFixed(0)+
+          "/255 — bright light/outdoors). REVERTED TO AUTO; bright light keeps auto's shutter short.");
+    }else if(expIdx===0 && st.exposureTime && st.exposureTime>=25){
+      log("⚠️ dim scene: auto shutter "+st.exposureTime+"ms is in smear territory "+
+          "(the 2026-08-12 failure). Tap Exp to pin 1/250 for this room.");
+    }else{
+      log("exposure check ok: "+EXPS[expIdx][0]+" luma "+luma.toFixed(0)+
+          (st.exposureTime?" shutter "+st.exposureTime+"ms":""));
+    }
+  }catch(e){ log("exposure guard skipped: "+e.message); }
+}
 $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   try{ screen.orientation.unlock(); document.exitFullscreen(); }catch(e){}
   if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
@@ -1173,6 +1216,10 @@ $("rec").onclick=async()=>{
          const st3=trk.getSettings();
          log("re-pinned for recording: exposure "+st3.exposureMode+"/"+st3.exposureTime+
              "  focus "+st3.focusMode+"/"+st3.focusDistance);
+         // the outdoor-blowout clip died HERE: recording re-pins the indoor
+         // shutter, and nothing looked at the frames again until the deal was
+         // over. Guard the recording path too.
+         setTimeout(()=>expoGuard(trk), 1200);
     }catch(e){ log("could not lower resolution: "+e.message); }
   }
   const prefer=["video/mp4;codecs=avc1.42E01E","video/mp4","video/webm;codecs=h264",
@@ -1263,7 +1310,7 @@ const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a
     await sess.run({input:dummy});
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
-    log("BENCH page-v52 (model "+MV+", beta=v25) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v53 (model "+MV+", exposure guard: pin auto-reverts on blowout, auto warns on smear) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>
