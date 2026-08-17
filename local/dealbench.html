@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v56</title>
+<title>deal bench page-v57</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -451,7 +451,42 @@ function hungarian(cost, n, m){          // cost[i*m+j], n<=m; returns colOf[i]
 }
 
 const BETA=0.5;   // concentration exponent — the anti-attractor filter
-function assignCommits(evs){             // evs: [{t, vec:Float32Array(52), n}]
+// SPLIT-EVENT MERGE. Some dealing styles fire the trigger twice per card (the
+// card entering and settling read as two ink excursions) — lap2b 2026-08-17:
+// 101 events for 52 cards, and the doubling is what broke it, not the model.
+// Each card's evidence lands split across two events, so both fall under the
+// per-event gates and the assignment rejects them: 31/52 committed with 21
+// cards never named, while the SLOWER lap2a (same lap, same light) read 45.
+// A deal is 52 cards. When events exceed that, greedily merge the closest
+// adjacent pair — pooling their evidence vectors — until the count reaches 52
+// or the smallest remaining gap is too wide to be one card. Self-calibrating:
+// clips that fire once per card never enter the loop.
+const MERGE_MAX_MS=+(new URLSearchParams(location.search).get("mergems")||700);
+// DEFAULT OFF: this was a hypothesis that did not pan out. On lap2b it merged
+// 101 events -> 60 and changed the score by exactly nothing (31/52 both ways),
+// because the missing cards had no usable evidence to pool — they were riding
+// the top edge of the frame, not split across events. Kept behind ?merge=1 for
+// a clip that genuinely is split, but shipping it on by default would be
+// unproven complexity that can only merge real cards together.
+const MERGE_ON=(new URLSearchParams(location.search).get("merge")||"0")!=="0";
+function mergeSplitEvents(evs, target){
+  if(!MERGE_ON || evs.length<=target) return evs;
+  const e=evs.map(x=>({t:x.t, vec:Float64Array.from(x.vec), n:x.n, parts:1}));
+  while(e.length>target){
+    let bi=-1, bg=Infinity;
+    for(let i=1;i<e.length;i++){ const g=e[i].t-e[i-1].t; if(g<bg){ bg=g; bi=i; } }
+    if(bi<0 || bg>MERGE_MAX_MS) break;
+    const a=e[bi-1], b=e[bi];
+    for(let j=0;j<52;j++) a.vec[j]+=b.vec[j];
+    a.n+=b.n; a.parts+=b.parts;
+    e.splice(bi,1);
+  }
+  if(e.length!==evs.length)
+    log("split-event merge: "+evs.length+" events -> "+e.length+" (gaps <= "+MERGE_MAX_MS+"ms pooled)");
+  return e;
+}
+function assignCommits(evs0){            // evs: [{t, vec:Float32Array(52), n}]
+  const evs=mergeSplitEvents(evs0, DECK_N);
   const E=evs.length; if(!E) return [];
   // CONCENTRATION WEIGHTING. A real card concentrates its evidence in one
   // event; an attractor (3H/6C/8H in dark backlit rooms) fires weakly across
