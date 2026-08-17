@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v55</title>
+<title>deal bench page-v56</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -46,6 +46,14 @@
   body.perform #v { display:block; width:100vw; height:100vh; object-fit:cover; }
   body.perform #pwrap { z-index:2; }
   #pwrap { display:none; }
+  /* EMBED: the parent lockscreen draws everything — clock, date, the covert
+     card/count readout. The perform skin's own clock sat at a different
+     offset than the real one and painted through as a faint SECOND clock
+     (reported from the field 2026-08-16). In embed mode the skin is black and
+     empty; only the <video> keeps rendering, which is what stops Android
+     stalling frame delivery to a hidden video element. */
+  body.embed #pclock, body.embed #pdate, body.embed #peek,
+  body.embed #phint, body.embed #porder { display:none !important; }
   body.perform #pwrap { display:block; position:fixed; inset:0; background:#000;
     font: 16px -apple-system, Roboto, sans-serif; user-select:none; }
   #pclock { position:absolute; top:16vh; width:100%; text-align:center;
@@ -678,6 +686,7 @@ function embedPost(o){
     try{ parent.postMessage(Object.assign({dbEmbed:true},o), location.origin); }catch(e){}
 }
 if(EMBED){
+  document.body.classList.add("embed");
   window.addEventListener("message", e=>{
     if(e.origin!==location.origin) return;
     if(e.data==="db-start"){ if(!running) $("start").click(); }

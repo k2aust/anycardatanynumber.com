@@ -3508,7 +3508,12 @@ function lkRenderDate(t) {
   // feedback: show the value as soon as it's tapped (before colour), then the full card
   let dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
   if (lkCribMode) dayTxt = lkCribVal ? lkCribVal : (lkCribPhase === "val" ? "_" : String(t.getDate()));   // crib lockscreen: day-of-month = chosen value ("_" once value entry is armed)
-  if (lkCribMode && lkCamCard) dayTxt = String(lkCamDayNum(lkCamCard));   // camera glimpse: day-of-month = their card's value
+  // Deal capture, PAUSE-GATED (lkPeekOn): day-of-month = the last card read,
+  // written "7h" / "10s" / "Kd". Kevin's call 2026-08-16 — a bare value was
+  // ambiguous and the suit-as-weather-word moved too much of the lockscreen.
+  // Nothing changes while cards are flowing; the readout only appears once
+  // dealing pauses for PEEK_HOLD_MS, i.e. exactly when he can look.
+  if (lkCribMode && lkPeekOn && lkCamCard) dayTxt = lkCardCode(lkCamCard);
   const yearTxt = lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear());
   $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
   lkRenderCode(face);
@@ -3518,7 +3523,10 @@ function lkRenderCode(face) {
   if (lkCribMode) {   // crib lockscreen: once a value is chosen show its 4-suit code, else the unavailable-value range
     w.classList.remove("u");
     // camera glimpse committed: weather condition's initial = suit (Sunny=S Hazy=H Drizzly=D Cloudy=C)
-    if (lkCamCard) { w.textContent = lkWeatherTxt + "  " + LK_CAM_SUIT[lkCamCard.slice(-1)] + (typeof lkDealLeft==="number" ? "  " + lkDealLeft : ""); return; }
+    // temperature = cards still to deal, so the weather line keeps its shape
+    // (two chars + degree) instead of gaining a suit word and a trailing count.
+    if (lkPeekOn && typeof lkDealLeft === "number") { w.textContent = lkDealLeft + "\u00b0"; return; }
+    if (lkPeekOn && lkCamCard) { w.textContent = lkWeatherTxt; return; }
     const validN = N >= 1 && N <= 52;
     if (validN && lkCribVal) w.innerHTML = lkWeatherTxt + "  " + acValCodesHTML(N, lkCribVal);
     else if (validN)         w.textContent = lkWeatherTxt + "  " + acUnavailRange(N);
@@ -3711,8 +3719,25 @@ function lkCamToggle(){
 // Corner taps: 1st = start, 2nd = stop/abort, 3rd = clear + re-arm.
 // Cut-glimpse (lkCamToggle above) is intact but unwired.
 let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
+// PAUSE GATE. While cards are flowing the lockscreen must not move at all —
+// a date that changes every second is the tell. Every tick restarts the timer
+// and hides the readout; PEEK_HOLD_MS of quiet reveals it. That is also
+// exactly when it is useful: the pause IS the moment he looks down, and it is
+// the moment a spectator has said "stop".
+const PEEK_HOLD_MS = 3000;
+let lkPeekOn = false, lkPeekTimer = null;
+function lkCardCode(c){                 // "7H" -> "7h", "10S" -> "10s", "KD" -> "Kd"
+  return c.slice(0, -1) + c.slice(-1).toLowerCase();
+}
+function lkPeekBump(){                  // a card moved: hide, and re-arm the reveal
+  if (lkPeekOn){ lkPeekOn = false; lkRenderDate(); }
+  clearTimeout(lkPeekTimer);
+  lkPeekTimer = setTimeout(() => { lkPeekOn = true; lkRenderDate(); }, PEEK_HOLD_MS);
+}
+function lkPeekClear(){ clearTimeout(lkPeekTimer); lkPeekTimer = null; lkPeekOn = false; }
 function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
+  lkPeekClear();
   lkDealState = "idle"; lkDealLeft = null; lkCamCard = null;
   lkCamDotSet("off"); lkRenderDate();
 }
@@ -3737,6 +3762,7 @@ window.addEventListener("message", e => {
   else if (d.ev === "tick"){
     lkDealState = "reading";
     lkCamCard = d.last || null; lkDealLeft = d.left;
+    lkPeekBump();                       // hides the readout + re-arms the 3s reveal
     lkRenderDate();
   }
   else if (d.ev === "done"){
@@ -3745,6 +3771,7 @@ window.addEventListener("message", e => {
       try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
            if (sv && window.__st) window.__st.rdUseCustomStack(sv.stack, sv.flags); }catch(err){}
     }
+    lkPeekClear();
     lkDealLeft = null; lkCamCard = null; lkRenderDate();
     $("lkWeather").textContent = lkWeatherTxt + "  " + (d.saved ? "✓" : "✗" + d.missing.length);
     lkCamDotSet("off");
@@ -4385,6 +4412,10 @@ $("camRead").addEventListener("pointerleave", () => clearTimeout(stPressT));
 $("camCut").addEventListener("click", () => { stCutVal = null; $("camCutPad").style.display === "none" ? stCutPad() : ($("camCutPad").style.display = "none"); });
 window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomStack, rdWorstNumbers, rdSetCutCard,
   lkCamCommit, lkCamToggle, lkCamState: () => ({ card: lkCamCard, on: !!lkCamStream }),
+  // deal-capture peek hooks (the pause gate is inner-scope; these let it be
+  // driven without a camera, which is the only way to test the 3s reveal)
+  lkFeed: (card, left) => { lkCamCard = card; lkDealLeft = left; lkPeekBump(); lkRenderDate(); },
+  lkPeekState: () => ({ on: lkPeekOn, card: lkCamCard, left: lkDealLeft, code: lkCamCard ? lkCardCode(lkCamCard) : null }),
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
   state: () => ({ scheme: rdScheme, half: RD_HALF, n: RD_L0, excluded: [...rdExcluded] }) };   // debug/test bridge
 
