@@ -262,34 +262,6 @@
   /* ---- Lockscreen covert view (#lockScreen) — vertical clock + fingerprint sit OVER the hidden 8/5/2 keys ---- */
   #lockScreen { position: fixed; inset: 0; background: #000;
     color: #fff; z-index: 50; font-family: -apple-system, system-ui, sans-serif; max-width: none; }
-  /* ---- landscape-park: viewport locked LANDSCAPE, lockscreen drawn PORTRAIT.
-     Locking landscape moves the OS chrome to a long edge — the Android privacy
-     dot parks beside the dealing area instead of over the "lockscreen", and
-     the required fullscreen hides the status bar entirely — while the CSS
-     counter-rotation keeps the visual exactly a normal portrait lockscreen.
-     Two directions because which long edge the dot picks depends on which
-     landscape variant the OS chose; flip with localStorage lkParkDir=ccw.
-     Unit swap below: vw/vh are VIEWPORT units, blind to transforms — parked,
-     the visual width IS the viewport height, so every vw rule needs a vh twin
-     (and vice versa for the clock's vh sizes). */
-  #lockScreen.park { inset: auto; top: 0; left: 0; width: 100vh; height: 100vw;
-    transform-origin: top left; }
-  /* Mask the OS rotation. Android spins the whole screen when the orientation
-     lock lands, and that spin is the single biggest tell. The lockscreen's own
-     background is already black, so hiding just the CHILDREN through the
-     transition reads as "the screen was black for a moment" rather than "the
-     UI rotated". Revealed once the viewport actually reports landscape. */
-  #lockScreen > * { transition: opacity .22s ease; }
-  #lockScreen.parking > * { opacity: 0; }
-  #lockScreen.park.pkcw  { transform: rotate(90deg)  translateY(-100%); }
-  #lockScreen.park.pkccw { transform: rotate(-90deg) translateX(-100%); }
-  #lockScreen.park #lkTop { padding-left: 7vh; }
-  #lockScreen.park #lkDate { font-size: 5.2vh; }
-  #lockScreen.park #lkWeather { margin-top: 1.5vw; font-size: 5vh; }
-  #lockScreen.park #lkHrs, #lockScreen.park #lkMins { font-size: 20vw; letter-spacing: -0.5vw; }
-  #lockScreen.park #lkFinger .fp { width: 6vw; height: 6vw; }
-  #lockScreen.park #lkFinger .lkHint { font-size: 1.5vw; margin-top: 0.6vw; }
-  #lockScreen.park #lkZones .z .zl { font-size: 4.5vh; }
   #lkTop { position: absolute; top: 9%; left: 0; right: 0; text-align: left; padding-left: 7vw; }
   #lkDate { font-size: 5.2vw; color: rgba(255,255,255,.9); font-weight: 500; }
   #lkWeather { margin-top: 1.5vh; font-size: 5vw; color: rgba(255,255,255,.8); letter-spacing: 1px; }
@@ -2188,8 +2160,6 @@ function renderSettings() {
     + '<button id="setOpenLie" class="randombtn" style="margin:0 0 12px">&#129317; Lie detector (any stack)</button>'
     + '<button id="setOpenDealBeta" class="randombtn" style="margin:0 0 12px">&#129514; Deal reader beta (model v25)</button>'
     + '<button id="setOpenDealBench" class="randombtn" style="margin:0 0 12px">&#9210; Deal bench (record a session, v25)</button>'
-    + '<button id="setPark" class="randombtn" style="margin:0 0 6px"></button>'
-    + '<button id="setParkDir" class="randombtn" style="margin:0 0 12px"></button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -2226,21 +2196,6 @@ function renderSettings() {
   // Full bench (no perform skin): the Rec button lives here — perform mode
   // hides the panel, so the beta link alone gave no way to record a session.
   { const bd = $("setOpenDealBench"); if (bd) bd.addEventListener("click", () => { location.href = "local/dealbench.html?model=v25"; }); }
-  // Landscape-park controls. Direction matters because which long edge Android
-  // puts the privacy dot on depends on the landscape variant it picks — that is
-  // device behaviour, not something the page can read, so it is a manual flip.
-  { const pk = $("setPark"), pd = $("setParkDir");
-    const draw = () => {
-      const on = localStorage.getItem("lkPark") !== "0";
-      pk.textContent = (on ? "\u2611" : "\u2610") + " Landscape park (looks portrait, dot moves to the edge)";
-      pd.textContent = "\u21bb Dot edge: " + (localStorage.getItem("lkParkDir") === "ccw" ? "other side" : "default");
-      pd.style.display = on ? "" : "none";
-    };
-    if (pk){ pk.addEventListener("click", () => {
-               localStorage.setItem("lkPark", localStorage.getItem("lkPark") === "0" ? "1" : "0"); draw(); });
-             pd.addEventListener("click", () => {
-               localStorage.setItem("lkParkDir", localStorage.getItem("lkParkDir") === "ccw" ? "cw" : "ccw"); draw(); });
-             draw(); } }
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
@@ -3588,8 +3543,8 @@ function lkShowCommon() {
   lkReset(); lkStartClock(); lkFetchWeather(); lkbtArm(lkCribMode);   // crib lockscreen auto-arms the BT remote (no arm key needed)
 }
 function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
-function lkCribShow() { lkCribMode = true;  lkShowCommon(); lkParkEngage(); lkbtActive = true; lkbtAcc = 0; lkbtBuf = ""; lkbtDone = false; lkbtDotSet("armed"); lkGpStart(); }   // crib lockscreen auto-arms + polls the gamepad (Zero 2 works immediately, no arm button)
-function lkHide() { lkCribPeekHide(); lkCamStop(); try{ lkDealCleanup(); }catch(e){} lkParkRelease(); lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+function lkCribShow() { lkCribMode = true;  lkShowCommon(); lkbtActive = true; lkbtAcc = 0; lkbtBuf = ""; lkbtDone = false; lkbtDotSet("armed"); lkGpStart(); }   // crib lockscreen auto-arms + polls the gamepad (Zero 2 works immediately, no arm button)
+function lkHide() { lkCribPeekHide(); lkCamStop(); try{ lkDealCleanup(); }catch(e){} lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
 // tap the button under the fingerprint to flip between the lockscreen and the crib (stays until tapped again)
 $("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow(); });
 $("lkCribBack").addEventListener("click", lkCribPeekHide);
@@ -3755,49 +3710,10 @@ function lkCamToggle(){
 // into the engine immediately — weather shows ✓; ✗N means N non-aces missed.
 // Corner taps: 1st = start, 2nd = stop/abort, 3rd = clear + re-arm.
 // Cut-glimpse (lkCamToggle above) is intact but unwired.
-let lkDealFr = null, lkDealState = "idle", lkDealLeft = null, lkParked = false;
-// Landscape-park (see the CSS block). Engaged only when camera permission is
-// already known-granted (lkCamGranted, set on the first successful tick):
-// entering fullscreen BEFORE the camera prompt can suppress the prompt — the
-// bench documented that failure — so the very first run stays unparked and
-// every run after parks. Must be called synchronously inside the tap handler:
-// requestFullscreen needs the gesture's transient activation.
-function lkParkEngage(){
-  if (lkParked) return;                                            // idempotent
-  if (localStorage.getItem("lkPark") === "0") return;              // Settings opt-out
-  if (localStorage.getItem("lkCamGranted") !== "1") return;
-  const dir = localStorage.getItem("lkParkDir") === "ccw" ? "pkccw" : "pkcw";
-  const ls = $("lockScreen");
-  let revealed = false;
-  const reveal = () => { if (!revealed){ revealed = true; ls.classList.remove("parking"); } };
-  ls.classList.add("parking");                                     // black through the spin
-  try{
-    document.documentElement.requestFullscreen()
-      .then(() => screen.orientation.lock("landscape"))
-      .then(() => {
-        ls.classList.add("park", dir); lkParked = true;
-        // Reveal only once the viewport actually reports landscape — adding
-        // .park before the rotation lands sizes it off 100vh/100vw of the OLD
-        // orientation, which is exactly the frame we must not show.
-        if (innerWidth > innerHeight) setTimeout(reveal, 80);
-        else window.addEventListener("resize", function once(){
-               window.removeEventListener("resize", once); setTimeout(reveal, 80); });
-      })
-      .catch(() => reveal());                  // desktop / unsupported: run unparked
-  }catch(e){ reveal(); }
-  setTimeout(reveal, 1400);                    // hard floor: never leave it hidden
-}
-function lkParkRelease(){
-  if (!lkParked) return;
-  lkParked = false;
-  $("lockScreen").classList.remove("park", "pkcw", "pkccw");
-  try{ screen.orientation.unlock(); }catch(e){}
-  if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
-}
+let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
 function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
   lkDealState = "idle"; lkDealLeft = null; lkCamCard = null;
-  lkParkRelease();
   lkCamDotSet("off"); lkRenderDate();
 }
 function lkDealToggle(){
@@ -3806,7 +3722,6 @@ function lkDealToggle(){
     return;
   }
   if (lkDealState !== "idle"){ lkDealCleanup(); return; }                 // done/error -> clear + re-arm
-  lkParkEngage();                                                          // sync: needs the tap's activation
   const f = document.createElement("iframe");
   f.id = "lkDealFrame"; f.setAttribute("allow", "camera");
   f.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none;";
@@ -3821,7 +3736,6 @@ window.addEventListener("message", e => {
   if (d.ev === "ready"){ try{ lkDealFr.contentWindow.postMessage("db-start", location.origin); }catch(err){} }
   else if (d.ev === "tick"){
     lkDealState = "reading";
-    try{ localStorage.setItem("lkCamGranted", "1"); }catch(err){}   // camera works -> park from next run on
     lkCamCard = d.last || null; lkDealLeft = d.left;
     lkRenderDate();
   }
@@ -3835,7 +3749,6 @@ window.addEventListener("message", e => {
     $("lkWeather").textContent = lkWeatherTxt + "  " + (d.saved ? "✓" : "✗" + d.missing.length);
     lkCamDotSet("off");
     if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }  // camera off the moment we're done
-    lkParkRelease();                                                         // back to real portrait; ✓/✗ stays up
     lkDealState = "done";                                                    // corner tap clears the ✓/✗
   }
   else if (d.ev === "error"){ lkDealState = "error"; lkCamDotSet("err"); }
