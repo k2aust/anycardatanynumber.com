@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v57</title>
+<title>deal bench page-v59</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -325,6 +325,23 @@ const feats=(()=>{  // downscaled ink feats, ROI y10-78% x5-95%, port of frame_f
   };
 })();
 window._feats=feats;   // debug hook
+// Replay-harvest export: the event list with each event's assigned card and its
+// VIDEO-TIME ms (replayLoop drives currentTime, so t/1000*fps is the exact
+// frame). replay_harvest.py aligns these against the known NDO order to label
+// every event — including the ones the model missed — so a clip the miner
+// cannot segment still becomes training data.
+// POST the event list to serve_bench.py, which writes it beside the clips as
+// events_<clip>.json — a browser download would land in Downloads (or nowhere
+// headless), and the harvester needs it in runs/dealglimpse.
+window.__saveEvents=async()=>{
+  const r=await fetch("/__ev",{method:"POST",body:JSON.stringify(window.__events())});
+  return r.ok ? await r.text() : "save failed "+r.status;
+};
+window.__events=()=>{
+  const cs=(typeof finalCommits!=="undefined" && finalCommits)||uniq(commits);
+  return {model:MV, clip:(new URLSearchParams(location.search).get("replay")||""),
+          events:cs.map(c=>({t:c.t, card:c.card, conf:c.conf, n:c.n}))};
+};
 
 // ---- portrait-stream normalisation --------------------------------------
 const ROT_DIR=(new URLSearchParams(location.search).get("rot")||"cw");
@@ -1398,7 +1415,7 @@ let EP="?"; let MODEL_ID="";
 // ?model=v24 (etc.) overrides the default — the "beta link" mechanism. One
 // page, one pipeline; only the weights differ, so bench fixes apply to both
 // and an A/B on the same rig is two URLs. Top-level: advise() needs MV too.
-const MV=(new URLSearchParams(location.search).get("model")||"v23").replace(/[^a-z0-9]/gi,"");
+const MV=(new URLSearchParams(location.search).get("model")||"v27").replace(/[^a-z0-9]/gi,"");
 (async()=>{
   try{
     // ORT 1.27 webgpu bundle. GPU inference is the single biggest live-mode

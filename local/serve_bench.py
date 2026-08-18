@@ -13,6 +13,39 @@ Phone access (getUserMedia needs a secure context — two easy options):
 import http.server, functools, os, re
 
 class H(http.server.SimpleHTTPRequestHandler):
+    def do_POST(self):
+        """POST /__ev  -> runs/dealglimpse/events_<clip>.json
+
+        The replay harvester needs the page's event list on disk. A browser
+        download lands in the user's Downloads folder (and headless it lands
+        nowhere), so the page POSTs it here instead and it is written straight
+        beside the clips where replay_harvest.py expects it.
+        """
+        if self.path != "/__ev":
+            return self.send_error(404)
+        import json as _json
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            data = _json.loads(self.rfile.read(n) or b"{}")
+        except Exception as e:
+            return self.send_error(400, str(e))
+        clip = (data.get("clip") or "clip").rsplit(".", 1)[0]
+        dest = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "..", "Magic Pipeline", "magic_pipeline",
+                            "stack_reader", "runs", "dealglimpse")
+        dest = os.path.normpath(dest)
+        if not os.path.isdir(dest):
+            dest = os.path.dirname(os.path.abspath(__file__))
+        out = os.path.join(dest, f"events_{clip}.json")
+        with open(out, "w") as fh:
+            _json.dump(data, fh)
+        body = out.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     """SimpleHTTPRequestHandler + HTTP Range support.
 
     Range matters: python's stock handler ignores the Range header and always
