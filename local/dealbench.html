@@ -1418,7 +1418,7 @@ let EP="?"; let MODEL_ID="";
 // ?model=v24 (etc.) overrides the default — the "beta link" mechanism. One
 // page, one pipeline; only the weights differ, so bench fixes apply to both
 // and an A/B on the same rig is two URLs. Top-level: advise() needs MV too.
-const MV=(new URLSearchParams(location.search).get("model")||"v27").replace(/[^a-z0-9]/gi,"");
+const MV=(new URLSearchParams(location.search).get("model")||"v30").replace(/[^a-z0-9]/gi,"");
 (async()=>{
   try{
     // ORT 1.27 webgpu bundle. GPU inference is the single biggest live-mode
