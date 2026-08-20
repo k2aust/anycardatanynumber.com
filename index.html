@@ -3828,22 +3828,34 @@ function lkCamToggle(){
 // Corner taps: 1st = start, 2nd = stop/abort, 3rd = clear + re-arm.
 // Cut-glimpse (lkCamToggle above) is intact but unwired.
 let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
-// PAUSE GATE. While cards are flowing the lockscreen must not move at all —
-// a date that changes every second is the tell. Every tick restarts the timer
-// and hides the readout; PEEK_HOLD_MS of quiet reveals it. That is also
-// exactly when it is useful: the pause IS the moment he looks down, and it is
-// the moment a spectator has said "stop".
+// PEEK LATCH (Kevin's call 2026-08-20, second live session). The old pause
+// gate blanked the readout on every tick and revealed only after a quiet
+// hold — so the display was empty whenever cards were flowing. Now it
+// LATCHES: the readout shows the last card that stayed on top for
+// PEEK_HOLD_MS and stays up until a DIFFERENT card earns its own hold.
+// The anti-tell property is preserved — during steady dealing no card holds
+// long enough, so the date is a frozen (stale) card, not a flicker; the
+// moment a spectator says "stop", the top card latches in and Kevin can
+// peek whenever he likes. The cards-left count freezes with its card.
 const PEEK_HOLD_MS = 2500;   // Kevin's call 2026-08-20 after the first live v30 capture: 3s felt slow
-let lkPeekOn = false, lkPeekTimer = null;
+let lkPeekOn = false, lkPeekTimer = null, lkPeekPend = null;
 function lkCardCode(c){                 // "7H" -> "7h", "10S" -> "10s", "KD" -> "Kd"
   return c.slice(0, -1) + c.slice(-1).toLowerCase();
 }
-function lkPeekBump(){                  // a card moved: hide, and re-arm the reveal
-  if (lkPeekOn){ lkPeekOn = false; lkRenderDate(); }
+function lkPeekFeed(card, left){        // a read tick: feed the latch, change nothing on screen
+  if (!card) return;
+  if (card === (lkPeekPend ? lkPeekPend.card : lkCamCard)){
+    if (lkPeekPend) lkPeekPend.left = left;    // same card still on top: fresher count only
+    return;
+  }
+  lkPeekPend = { card, left };
   clearTimeout(lkPeekTimer);
-  lkPeekTimer = setTimeout(() => { lkPeekOn = true; lkRenderDate(); }, PEEK_HOLD_MS);
+  lkPeekTimer = setTimeout(() => {
+    lkCamCard = lkPeekPend.card; lkDealLeft = lkPeekPend.left;
+    lkPeekPend = null; lkPeekOn = true; lkRenderDate();
+  }, PEEK_HOLD_MS);
 }
-function lkPeekClear(){ clearTimeout(lkPeekTimer); lkPeekTimer = null; lkPeekOn = false; }
+function lkPeekClear(){ clearTimeout(lkPeekTimer); lkPeekTimer = null; lkPeekOn = false; lkPeekPend = null; }
 function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
   lkPeekClear();
@@ -3870,9 +3882,7 @@ window.addEventListener("message", e => {
   if (d.ev === "ready"){ try{ lkDealFr.contentWindow.postMessage("db-start", location.origin); }catch(err){} }
   else if (d.ev === "tick"){
     lkDealState = "reading";
-    lkCamCard = d.last || null; lkDealLeft = d.left;
-    lkPeekBump();                       // hides the readout + re-arms the 3s reveal
-    lkRenderDate();
+    lkPeekFeed(d.last || null, d.left);   // feed the latch; the screen changes only when a card HOLDS
   }
   else if (d.ev === "done"){
     lkDealState = "done";
@@ -4528,7 +4538,7 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
   lkCamCommit, lkCamToggle, lkCamState: () => ({ card: lkCamCard, on: !!lkCamStream }),
   // deal-capture peek hooks (the pause gate is inner-scope; these let it be
   // driven without a camera, which is the only way to test the 3s reveal)
-  lkFeed: (card, left) => { lkCamCard = card; lkDealLeft = left; lkPeekBump(); lkRenderDate(); },
+  lkFeed: (card, left) => lkPeekFeed(card, left),
   lkPeekState: () => ({ on: lkPeekOn, card: lkCamCard, left: lkDealLeft, code: lkCamCard ? lkCardCode(lkCamCard) : null }),
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
   state: () => ({ scheme: rdScheme, half: RD_HALF, n: RD_L0, excluded: [...rdExcluded] }) };   // debug/test bridge
