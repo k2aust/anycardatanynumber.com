@@ -2229,7 +2229,7 @@ function renderSettings() {
       const v = b.dataset.v;
       if (v === "custom") {
         try { const saved = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
-              if (saved && window.__st) { window.__st.rdUseCustomStack(saved.stack, saved.flags);
+              if (saved && window.__st) { window.__st.rdUseCustomStack(saved.stack, saved.flags, saved.stack52);
                 if (rdSetScheme) rdSetScheme("custom"); } } catch (err) {}
       } else if (rdSetScheme) rdSetScheme(v);
       renderSettings(); });
@@ -2758,15 +2758,74 @@ rdApplyScheme(rdScheme);
 rdSetScheme = name => { rdApplyScheme(name); rdResetState(); rdRender(); };   // bridge for the settings toggle (outer scope)
 // ---- shuffled-deck (live-read) custom stack ----
 let rdExcluded = new Set();          // flagged/uncertain cards: never offered, never forced
-function rdUseCustomStack(stack48, flaggedCards){
+function rdUseCustomStack(stack48, flaggedCards, stack52){
+  // stack52 (optional): the full order INCLUDING aces, from a complete 52-card
+  // capture or a poker-deal gather. The ACAAN engine still runs on the 48; the
+  // full order only feeds modes that need ace positions (poker-deal).
+  const full52 = stack52 && stack52.length === 52 ? stack52.slice() : null;
   const base = RD_SCHEMES.highlow;
-  RD_SCHEMES.custom = { stack: stack48.slice(), full: stack48.slice(),
+  RD_SCHEMES.custom = { stack: stack48.slice(), full: full52 || stack48.slice(),
     lo: base.lo, hi: base.hi, kindStep: false,
     low: base.low, lowMid: base.lowMid, high: base.high, highMid: base.highMid,
     mid: base.mid, lowFan: base.lowFan, highFan: base.highFan };
   rdExcluded = new Set(flaggedCards || []);
   rdApplyScheme("custom");
-  try { localStorage.setItem("rdCustomStack", JSON.stringify({ stack: stack48, flags: flaggedCards || [], at: new Date().toISOString() })); } catch (e) {}
+  try { localStorage.setItem("rdCustomStack", JSON.stringify({ stack: stack48, flags: flaggedCards || [], stack52: full52 || undefined, at: new Date().toISOString() })); } catch (e) {}
+}
+/* ---- Poker-deal mode (crib lockscreen, hidden "10" key) ----
+   Kevin deals H (2-6) five-card poker hands ROUND-ROBIN off the top of the
+   current full 52-card stack. The lockscreen answers covertly:
+   day-of-month = winning hand number, "year" = the hand's five value chars
+   grouped best-first ("666jj" = sixes full of jacks; ten = "0", ace = "a",
+   wheel straight = "5432a"). Flush / straight flush: the weather condition
+   word's initial gives the suit (Sunny=S Hazy=H Drizzly=D Cloudy=C).
+   Gather convention (Kevin's, 2026-08-19): every hand is turned face up,
+   hand H goes onto hand H-1 ... onto hand 1, the combined packet is flipped
+   face down, and the UNDEALT REMAINDER IS DROPPED ON TOP of it. The "0" key
+   commits that recomputed order as the new "Last read" stack. */
+/*PK-START*/
+function pkRank(c){ const v = c.slice(0, -1); return v==="A"?14 : v==="K"?13 : v==="Q"?12 : v==="J"?11 : parseInt(v,10); }
+function pkChar(r){ return r===14?"a" : r===13?"k" : r===12?"q" : r===11?"j" : r===10?"0" : String(r); }
+function pkEval(cards){        // 5 card codes -> {key, year, flushSuit}; lexicographically bigger key wins
+  const cnt = {};
+  cards.forEach(c => { const r = pkRank(c); cnt[r] = (cnt[r]||0)+1; });
+  const groups = Object.keys(cnt).map(Number).sort((a,b) => cnt[b]-cnt[a] || b-a);
+  const shape = groups.map(g => cnt[g]).join("");        // "41"=quads "32"=boat "311"=trips "221"=two pair "2111"=pair
+  const flush = new Set(cards.map(c => c.slice(-1))).size === 1;
+  const wheel = shape==="11111" && groups[0]===14 && groups[1]===5;   // A-5-4-3-2: ace plays low
+  const straight = shape==="11111" && (groups[0]-groups[4]===4 || wheel);
+  const cat = straight&&flush ? 8 : shape==="41" ? 7 : shape==="32" ? 6 : flush ? 5 :
+              straight ? 4 : shape==="311" ? 3 : shape==="221" ? 2 : shape==="2111" ? 1 : 0;
+  const order = wheel ? [5,4,3,2,14] : groups.flatMap(g => Array(cnt[g]).fill(g));   // count-desc then rank-desc
+  return { key: [cat].concat(wheel ? [5,4,3,2,1] : order),
+           year: order.map(pkChar).join(""), flushSuit: flush ? cards[0].slice(-1) : null };
+}
+function pkCmp(a, b){ for (let i=0;i<a.key.length;i++) if (a.key[i]!==b.key[i]) return a.key[i]-b.key[i]; return 0; }
+function pkDeal(stack52, H){   // round-robin: hand i (0-based) receives positions i, i+H, i+2H, i+3H, i+4H
+  const hands = [];
+  for (let i=0;i<H;i++) hands.push([0,1,2,3,4].map(r => stack52[i + r*H]));
+  return hands;
+}
+function pkGather(stack52, H){ // the physical cleanup above, as card math: new top->bottom order
+  const packet = [];
+  for (let i=0;i<H;i++) for (let r=4;r>=0;r--) packet.push(stack52[i + r*H]);
+  return stack52.slice(5*H).concat(packet);
+}
+/*PK-END*/
+function pkStack52(){ const f = fullStackForSettings; return f && f.length === 52 ? f : null; }   // custom needs a complete 52-card capture
+function pkCompute(H){
+  const s = pkStack52();
+  if (!s) return { ok: false };
+  const evs = pkDeal(s, H).map(pkEval);
+  let w = 0;
+  for (let i=1;i<evs.length;i++) if (pkCmp(evs[i], evs[w]) > 0) w = i;   // an exact tie keeps the earlier hand
+  return { ok: true, win: w+1, year: evs[w].year, suit: evs[w].flushSuit };
+}
+function pkApply(H){           // commit the gather: recomputed order becomes the new "Last read" stack
+  const s = pkStack52(); if (!s) return false;
+  const order = pkGather(s, H);
+  rdUseCustomStack(order.filter(c => !/^A/.test(c)), rdScheme === "custom" ? [...rdExcluded] : [], order);
+  return true;
 }
 function rdSetCutCard(card){          // glimpsed bottom card of the handed-off TOP half
   const p = RD_POS[card];
@@ -3470,6 +3529,8 @@ let lkCribMode = false;   // number-only covert lockscreen that peeks the high-l
 let lkCribPhase = "num";  // crib lockscreen input target: "num" (position 1-52, shown as the year) | "val" (value 2-K, shown as the day)
 let lkCribVal = null;     // chosen value ("2".."10","J","Q","K"); shows as the day-of-month, drives the 4-suit code
 let lkbtValAcc = 0;       // accumulator for the value phase (2..13 -> 2..K)
+let lkPokerH = null;      // poker-deal mode: number of hands dealt (2-6); lkCribPhase === "poker" while armed
+let lkPokerRes = null;    // poker-deal result {ok, win, year, suit, applied} — see the pk* block for the covert language
 // invisible numpad — calculator layout so the middle column reads 8/5/2 top→bottom under the clock:
 //   J Q K / 7 8 9 / 4 5 6 / 1 2 3 / 10 0 C
 const LK_KEYS = [["J",0,0],["Q",1,0],["K",2,0],["7",0,1],["8",1,1],["9",2,1],
@@ -3485,6 +3546,16 @@ $("lkSetup").addEventListener("click", () => { const dbg = $("lkZones").classLis
 function lkTap(k) {
   if (k === "clr") { lkReset(); return; }
   if (lkCribMode) {                                  // crib lockscreen: number (year) then value (day) -> 4-suit code by the weather
+    if (k === "10") {                                // "10" (unused by the crib flow) toggles poker-deal mode
+      lkPokerH = null; lkPokerRes = null;
+      lkCribPhase = lkCribPhase === "poker" ? "num" : "poker";
+      lkRenderDate(); lkCribRefresh(); return;
+    }
+    if (lkCribPhase === "poker") {                   // poker phase: 2-6 = hands dealt, 0 = commit the gather
+      if (k >= "2" && k <= "6") { lkPokerH = +k; lkPokerRes = pkCompute(+k); lkRenderDate(); }
+      else if (k === "0" && lkPokerRes && lkPokerRes.ok && !lkPokerRes.applied && pkApply(lkPokerH)) { lkPokerRes.applied = true; lkRenderDate(); }
+      return;
+    }
     if (lkCribPhase === "val") {                     // value phase: a single value key sets the value 2-K
       let v = null;
       if (k === "10") v = "10"; else if (k === "J" || k === "Q" || k === "K") v = k; else if (k >= "2" && k <= "9") v = k;
@@ -3511,7 +3582,7 @@ function lkTap(k) {
     lkNum += k; lkRenderDate();
   }
 }
-function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkCribPhase="num"; lkCribVal=null; lkbtValAcc=0; lkCamCard=null; lkRenderDate(); }
+function lkReset() { lkValue=null; lkColor=null; lkNum=""; lkPhase="value"; lkCribPhase="num"; lkCribVal=null; lkbtValAcc=0; lkCamCard=null; lkPokerH=null; lkPokerRes=null; lkRenderDate(); }
 function lkValToNum(v){ return v==="10"?10 : v==="J"?11 : v==="Q"?12 : v==="K"?13 : (+v||0); }
 function lkStartClock() { lkTick(); lkTimer = setInterval(lkTick, 1000); }
 function lkStopClock() { if (lkTimer) clearInterval(lkTimer); lkTimer = null; }
@@ -3533,7 +3604,13 @@ function lkRenderDate(t) {
   // Nothing changes while cards are flowing; the readout only appears once
   // dealing pauses for PEEK_HOLD_MS, i.e. exactly when he can look.
   if (lkCribMode && lkPeekOn && lkCamCard) dayTxt = lkCardCode(lkCamCard);
-  const yearTxt = lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear());
+  // Poker-deal mode: day-of-month = winning hand number, year = its five value
+  // chars ("_" while waiting for the hand count; "!" / "no52" when the current
+  // stack has no complete 52-card order — poker needs the ace positions).
+  const pk = lkCribMode && lkCribPhase === "poker";
+  if (pk) dayTxt = lkPokerRes ? (lkPokerRes.ok ? String(lkPokerRes.win) : "!") : "_";
+  const yearTxt = pk ? (lkPokerRes ? (lkPokerRes.ok ? lkPokerRes.year : "no52") : String(t.getFullYear()))
+                     : (lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear()));
   $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
   lkRenderCode(face);
 }
@@ -3541,6 +3618,12 @@ function lkRenderCode(face) {
   const w = $("lkWeather"), N = parseInt(lkNum,10);
   if (lkCribMode) {   // crib lockscreen: once a value is chosen show its 4-suit code, else the unavailable-value range
     w.classList.remove("u");
+    if (lkCribPhase === "poker") {   // poker-deal: weather word initial = flush suit (only when the winner is a flush); ✓ = gather committed
+      if (lkPokerRes && lkPokerRes.ok)
+        w.textContent = (lkPokerRes.suit ? LK_CAM_SUIT[lkPokerRes.suit] + " " : "") + lkWeatherTxt + (lkPokerRes.applied ? " ✓" : "");
+      else w.textContent = lkWeatherTxt;
+      return;
+    }
     // camera glimpse committed: weather condition's initial = suit (Sunny=S Hazy=H Drizzly=D Cloudy=C)
     // temperature = cards still to deal, so the weather line keeps its shape
     // (two chars + degree) instead of gaining a suit word and a trailing count.
@@ -3788,7 +3871,7 @@ window.addEventListener("message", e => {
     lkDealState = "done";
     if (d.saved){
       try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
-           if (sv && window.__st) window.__st.rdUseCustomStack(sv.stack, sv.flags); }catch(err){}
+           if (sv && window.__st) window.__st.rdUseCustomStack(sv.stack, sv.flags, sv.stack52); }catch(err){}
     }
     lkPeekClear();
     lkDealLeft = null; lkCamCard = null; lkRenderDate();
@@ -3855,8 +3938,13 @@ function lkbtKey(e){
       lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }
     if(LK_ZERO2_PHASE.has(kc)){ e.preventDefault(); lkCribPhase = lkCribPhase==="num" ? "val" : "num"; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }   // d: flip between entering the number and the value
     if(LK_ZERO2_CRIB.has(kc)){ e.preventDefault(); ($("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow()); lkbtDotSet("hit"); return; }   // c toggle crib
-    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkbtValAcc=0; lkCribVal=null; lkCribPhase="num"; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }   // clear number + value
+    if(LK_ZERO2_CLR.has(kc)){ e.preventDefault(); lkbtAcc=0; lkbtBuf=""; lkNum=""; lkbtValAcc=0; lkCribVal=null; lkCribPhase="num"; lkPokerH=null; lkPokerRes=null; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }   // clear number + value + poker
+    if(c==="NumpadMultiply"){ e.preventDefault(); lkPokerH=null; lkPokerRes=null; lkCribPhase = lkCribPhase==="poker" ? "num" : "poker"; lkRenderDate(); lkCribRefresh(); lkbtDotSet("hit"); return; }   // numpad *: toggle poker-deal mode
     if(digit!==null){ e.preventDefault();
+      if(lkCribPhase==="poker"){   // BT numpad in poker-deal mode: 2-6 = hands dealt, 0 = commit the gather
+        if(digit>=2&&digit<=6){ lkPokerH=digit; lkPokerRes=pkCompute(digit); lkRenderDate(); }
+        else if(digit===0&&lkPokerRes&&lkPokerRes.ok&&!lkPokerRes.applied&&pkApply(lkPokerH)){ lkPokerRes.applied=true; lkRenderDate(); }
+        lkbtDotSet("hit"); return; }
       if(lkCribPhase==="val"){ if(digit>=2&&digit<=9){ lkCribVal=String(digit); lkbtValAcc=digit; lkRenderDate(); lkCribRefresh(); } }   // BT numpad: value 2-9 (bonus)
       else if(lkbtBuf.length<2){ lkbtBuf+=String(digit); lkbtAcc=0; lkNum=lkbtBuf; lkRenderDate(); lkCribRefresh(); }                    // BT numpad: number digits (bonus)
       lkbtDotSet("hit"); return; }

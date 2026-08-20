@@ -812,9 +812,12 @@ function performSummary(){
   let savedOk=false;
   if(nonAce.length===48 && new Set(nonAce).size===48){
     try{
-      localStorage.setItem("rdCustomStack", JSON.stringify(
-        {stack:[...nonAce].reverse(), flags:[], at:new Date().toISOString(),
-         src:"deal-capture "+MV}));
+      const sv={stack:[...nonAce].reverse(), flags:[], at:new Date().toISOString(),
+                src:"deal-capture "+MV};
+      // Complete 52-card capture (aces read too): save the full order as well —
+      // the app's poker-deal mode needs ace positions, ACAAN still uses the 48.
+      if(dealt.length===52 && new Set(dealt).size===52) sv.stack52=[...dealt].reverse();
+      localStorage.setItem("rdCustomStack", JSON.stringify(sv));
       savedOk=true;
       lines.push("STACK SAVED ✓ — app Settings → Stack → \"Last read\"");
       lines.push("(pick the dealt pile up as-is, face down)");
