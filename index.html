@@ -3546,7 +3546,12 @@ $("lkSetup").addEventListener("click", () => { const dbg = $("lkZones").classLis
 function lkTap(k) {
   if (k === "clr") { lkReset(); return; }
   if (lkCribMode) {                                  // crib lockscreen: number (year) then value (day) -> 4-suit code by the weather
-    if (k === "10") {                                // "10" (unused by the crib flow) toggles poker-deal mode
+    // Poker-deal toggle lives on "K", NOT "10": in crib mode the #lkCam
+    // deal-reader toggle (z-index 63) blankets the whole 10 zone, so a real
+    // finger there starts the camera. K's zone (top-right, below Setup) is
+    // clear of every overlay and unused by the number phase; in the value
+    // phase K still means King, so the toggle only reads outside it.
+    if (k === "K" && lkCribPhase !== "val") {
       lkPokerH = null; lkPokerRes = null;
       lkCribPhase = lkCribPhase === "poker" ? "num" : "poker";
       lkRenderDate(); lkCribRefresh(); return;
