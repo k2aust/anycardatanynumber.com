@@ -809,7 +809,8 @@ function performSummary(){
   const dealt=cs.filter(c=>c.card).map(c=>c.card);
   const nonAce=dealt.filter(c=>!/^A/.test(c));
   const missingNA=CODES.filter(c=>!/^A/.test(c)&&!dealt.includes(c));
-  let savedOk=false;
+  let savedOk=false, partialN=0;
+  const PARTIAL_MIN=30;   // a shorter run is probably an abort — don't overwrite a good stack
   if(nonAce.length===48 && new Set(nonAce).size===48){
     try{
       const sv={stack:[...nonAce].reverse(), flags:[], at:new Date().toISOString(),
@@ -822,10 +823,30 @@ function performSummary(){
       lines.push("STACK SAVED ✓ — app Settings → Stack → \"Last read\"");
       lines.push("(pick the dealt pile up as-is, face down)");
     }catch(e){ lines.push("stack save failed: "+e.message); }
+  }else if(nonAce.length>=PARTIAL_MIN && new Set(nonAce).size===nonAce.length){
+    // PARTIAL SAVE (Kevin's call 2026-08-20). Slot-counting the event stream
+    // CANNOT recover the unread cards' positions (measured on 13 recorded
+    // deals: the trigger fires ~2 events per card, so even the cleanest clip
+    // put only 25/51 committed cards on their true slot). Convention instead:
+    // the unread cards are ASSUMED ON TOP of the stack, flagged so the engine
+    // never offers or forces them. The read cards' RELATIVE order below them
+    // is exact; their absolute positions become exact too once Kevin CULLS
+    // the listed cards to the top of the physical deck (removing cards never
+    // disturbs the order of the rest).
+    try{
+      localStorage.setItem("rdCustomStack", JSON.stringify(
+        {stack:[...missingNA, ...[...nonAce].reverse()], flags:missingNA,
+         at:new Date().toISOString(), src:"deal-capture partial "+MV}));
+      savedOk=true; partialN=missingNA.length;
+      lines.push("PARTIAL STACK SAVED — "+nonAce.length+"/48 read, "+partialN+" unread flagged");
+      lines.push("MOVE THESE "+partialN+" CARDS TO THE TOP (any order among them):");
+      lines.push("  "+missingNA.map(pretty).join(" "));
+      lines.push("(then the saved order is exact; flagged cards are never offered/forced)");
+    }catch(e){ lines.push("stack save failed: "+e.message); }
   }else{
     lines.push("stack NOT saved — missing "+missingNA.map(pretty).join(" "));
   }
-  embedPost({ev:"done", saved:savedOk, read:got.size,
+  embedPost({ev:"done", saved:savedOk, partial:partialN, read:got.size,
              missing:missingNA, missingAces:CODES.filter(c=>/^A/.test(c)&&!dealt.includes(c))});
   $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
   if(RETURN){ $("phint").textContent="tap the date to open the app"; }
