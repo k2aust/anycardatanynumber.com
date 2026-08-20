@@ -3623,10 +3623,12 @@ function lkRenderCode(face) {
   const w = $("lkWeather"), N = parseInt(lkNum,10);
   if (lkCribMode) {   // crib lockscreen: once a value is chosen show its 4-suit code, else the unavailable-value range
     w.classList.remove("u");
-    if (lkCribPhase === "poker") {   // poker-deal: weather word initial = flush suit (only when the winner is a flush); ✓ = gather committed
-      if (lkPokerRes && lkPokerRes.ok)
-        w.textContent = (lkPokerRes.suit ? LK_CAM_SUIT[lkPokerRes.suit] + " " : "") + lkWeatherTxt + (lkPokerRes.applied ? " ✓" : "");
-      else w.textContent = lkWeatherTxt;
+    if (lkCribPhase === "poker") {   // poker-deal MODE INDICATOR: the weather gains a condition word.
+      // "Fair" = poker mode active (F collides with no suit initial); a flush
+      // winner swaps it for the suit word (Sunny=S Hazy=H Drizzly=D Cloudy=C);
+      // ✓ = gather committed. Plain temperature, no word = normal crib mode.
+      w.textContent = (lkPokerRes && lkPokerRes.ok && lkPokerRes.suit ? LK_CAM_SUIT[lkPokerRes.suit] : "Fair")
+        + " " + lkWeatherTxt + (lkPokerRes && lkPokerRes.applied ? " ✓" : "");
       return;
     }
     // camera glimpse committed: weather condition's initial = suit (Sunny=S Hazy=H Drizzly=D Cloudy=C)
