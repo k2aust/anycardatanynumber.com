@@ -53,7 +53,7 @@
      empty; only the <video> keeps rendering, which is what stops Android
      stalling frame delivery to a hidden video element. */
   body.embed #pclock, body.embed #pdate, body.embed #peek,
-  body.embed #phint, body.embed #porder { display:none !important; }
+  body.embed #phint, body.embed #porder, body.embed #premain { display:none !important; }
   body.perform #pwrap { display:block; position:fixed; inset:0; background:#000;
     font: 16px -apple-system, Roboto, sans-serif; user-select:none; }
   #pclock { position:absolute; top:16vh; width:100%; text-align:center;
@@ -73,6 +73,15 @@
   #porder .u { color:#555; }
   #porder .pos { color:#4a4a4a; }
   body.perform.psum #peek { bottom:6vh; font-size:15px; letter-spacing:1px; }
+  /* live remaining-cards panel (Kevin 2026-08-25: until the model is near-100%,
+     show every read instantly and the full not-yet-seen list — visibility over
+     covertness). One line per suit, seen cards struck+dimmed. */
+  #premain { position:absolute; top:32vh; left:50%; transform:translateX(-50%);
+    font:14px/1.9 ui-monospace, monospace; color:#8a8a8a; letter-spacing:1px;
+    white-space:pre; text-align:left; }
+  #premain .red { color:#a06060; }
+  #premain .got { color:#333; text-decoration:line-through; }
+  body.perform.psum #premain { display:none; }
   #phint { position:absolute; bottom:4vh; width:100%; text-align:center;
     font-size:12px; color:#1c1c1c; }
 </style>
@@ -109,6 +118,7 @@
   <div id="pclock">--:--</div>
   <div id="pdate"></div>
   <div id="porder"></div>
+  <div id="premain"></div>
   <div id="peek"></div>
   <div id="phint">tap to begin</div>
 </div>
@@ -540,7 +550,12 @@ function assignCommits(evs0){            // evs: [{t, vec:Float32Array(52), n}]
       const ratio = t1>0 ? s/t1 : 0;
       if(s>=MIN_SCORE && ratio>=MIN_RATIO && (t1-t2)>=MIN_MARGIN){ card=CODES[j]; conf=s; }
     }
-    return {t:e.t, card, conf:+conf.toFixed(2), n:e.n};
+    // `raw` = the assignment's choice BEFORE the confidence gate. The Hungarian
+    // pass is one-to-one over the 52 cards, so a card the gate rejects still
+    // has a slot — and a SLOT is all the ACAAN composer needs to keep every
+    // other card's position exact. Identity stays untrusted (flagged), but an
+    // unread card no longer shifts the whole deck below it by one.
+    return {t:e.t, card, raw:(j>=0?CODES[j]:null), conf:+conf.toFixed(2), n:e.n};
   });
 }
 
@@ -718,12 +733,17 @@ function scoreFinal(){
    - END SUMMARY on Stop: each stop with its deal position, then the cards
      never committed. With <=2 unknowns that missing-list IS the elimination
      readout the 3-card routine needs.
-   Counts are over EVERY event (committed or unknown) because each event is
-   one physically dealt card — the pile arithmetic needs physical positions,
-   not read positions. So "left" = DECK_N minus events, and it inherits the
-   event stream's known bias: hover junk fires spurious events and reads low,
-   a wholly missed card reads high. It can go negative; that is left visible
-   on purpose, as it is the cheapest signal that the trigger over-fired. */
+   COUNTS ARE IDENTITY-BASED (2026-08-24, Kevin's stop-deal routine, where the
+   count is spoken aloud as the ACAAN number and has to be exactly right).
+   "left" = DECK_N minus the number of DISTINCT cards committed. The old
+   event-based count inherited the trigger's documented ~2-events-per-card
+   over-fire, which pushed "left" low by a wildly variable amount; deduping by
+   identity removes that error class completely — a card seen twice, or the
+   deck face hovering over the lens before its card is dealt, moves the count
+   once or not at all. The one residual error is a dealt-but-unread card,
+   which reads 1 HIGH per miss (the dangerous direction: he names a number
+   larger than the packet and runs out of cards one early). "+N?" still rides
+   along on the bench skin when unknown events landed after the shown card. */
 // &embed=1: headless mode for the app's REAL lockscreen. The lockscreen puts
 // this page in an invisible same-origin iframe, drives it with postMessage
 // ("db-start"/"db-stop"), and renders progress in its own covert idiom from
@@ -746,17 +766,40 @@ if(EMBED){
   });
 }
 const PEEK_MS=3000;
-const DECK_N=52;                   // assumed full deal length for the countdown
+// Real deck size. The ACAAN packets (4 aces, jokers) are held out before the
+// routine begins, so the app's lockscreen passes &deck=48 — left at 52 every
+// "cards left" readout ran 4 high.
+const DECK_N=+(new URLSearchParams(location.search).get("deck")||52);
 let stops=[], peekSeenEvents=0;
+function dealtSoFar(){                 // distinct cards committed = physical cards dealt
+  const seen=new Set();
+  for(const c of commits) if(c.card) seen.add(c.card);
+  return seen.size;
+}
 function performLive(){
   if(!PERFORM||!running) return;
   let li=commits.length-1;
   while(li>=0 && !commits[li].card) li--;
   const unkAfter=li<0?0:commits.length-1-li;
+  const seen=new Set();
+  for(const c of commits) if(c.card) seen.add(c.card);
+  const left=DECK_N-seen.size;
   $("peek").textContent=(li<0?"":pretty(commits[li].card)+(unkAfter?" +"+unkAfter+"?":"")+"   ")
-    +(DECK_N-commits.length)+" left";
+    +left+" left";
+  renderRemain(seen);
   embedPost({ev:"tick", last:li<0?null:commits[li].card, unkAfter,
-             left:DECK_N-commits.length, events:commits.length});
+             left, events:commits.length, seen:[...seen]});
+}
+// Kevin 2026-08-25: until the model reads near-100%, the capture surfaces
+// show everything live — every card as it commits plus the whole 52-card
+// grid with seen cards struck.
+function renderRemain(seen){
+  $("premain").innerHTML=["H","C","D","S"].map(su=>
+    SYM[su]+" "+RANKS.map(r=>{
+      const cls=("HD".includes(su)?"red":"")+(seen.has(r+su)?" got":"");
+      return `<span class="${cls.trim()}">${r}</span>`;
+    }).join(" ")
+  ).join("\n");
 }
 function performTick(tMs){
   if(!PERFORM||!running||!commits.length) return;
@@ -846,8 +889,14 @@ function performSummary(){
   }else{
     lines.push("stack NOT saved — missing "+missingNA.map(pretty).join(" "));
   }
-  embedPost({ev:"done", saved:savedOk, partial:partialN, read:got.size,
+  // FULL SLOT ORDER for the app's routine composer: every card the assignment
+  // placed, in dealt order, each tagged weak:true when the confidence gate
+  // rejected its identity. Gate-rejected cards keep their slot so the cards
+  // below them keep their positions; the app flags them unreachable instead.
+  const slots=cs.filter(c=>c.raw).map(c=>({card:c.raw, weak:!c.card}));
+  embedPost({ev:"done", saved:savedOk, partial:partialN, read:got.size, slots,
              missing:missingNA, missingAces:CODES.filter(c=>/^A/.test(c)&&!dealt.includes(c))});
+  window.__lastSlots=slots;   // test hook (replay/bench measurement)
   $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
   if(RETURN){ $("phint").textContent="tap the date to open the app"; }
 }
@@ -865,6 +914,7 @@ if(PERFORM){
   tick(); setInterval(tick,10000);
   $("pwrap").onclick=async()=>{
     if(!running){ stops=[]; peekSeenEvents=0; $("peek").textContent=DECK_N+" left";
+      renderRemain(new Set());
       $("porder").style.display="none"; $("porder").innerHTML="";
       document.body.classList.remove("psum");
       $("phint").textContent=""; $("start").click(); }

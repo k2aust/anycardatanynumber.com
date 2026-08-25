@@ -137,6 +137,8 @@
   .seg .segopt { flex: 1; background: transparent; border: none; color: var(--dim); border-radius: 8px; padding: 9px 6px; font-size: 15px; font-weight: 800; line-height: 1.15; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .seg .segopt small { font-weight: 500; font-size: 11px; opacity: .8; text-transform: none; letter-spacing: 0; }
   .seg .segopt.active { background: var(--gold); color: #000; }
+  #segStack { flex-wrap: wrap; }
+  #segStack .segopt { flex: 1 1 38%; }
   .set-group h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; }
   .set-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 14px; }
   .set-row input[type=number] { width: 64px; background: var(--panel2); border: 1px solid var(--line);
@@ -284,6 +286,16 @@
   #lkExit  { position: absolute; top: 0; left: 0;  width: 22%; height: 10%; z-index: 61; }
   /* front-camera glimpse toggle: bottom-left, inset off the very edges so iOS edge-gesture protection doesn't eat the tap */
   #lkCam { position: absolute; bottom: 4%; left: 3%; width: 34%; height: 16%; z-index: 63; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  /* live remaining-cards panel during a deal capture (Kevin 2026-08-25: until
+     the model is near-100%, show everything). One row per suit, seen cards
+     struck+dimmed. pointer-events:none so the corner tap zones keep working. */
+  #lkRemain { display: none; position: absolute; top: 83%; left: 0; right: 0;
+    text-align: center; z-index: 64; pointer-events: none;
+    font: 3.2vw/1.7 ui-monospace, monospace; letter-spacing: 0.3vw;
+    color: rgba(255,255,255,.75); white-space: pre; }
+  #lkRemain .red { color: rgba(255,120,120,.8); }
+  #lkRemain .got { color: rgba(255,255,255,.18); text-decoration: line-through; }
+  #lkRemain .got.red { color: rgba(255,120,120,.18); }
   #lkCrib { display: none; position: absolute; inset: 0; z-index: 70; background: #000; padding: 6px 8px; flex-direction: column; overflow: hidden; box-sizing: border-box; }
   /* invisible tap zone over the date: tap the date to OPEN the crib (nothing visible to a spectator) */
   #lkToggle { display: none; position: absolute; left: 0; top: 8%; width: 62%; height: 11%; z-index: 75;
@@ -442,6 +454,7 @@
   <div id="lkCam" style="display:none"></div>
   <div id="lkCrib"><div id="lkCribBody"></div></div>
   <div id="lkToggle"></div>
+  <div id="lkRemain"></div>
   <div id="lkCribBack">&#8249;&nbsp; Lock screen</div>
   <div id="lkDbg"></div>
 </section>
@@ -2196,13 +2209,13 @@ function renderSettings() {
     +   '<button class="segopt' + (cardFirst ? ' active' : '') + '" data-v="1">Card first<small>free card, steer the number</small></button>'
     + '</div></div>'
     + '<div class="set-group"><div class="set-label">Stack</div><div class="seg" id="segStack">'
-    +   [["highlow","Combined","optimized"],["aronson","Aronson",""],["mnemonica","Mnemonica",""]]
+    +   [["highlow","Combined","optimized"],["majorminor","Major\u2013Minor","memorable force"],["aronson","Aronson",""],["mnemonica","Mnemonica",""]]
         .concat(localStorage.getItem("rdCustomStack") ? [["custom","Last read","live-read shuffle"]] : [])
         .map(([v,l,sm]) => '<button class="segopt' + (rdScheme === v ? ' active' : '') + '" data-v="' + v + '">' + l + (sm ? '<small>' + sm + '</small>' : '') + '</button>').join('')
     + '</div><div class="hint" id="stackThin"></div></div>'
     + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The full 52-card stack is listed below. Set aside the <b>2 jokers</b> and the <b>4 aces</b> (highlighted) in two face-up piles, leaving the 48-card ACAAN stack &mdash; which is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
     + instr
-    + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers). The aces are placed here for an upcoming spelling mode.</div></div>`
+    + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers).${rdScheme === "highlow" ? " The aces are placed here for an upcoming spelling mode." : ""}</div></div>`
     + spellSection;
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
@@ -2214,7 +2227,7 @@ function renderSettings() {
   // The perform-mode deal reader ("beta") is gone — live reading now happens on
   // the lockscreen, so the only reason left to open the bench is recording.
   // Full bench (no perform skin): the Rec button lives here.
-  { const bd = $("setOpenDealBench"); if (bd) bd.addEventListener("click", () => { location.href = "local/dealbench.html?model=v30"; }); }
+  { const bd = $("setOpenDealBench"); if (bd) bd.addEventListener("click", () => { location.href = "local/dealbench.html"; }); }
   $("segSel").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; selectMode = b.dataset.v === "1"; localStorage.setItem("rdSelectMode", selectMode ? "1" : "0"); updateModeTitle(); renderSettings(); });
   { const fp = $("setForgetPw"); if (fp) fp.addEventListener("click", () => { localStorage.removeItem("rdMagTrusted"); renderSettings(); }); }
   $("segChime").addEventListener("click", e => { const b = e.target.closest(".segopt"); if (!b) return; chimeEnabled = b.dataset.v === "1"; localStorage.setItem("rdChime", chimeEnabled ? "1" : "0"); if (chimeEnabled && rdChime) rdChime(); renderSettings(); });
@@ -2229,7 +2242,7 @@ function renderSettings() {
       const v = b.dataset.v;
       if (v === "custom") {
         try { const saved = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
-              if (saved && window.__st) { window.__st.rdUseCustomStack(saved.stack, saved.flags, saved.stack52);
+              if (saved && window.__st) { window.__st.rdUseCustomStack(saved.stack, saved.flags, saved.stack52, saved.half);
                 if (rdSetScheme) rdSetScheme("custom"); } } catch (err) {}
       } else if (rdSetScheme) rdSetScheme(v);
       renderSettings(); });
@@ -2556,7 +2569,12 @@ let lkCribOpen = null;  // set by the tool's IIFE; shows the number-only crib lo
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
 let acaanCribOpen = null; // set by the tool's IIFE; shows the ACAAN number-lookup crib
 let lieOpen = null;     // set by the tool's IIFE; shows the lie-detector tool
-let rdScheme = "highlow";  // single steering scheme (shared with the tool IIFE)
+const RD_BUILTIN_SCHEMES = ["highlow","majorminor","aronson","mnemonica"];
+// The chosen stack sticks across reloads — a mid-gig refresh must not silently
+// put the app on a different stack than the one in your hands. ("custom" is a
+// live read; it is restored from rdCustomStack in Settings, not from here.)
+let rdScheme = RD_BUILTIN_SCHEMES.includes(localStorage.getItem("rdScheme"))
+  ? localStorage.getItem("rdScheme") : "highlow";   // steering scheme (shared with the tool IIFE)
 let rdSetScheme = null; // set by the tool's IIFE; switches scheme + resets the flow
 let chimeEnabled = localStorage.getItem("rdChime") !== "0";   // reveal bell (elimination mode), on by default
 let rdChime = null;     // set by the tool's IIFE; plays the reveal bell (used for the settings preview)
@@ -2736,6 +2754,16 @@ for (const [nm, stk, fl] of [
   ["mnemonica",
    ["4C","2H","7D","3C","4H","6D","5H","9S","2S","QH","3D","QC","8H","6S","5S","9H","KC","2D","JH","3S","8S","6H","10C","5D","KD","2C","3H","8D","5C","KS","JD","8C","10S","KH","JC","7S","10H","4S","7H","4D","9C","JS","QD","7C","QS","10D","6C","9D"],
    ["4C","2H","7D","3C","4H","6D","AS","5H","9S","2S","QH","3D","QC","8H","6S","5S","9H","KC","2D","JH","3S","8S","6H","10C","5D","KD","2C","3H","8D","5C","KS","JD","8C","10S","KH","JC","7S","10H","AD","4S","7H","4D","AC","9C","JS","QD","7C","QS","10D","6C","AH","9D"]],
+
+  // "Major–Minor" (2026-08): ACAAN-only stack engineered so the forced suit is
+  // memorable instead of looked up — force a MAJOR (S/H) when N is within r of
+  // 15 or 39, a MINOR (D/C) otherwise, with r = 7 (K,Q) 6 (J,10) 5 (5,4) 4 (3,2);
+  // middles are r = 3 (9,6) and exactly 2 (8,7), free choice further out. Red and
+  // black are mirror images. Engine-verified: 0 dead anchors, 0 double lifts,
+  // 1264 clean outs over 4-50 — identical coverage to Combined, but no spelling.
+  ["majorminor",
+   ["QD","10C","4C","2D","6C","8D","7H","9S","KS","JH","4H","2S","3H","5S","JS","KH","9H","7S","8C","6D","3C","5C","JD","KD","QC","10D","4D","2C","9D","7D","8H","6S","QH","10S","4S","2H","3S","5H","10H","QS","6H","8S","7C","9C","3D","5D","JC","KC"],
+   ["QD","10C","4C","2D","6C","8D","7H","9S","KS","JH","AC","4H","2S","3H","5S","JS","KH","9H","7S","8C","6D","3C","AH","5C","JD","KD","QC","10D","4D","2C","9D","7D","8H","6S","QH","10S","AD","4S","2H","3S","5H","10H","QS","6H","8S","7C","9C","3D","AS","5D","JC","KC"]],
 ]) {
   const base = RD_SCHEMES.highlow;
   RD_SCHEMES[nm] = { stack: stk, full: fl, lo: base.lo, hi: base.hi, kindStep: false,
@@ -2755,10 +2783,12 @@ function rdApplyScheme(name){
   fullStackForSettings = c.full || RD_STACK;   // 52-card order with aces, for the settings reference
 }
 rdApplyScheme(rdScheme);
-rdSetScheme = name => { rdApplyScheme(name); rdResetState(); rdRender(); };   // bridge for the settings toggle (outer scope)
+rdSetScheme = name => { rdApplyScheme(name);
+  try { if (RD_BUILTIN_SCHEMES.includes(name)) localStorage.setItem("rdScheme", name); } catch (e) {}
+  rdResetState(); rdRender(); };   // bridge for the settings toggle (outer scope)
 // ---- shuffled-deck (live-read) custom stack ----
 let rdExcluded = new Set();          // flagged/uncertain cards: never offered, never forced
-function rdUseCustomStack(stack48, flaggedCards, stack52){
+function rdUseCustomStack(stack48, flaggedCards, stack52, half){
   // stack52 (optional): the full order INCLUDING aces, from a complete 52-card
   // capture or a poker-deal gather. The ACAAN engine still runs on the 48; the
   // full order only feeds modes that need ace positions (poker-deal).
@@ -2770,7 +2800,12 @@ function rdUseCustomStack(stack48, flaggedCards, stack52){
     mid: base.mid, lowFan: base.lowFan, highFan: base.highFan };
   rdExcluded = new Set(flaggedCards || []);
   rdApplyScheme("custom");
-  try { localStorage.setItem("rdCustomStack", JSON.stringify({ stack: stack48, flags: flaggedCards || [], stack52: full52 || undefined, at: new Date().toISOString() })); } catch (e) {}
+  // half: size of the TOP half, when the deck is already split (the stop-deal
+  // routine leaves an arbitrary split, not 24/24). rdApplyScheme has just reset
+  // RD_HALF to the midpoint, so this has to land after it — and it has to
+  // persist, or a reload silently re-cuts the deck down the middle.
+  if (half > 0 && half < stack48.length) RD_HALF = half;
+  try { localStorage.setItem("rdCustomStack", JSON.stringify({ stack: stack48, flags: flaggedCards || [], stack52: full52 || undefined, half: RD_HALF, at: new Date().toISOString() })); } catch (e) {}
 }
 /* ---- Poker-deal mode (crib lockscreen, hidden "10" key) ----
    Kevin deals H (2-6) five-card poker hands ROUND-ROBIN off the top of the
@@ -3603,11 +3638,11 @@ function lkRenderDate(t) {
   // feedback: show the value as soon as it's tapped (before colour), then the full card
   let dayTxt = face ? face : (lkValue ? lkValue : String(t.getDate()));
   if (lkCribMode) dayTxt = lkCribVal ? lkCribVal : (lkCribPhase === "val" ? "_" : String(t.getDate()));   // crib lockscreen: day-of-month = chosen value ("_" once value entry is armed)
-  // Deal capture, PAUSE-GATED (lkPeekOn): day-of-month = the last card read,
-  // written "7h" / "10s" / "Kd". Kevin's call 2026-08-16 — a bare value was
-  // ambiguous and the suit-as-weather-word moved too much of the lockscreen.
-  // Nothing changes while cards are flowing; the readout only appears once
-  // dealing pauses for PEEK_HOLD_MS, i.e. exactly when he can look.
+  // Deal capture (lkPeekOn): day-of-month = the last card read, written
+  // "7h" / "10s" / "Kd" (Kevin 2026-08-16 — a bare value was ambiguous and
+  // the suit-as-weather-word moved too much of the lockscreen). Updates
+  // INSTANTLY per read since 2026-08-25 (the 2.5s pause gate is retired
+  // until the model is near-100%).
   if (lkCribMode && lkPeekOn && lkCamCard) dayTxt = lkCardCode(lkCamCard);
   // Poker-deal mode: day-of-month = winning hand number, year = its five value
   // chars ("_" while waiting for the hand count; "!" / "no52" when the current
@@ -3661,7 +3696,7 @@ function lkShowCommon() {
 }
 function lkShow()     { lkCribMode = false; setDeck("gaff"); lkShowCommon(); }   // gaff lockscreen (unchanged)
 function lkCribShow() { lkCribMode = true;  lkShowCommon(); lkbtActive = true; lkbtAcc = 0; lkbtBuf = ""; lkbtDone = false; lkbtDotSet("armed"); lkGpStart(); }   // crib lockscreen auto-arms + polls the gamepad (Zero 2 works immediately, no arm button)
-function lkHide() { lkCribPeekHide(); lkCamStop(); try{ lkDealCleanup(); }catch(e){} lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
+function lkHide() { lkCribPeekHide(); lkCamStop(); try{ lkDealCleanup(); rtnReset(); }catch(e){} lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
 // tap the button under the fingerprint to flip between the lockscreen and the crib (stays until tapped again)
 $("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow(); });
 $("lkCribBack").addEventListener("click", lkCribPeekHide);
@@ -3831,37 +3866,41 @@ let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
 let lkDealBadge = null;   // capture verdict, PERSISTENT (Kevin's call 2026-08-20): "✓" full,
                           // "✓-N" partial (N unread, flagged), "✗N" not saved. Shown on the
                           // idle weather line until the NEXT capture starts.
-// PEEK LATCH (Kevin's call 2026-08-20, second live session). The old pause
-// gate blanked the readout on every tick and revealed only after a quiet
-// hold — so the display was empty whenever cards were flowing. Now it
-// LATCHES: the readout shows the last card that stayed on top for
-// PEEK_HOLD_MS and stays up until a DIFFERENT card earns its own hold.
-// The anti-tell property is preserved — during steady dealing no card holds
-// long enough, so the date is a frozen (stale) card, not a flicker; the
-// moment a spectator says "stop", the top card latches in and Kevin can
-// peek whenever he likes. The cards-left count freezes with its card.
-const PEEK_HOLD_MS = 2500;   // Kevin's call 2026-08-20 after the first live v30 capture: 3s felt slow
-let lkPeekOn = false, lkPeekTimer = null, lkPeekPend = null;
+// INSTANT READOUT (Kevin's call 2026-08-25, replacing the 2.5s peek latch):
+// until the model reads near-100%, visibility beats covertness — every card
+// updates the readout the moment it commits, and a remaining-cards panel
+// (lkRemain below) shows the whole deck with seen cards struck. The old
+// latch (a card had to stay on top PEEK_HOLD_MS before the date changed;
+// anti-tell for live spectators) is retired with the constant — restore from
+// git history when a near-perfect model makes covert capture worth it again.
+let lkPeekOn = false;
 function lkCardCode(c){                 // "7H" -> "7h", "10S" -> "10s", "KD" -> "Kd"
   return c.slice(0, -1) + c.slice(-1).toLowerCase();
 }
-function lkPeekFeed(card, left){        // a read tick: feed the latch, change nothing on screen
-  if (!card) return;
-  if (card === (lkPeekPend ? lkPeekPend.card : lkCamCard)){
-    if (lkPeekPend) lkPeekPend.left = left;    // same card still on top: fresher count only
-    return;
-  }
-  lkPeekPend = { card, left };
-  clearTimeout(lkPeekTimer);
-  lkPeekTimer = setTimeout(() => {
-    lkCamCard = lkPeekPend.card; lkDealLeft = lkPeekPend.left;
-    lkPeekPend = null; lkPeekOn = true; lkRenderDate();
-  }, PEEK_HOLD_MS);
+function lkPeekFeed(card, left){        // a read tick: show it NOW
+  if (typeof left === "number") lkDealLeft = left;
+  if (card) lkCamCard = card;
+  if (lkCamCard || typeof lkDealLeft === "number"){ lkPeekOn = true; lkRenderDate(); }
 }
-function lkPeekClear(){ clearTimeout(lkPeekTimer); lkPeekTimer = null; lkPeekOn = false; lkPeekPend = null; }
+function lkPeekClear(){ lkPeekOn = false; }
+// The remaining-cards panel: all 52 in four suit rows, cards already read this
+// capture struck+dimmed. Fed by the embed's tick (d.seen). In ACAAN captures
+// the aces are held out of the deck, so they simply stay un-struck.
+const LK_REMAIN_RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+function lkRemainRender(seenArr){
+  const seen = new Set(seenArr || []);
+  $("lkRemain").innerHTML = ["H","C","D","S"].map(su =>
+    SUIT_SYM[su] + " " + LK_REMAIN_RANKS.map(r => {
+      const cls = ("HD".includes(su) ? "red" : "") + (seen.has(r + su) ? " got" : "");
+      return `<span class="${cls.trim()}">${r}</span>`;
+    }).join(" ")
+  ).join("\n");
+  $("lkRemain").style.display = "block";
+}
+function lkRemainHide(){ $("lkRemain").style.display = "none"; $("lkRemain").innerHTML = ""; }
 function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
-  lkPeekClear();
+  lkPeekClear(); lkRemainHide();
   lkDealState = "idle"; lkDealLeft = null; lkCamCard = null;
   lkCamDotSet("off"); lkRenderDate();
 }
@@ -3878,11 +3917,66 @@ function lkDealToggle(){
   // recorded clip instead of the camera — the full lockscreen flow (ticks,
   // peek latch, done badge, partial save) without a deck in hand.
   const dr = new URLSearchParams(location.search).get("dealreplay");
-  f.src = "local/dealbench.html?embed=1&model=v30" + (dr ? "&replay=" + encodeURIComponent(dr) : "");
+  // deck: the 4 aces are out before the routine starts (held out as the ACAAN
+  // packets), so a fresh capture counts down from 48. Segment 2 is the shuffled
+  // packet rather than a deck — counting down from its own size makes the
+  // readout hit 0 exactly as the packet runs out, a live check that the number
+  // he named aloud was right.
+  const deck = rtnSegs.length === 1 ? 48 - rtnSegs[0].length : 48;
+  f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
   $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
   lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
   lkDealBadge = null;   // a new capture is the only thing that clears the verdict
   lkCamDotSet("read");
+  lkRemainRender([]);   // full grid up from the first frame; ticks strike cards as they commit
+}
+/* ---- Stop-deal routine: two captures, one deck (2026-08-25) ----------------
+   Kevin's routine makes the deck in two passes with a spectator shuffle in the
+   middle, so one capture can never see it all:
+     capture 1 — deal into pile 1 until "stop" (they peek the top card and put
+                 it back, order intact), carry on into pile 2 until the second
+                 "stop". The frozen peek count is the size of the packet still
+                 in hand.
+     capture 2 — that packet comes back shuffled and gets dealt over the reader.
+   HANDLING CONVENTION (required): when the two stop-piles are picked up,
+   PILE 2 GOES ON TOP OF PILE 1. Each pile reverses as it is picked up, so
+   pile-2-on-pile-1 makes the combined packet the exact reverse of the whole
+   phase-1 deal — which means the boundary between the piles never has to be
+   detected, marked, or trusted. Picking them up the other way round would
+   need the boundary and is not supported.
+   The shuffled packet goes back ON TOP, gets dealt, and lands on the table
+   reversed — so the table pile is the reverse of capture 2, the hand holds the
+   reverse of capture 1, and the whole deck is hand ++ table with the top half
+   exactly as long as capture 1.
+   No mode switch: a capture that reads all 48 is a plain full-deck capture and
+   behaves as before; a SHORT capture is held as segment 1 and the next one
+   composes against it. */
+const RTN_ALL48 = (() => { const o = [];
+  for (const su of ["S","H","D","C"]) for (const v of ["2","3","4","5","6","7","8","9","10","J","Q","K"]) o.push(v + su);
+  return o; })();
+const RTN_SEG_MAX = 40;         // longest capture still treated as a stop-deal segment
+let rtnSegs = [];               // completed captures waiting to be composed
+function rtnReset(){ rtnSegs = []; }
+// Confident reads only, in dealt order. The ungated slot list (d.slots) also
+// arrives and is deliberately NOT used yet: the assignment pass places all 52
+// cards whether or not that many were dealt, so on a short segment most of it
+// is invention. Measured on a full-deck replay it puts 36/52 cards on their
+// exact position vs 11/52 for the confident-only sequence — worth having once
+// the assignment can be told which cards are still in play.
+function rtnSeg(slots){ return (slots || []).filter(x => !x.weak).map(x => x.card); }
+function rtnCompose(){
+  const hand  = rtnSegs[0].slice().reverse();
+  const table = rtnSegs[1].slice().reverse();
+  const order = hand.concat(table);
+  const seen  = new Set(order);
+  const holes = RTN_ALL48.filter(c => !seen.has(c));
+  // Every card present exactly once is the only safe state: one unread card in
+  // the middle shifts every position below it, which breaks the ACAAN for most
+  // of the deck, not just for that card. Refuse to load rather than perform off
+  // a stack that is quietly one out.
+  const ok = order.length === 48 && seen.size === 48;
+  if (ok){ rdUseCustomStack(order, [], null, hand.length); }
+  return { ok, half: hand.length, holes: holes.length, n: order.length };
 }
 window.addEventListener("message", e => {
   if (e.origin !== location.origin || !e.data || !e.data.dbEmbed || !lkDealFr) return;
@@ -3890,17 +3984,40 @@ window.addEventListener("message", e => {
   if (d.ev === "ready"){ try{ lkDealFr.contentWindow.postMessage("db-start", location.origin); }catch(err){} }
   else if (d.ev === "tick"){
     lkDealState = "reading";
-    lkPeekFeed(d.last || null, d.left);   // feed the latch; the screen changes only when a card HOLDS
+    lkPeekFeed(d.last || null, d.left);   // instant readout (2026-08-25: latch retired)
+    lkRemainRender(d.seen);
   }
   else if (d.ev === "done"){
     lkDealState = "done";
-    if (d.saved){
-      try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
-           if (sv && window.__st) window.__st.rdUseCustomStack(sv.stack, sv.flags, sv.stack52); }catch(err){}
+    const seg = rtnSeg(d.slots);
+    // Which kind of capture was this? A stop-deal segment is SHORT (the two
+    // stop-piles run ~10-25 cards); a whole-deck capture reads 45-48. Anything
+    // at or above RTN_SEG_MAX keeps the original single-capture behaviour, so a
+    // full capture that dropped a few cards is still treated as a whole deck
+    // and not silently parked as segment 1. Once segment 1 IS parked the next
+    // capture is segment 2 whatever its length (the shuffled packet is long).
+    const whole = seg.length >= RTN_SEG_MAX && rtnSegs.length === 0;
+    if (whole || rtnSegs.length >= 2) rtnReset();
+    if (whole){
+      if (d.saved){
+        try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
+             if (sv) rdUseCustomStack(sv.stack, sv.flags, sv.stack52, sv.half); }catch(err){}
+      }
+      lkDealBadge = d.saved ? (d.partial ? "✓-" + d.partial : "✓") : "✗" + d.missing.length;
+    } else {
+      rtnSegs.push(seg);
+      if (rtnSegs.length < 2){
+        lkDealBadge = String(seg.length);      // segment 1 parked: how many cards it pinned
+      } else {
+        const r = rtnCompose();
+        // ✓ = the two segments account for all 48 exactly once and the composed
+        // deck is loaded, cut where the routine actually left it.
+        lkDealBadge = r.ok ? "✓" : "✗" + r.holes;
+        rtnReset();
+      }
     }
     lkPeekClear();
     lkDealLeft = null; lkCamCard = null;
-    lkDealBadge = d.saved ? (d.partial ? "✓-" + d.partial : "✓") : "✗" + d.missing.length;
     lkRenderDate();   // badge is persistent — rendered on the idle weather line until the next capture
     lkCamDotSet("off");
     if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }  // camera off the moment we're done
@@ -4544,6 +4661,7 @@ $("camRead").addEventListener("pointerup", () => clearTimeout(stPressT));
 $("camRead").addEventListener("pointerleave", () => clearTimeout(stPressT));
 $("camCut").addEventListener("click", () => { stCutVal = null; $("camCutPad").style.display === "none" ? stCutPad() : ($("camCutPad").style.display = "none"); });
 window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomStack, rdWorstNumbers, rdSetCutCard,
+  rtnSeg, rtnCompose, rtnReset, rtnSegs: () => rtnSegs, rtnPush: seg => rtnSegs.push(seg),
   lkCamCommit, lkCamToggle, lkCamState: () => ({ card: lkCamCard, on: !!lkCamStream }),
   // deal-capture peek hooks (the pause gate is inner-scope; these let it be
   // driven without a camera, which is the only way to test the 3s reveal)
@@ -4718,7 +4836,7 @@ const LD_LABEL = [5,4,6,2,3,1];              // physical section (top→bottom) 
 const LD_SYM = {C:"&#9827;", D:"&#9830;", H:"&#9829;", S:"&#9824;"};
 const LD_SUITNAME = {C:"Club", D:"Diamond", H:"Heart", S:"Spade"};
 const LD_VNAME = v => ({J:"Jack", Q:"Queen", K:"King", A:"Ace"}[v] || v);
-const LD_SCHEME_NAMES = { highlow:"Combined", aronson:"Aronson", mnemonica:"Mnemonica", custom:"Last read (live)" };
+const LD_SCHEME_NAMES = { highlow:"Combined", majorminor:"Major\u2013Minor", aronson:"Aronson", mnemonica:"Mnemonica", custom:"Last read (live)" };
 const ld = { step:0, sp2:false, split:true, aces:false, spec:false, sizes:[8,8,8,8,8,8], a:[[null,null,null],[null,null,null]], verdict:[null,null], fhist:[[],[]], cur:0, warned:[false,false] };
 function ldReset(){ ld.step=0; ld.a=[[null,null,null],[null,null,null]]; ld.verdict=[null,null]; ld.fhist=[[],[]]; ld.cur=0; ld.warned=[false,false]; }
 const ldIsRed = c => /[HD]$/.test(c);
