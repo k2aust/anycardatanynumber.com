@@ -14,6 +14,13 @@
   body.fill .panel { opacity: .2; }
   h1 { font-size: 16px; color: #9ab; margin-bottom: 6px; }
   .panel { background: #15151c; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+  /* the PEEK REHEARSAL overlay: exactly what the lockscreen's covert readout
+     would show right now (card as "Kd"/"10s", cards-left as NN°), updated per
+     commit — so bench practice trains the performance glance too. */
+  #vwrap { position: relative; }
+  #bpeek { position:absolute; top:8px; left:12px; font:500 22px ui-monospace,monospace;
+    color:rgba(255,255,255,.85); text-shadow:0 1px 4px #000; letter-spacing:1px;
+    pointer-events:none; }
   video { width: 100%; max-height: 30vh; border-radius: 10px; background: #000; object-fit: contain;
           transform: scaleX(-1); /* selfie-mirror the PREVIEW only — the model
           reads frames via canvas, which sees the unmirrored stream, so
@@ -121,7 +128,8 @@
   <button id="mode">Mode: live read</button>
   <button id="exp">Exp: auto</button>
   <button id="focus">Focus: auto</button>
-  <video id="v" autoplay playsinline muted></video>
+  <div id="vwrap"><video id="v" autoplay playsinline muted></video>
+    <div id="bpeek"></div></div>
 </div>
 
 <div class="panel">
@@ -639,6 +647,7 @@ async function processPending(){
     }
     // every event moves the countdown, and a card-bearing one moves the peek
     performLive();
+    benchPeek();
     render();
   }
   procBusy=false;
@@ -847,6 +856,17 @@ function performLive(){
 // Kevin 2026-08-25: until the model reads near-100%, the capture surfaces
 // show everything live — every card as it commits plus the whole 52-card
 // grid with seen cards struck.
+// The peek-rehearsal overlay: the lockscreen's covert readout, verbatim —
+// card as value+lowercase suit ("Kd", "10s"), cards-left as NN°. If Kevin
+// can read the glance here, he'd get the peek in performance.
+function benchPeek(){
+  const seen=new Set();
+  for(const c of commits) if(c.card) seen.add(c.card);
+  let li=commits.length-1;
+  while(li>=0 && !commits[li].card) li--;
+  const code=li<0?"—":commits[li].card.slice(0,-1)+commits[li].card.slice(-1).toLowerCase();
+  $("bpeek").textContent=`${code}  ${DECK_N-seen.size}°`;
+}
 function renderRemain(seen){
   $("premain").innerHTML=["H","C","D","S"].map(su=>
     SYM[su]+" "+RANKS.map(r=>{
@@ -1063,7 +1083,7 @@ $("start").onclick=async()=>{
     const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
-    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); $("bpeek").textContent=""; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
     eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
     // Calibrate over the clip's first 2s exactly as a live run would — replay
@@ -1183,7 +1203,7 @@ $("start").onclick=async()=>{
     // territory warns to pin. Never silently either way.
     setTimeout(()=>expoGuard(track), 1500);
   }
-  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); $("bpeek").textContent=""; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   if(SCAN_ON) calStart(performance.now());
