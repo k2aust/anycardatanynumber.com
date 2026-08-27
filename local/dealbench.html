@@ -220,6 +220,15 @@ let base=null, inEvent=false, event_=[], eventScans=0, eventT0=0, commits=[], la
 let unknownThumbs=[];
 const thumbCanvas=document.createElement("canvas");
 const crop192=document.createElement("canvas"); crop192.width=crop192.height=192;
+const frameCanvas=document.createElement("canvas");
+function grabFrame(v0){
+  try{
+    const v=frameSource(v0), w=srcW(v), h=srcH(v), sc=480/Math.max(w,h);
+    frameCanvas.width=Math.round(w*sc); frameCanvas.height=Math.round(h*sc);
+    frameCanvas.getContext("2d").drawImage(v,0,0,frameCanvas.width,frameCanvas.height);
+    return frameCanvas.toDataURL("image/jpeg",0.7);
+  }catch(e){ return null; }
+}
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
 let frameReads=[];   // {t, cls, conf} per classified frame — for order refinement at Stop
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
@@ -622,12 +631,10 @@ async function processPending(){
         thumbCanvas.width=r.rw; thumbCanvas.height=r.rh;
         const tc=thumbCanvas.getContext("2d");
         tc.putImageData(new ImageData(r.px,r.rw,r.rh),0,0);
-        const big=thumbCanvas.toDataURL("image/jpeg",0.8);
-        // thumb = the CENTER box (offs[0]) — the model's actual view, and the
-        // most readable zoom for human tagging (Kevin 2026-08-27)
-        const [cx0,cy0]=r.offs[0];
-        crop192.getContext("2d").drawImage(thumbCanvas,cx0,cy0,NET_IN,NET_IN,0,0,NET_IN,NET_IN);
-        unknownThumbs.push({t:picks[0].t, url:crop192.toDataURL("image/jpeg",0.8), big});
+        const big=thumbCanvas.toDataURL("image/jpeg",0.8);   // region: the TRAINING payload
+        // display = the FULL frame, uncropped (Kevin 2026-08-27); the region
+        // still travels in the tag so ingest gets the live crop geometry.
+        unknownThumbs.push({t:picks[0].t, url:picks[0].frame||big, big});
       }catch(e){}
     }
     // every event moves the countdown, and a card-bearing one moves the peek
@@ -1002,7 +1009,10 @@ async function step(v, tMs){
   if(fire){
     if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; eventT0=tMs; }
     eventScans++;
-    const entry={t:tMs, ink:frac, pips, region:extractRegion(v,cx,cy)};
+    // frame: a small full-frame jpeg per buffered scan, so the miss gallery
+    // can show the WHOLE view (Kevin 2026-08-27: no cropping when tagging).
+    // ~10ms per scan, only during events; discarded with the event buffer.
+    const entry={t:tMs, ink:frac, pips, region:extractRegion(v,cx,cy), frame:grabFrame(v)};
     if(eventBuf.length<12) eventBuf.push(entry);
     else{                        // keep the best-ink frames of long events
       // evict by PIP COUNT (ink ties): ink ranks the incoming hand, pips
@@ -1428,7 +1438,7 @@ function renderUgal(){
   if(PERFORM && g.parentElement.id!=="pwrap") $("pwrap").appendChild(g);
   if(!unknownThumbs.length){ g.classList.remove("on"); g.innerHTML=""; return; }
   g.innerHTML=`<div class="ugh">${unknownThumbs.length} events read nothing — tag any card you can
-    see (7D / 10S, R B P N partials, X = no card). Tap a picture for the wide view.
+    see (7D / 10S, R B P N partials, X = no card). Tap a picture to enlarge it.
     <button id="tagsend">Send tags</button><span id="tagstat"></span></div>`+
     unknownThumbs.map((u,i)=>`<figure><img data-i="${i}" src="${u.url}">`+
       `<figcaption>${(u.t/1000).toFixed(1)}s</figcaption>`+
@@ -1470,9 +1480,7 @@ document.addEventListener("click", async e=>{
     return;
   }
   const im=e.target.closest("#ugal img"); if(!im) return;
-  const u=unknownThumbs[+im.dataset.i]; if(!u) return;
-  im.src = im.src===u.big ? u.url : u.big;
-  im.classList.toggle("wide", im.src===u.big);
+  im.classList.toggle("wide");     // tap = bigger, same uncropped frame
 });
 let runStamp=0;
 $("fill").onclick=()=>document.body.classList.toggle("fill");
