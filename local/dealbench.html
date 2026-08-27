@@ -82,6 +82,16 @@
   #premain .red { color:#a06060; }
   #premain .got { color:#333; text-decoration:line-through; }
   body.perform.psum #premain { display:none; }
+  /* miss gallery: thumbnails of every event that committed no card, shown
+     after Stop so Kevin can judge readable-but-missed vs truly unreadable */
+  #ugal { display:none; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  #ugal.on { display:flex; }
+  #ugal figure { margin:0; }
+  #ugal img { height:110px; border-radius:6px; display:block; }
+  #ugal figcaption { font:10px ui-monospace,monospace; color:#888; text-align:center; }
+  #ugal .ugh { width:100%; font:12px ui-monospace,monospace; color:#aaa; }
+  body.perform #ugal { position:absolute; left:4vw; right:4vw; top:38vh;
+    max-height:50vh; overflow-y:auto; }
   #phint { position:absolute; bottom:4vh; width:100%; text-align:center;
     font-size:12px; color:#1c1c1c; }
 </style>
@@ -109,6 +119,7 @@
 <div class="panel">
   <div id="reads">—</div>
   <div id="score"></div>
+  <div id="ugal"></div>
   <div id="stats">idle</div>
 </div>
 
@@ -198,6 +209,8 @@ const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,800
 
 let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
 let base=null, inEvent=false, event_=[], eventScans=0, eventT0=0, commits=[], lastClassifyT=0;
+let unknownThumbs=[];
+const thumbCanvas=document.createElement("canvas");
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
 let frameReads=[];   // {t, cls, conf} per classified frame — for order refinement at Stop
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
@@ -587,8 +600,21 @@ async function processPending(){
     // one evidence vector per event, for the assignment run at Stop
     eventVecs.push({t:picks[0]?.t||0, vec:acc, n:accN});
     event_=results;                 // settle() still drives the LIVE readout —
-    commits.push(...(results.length?settle():   // it is causal, assignment is not
-      [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}]));
+    const settled=results.length?settle():
+      [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}];
+    commits.push(...settled);
+    // MISS GALLERY (Kevin 2026-08-26): an event that commits no card keeps a
+    // thumbnail of its best (top-pip) frame, so after Stop he can judge each
+    // miss himself — "readable but the model failed" (worth training) vs
+    // "nothing readable in the frame" (speed/occlusion, no model will fix it).
+    if(!settled.some(c=>c.card) && picks[0] && unknownThumbs.length<150){
+      try{
+        const r=picks[0].region;   // {px,rw,rh,offs} — raw RGBA at net scale
+        thumbCanvas.width=r.rw; thumbCanvas.height=r.rh;
+        thumbCanvas.getContext("2d").putImageData(new ImageData(r.px,r.rw,r.rh),0,0);
+        unknownThumbs.push({t:picks[0].t, url:thumbCanvas.toDataURL("image/jpeg",0.72)});
+      }catch(e){}
+    }
     // every event moves the countdown, and a card-bearing one moves the peek
     performLive();
     render();
@@ -1012,7 +1038,7 @@ $("start").onclick=async()=>{
     const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
-    base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
     eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
     // Calibrate over the clip's first 2s exactly as a live run would — replay
@@ -1132,7 +1158,7 @@ $("start").onclick=async()=>{
     // territory warns to pin. Never silently either way.
     setTimeout(()=>expoGuard(track), 1500);
   }
-  base=null; varInk=0; inEvent=false; commits=[]; scanN=0; infN=0; infMs=0;
+  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   if(SCAN_ON) calStart(performance.now());
@@ -1379,7 +1405,19 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
     log(`assignment: ${eventVecs.length} events -> ${com} committed `+
         `(${(performance.now()-t0).toFixed(0)}ms)`);
   }
-  render(); scoreFinal(); performSummary(); };
+  render(); scoreFinal(); performSummary(); renderUgal(); };
+// The miss gallery. Bench: shows under the score. Perform summary: the node
+// is moved into #pwrap so it paints over the black skin.
+function renderUgal(){
+  const g=$("ugal");
+  if(PERFORM && g.parentElement.id!=="pwrap") $("pwrap").appendChild(g);
+  if(!unknownThumbs.length){ g.classList.remove("on"); g.innerHTML=""; return; }
+  g.innerHTML=`<div class="ugh">${unknownThumbs.length} events read nothing — `+
+    `can YOU see a card in any of these?</div>`+
+    unknownThumbs.map(u=>`<figure><img src="${u.url}">`+
+      `<figcaption>${(u.t/1000).toFixed(1)}s</figcaption></figure>`).join("");
+  g.classList.add("on");
+}
 $("fill").onclick=()=>document.body.classList.toggle("fill");
 $("mode").onclick=()=>{
   SCAN_ON=!SCAN_ON;
