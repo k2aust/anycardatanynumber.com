@@ -609,7 +609,14 @@ const KEEP_FRAMES=7;               // classify top-K ink frames per event
 async function processPending(){
   if(procBusy) return; procBusy=true;
   while(pending.length){
-    const buf=pending.shift();
+    // NEWEST FIRST (Kevin 2026-08-27): each event costs the phone ~1-2s of
+    // inference, so a fast deal builds a backlog and the readout used to
+    // crawl through every old event before showing the card he STOPPED on.
+    // The stop card is always the newest event — classify it next, show it
+    // instantly; the backlog fills in during the pause (when the queue is
+    // idle anyway). commits/eventVecs are kept time-sorted below, so the
+    // final sequence, scoring and export are order-identical.
+    const buf=pending.pop();
     buf.sort((a,b)=>(b.pips-a.pips)||(b.ink-a.ink));
     const picks=buf.slice(0,KEEP_FRAMES).sort((a,b)=>a.t-b.t);
     const results=[];
@@ -625,10 +632,12 @@ async function processPending(){
     }
     // one evidence vector per event, for the assignment run at Stop
     eventVecs.push({t:picks[0]?.t||0, vec:acc, n:accN});
+    eventVecs.sort((a,b)=>a.t-b.t);
     event_=results;                 // settle() still drives the LIVE readout —
     const settled=results.length?settle():
       [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}];
     commits.push(...settled);
+    commits.sort((a,b)=>a.t-b.t);   // LIFO processing, chronological record
     // MISS GALLERY (Kevin 2026-08-26): an event that commits no card keeps a
     // thumbnail of its best (top-pip) frame, so after Stop he can judge each
     // miss himself — "readable but the model failed" (worth training) vs
