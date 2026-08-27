@@ -3982,6 +3982,12 @@ window.addEventListener("message", e => {
   if (e.origin !== location.origin || !e.data || !e.data.dbEmbed || !lkDealFr) return;
   const d = e.data;
   if (d.ev === "ready"){ try{ lkDealFr.contentWindow.postMessage("db-start", location.origin); }catch(err){} }
+  else if (d.ev === "armed"){
+    // trigger warmup complete — the weather flipping to the deck count IS the
+    // covert "deal now" signal; cards dealt before it can never be captured.
+    lkDealState = "reading";
+    lkPeekFeed(null, d.left);
+  }
   else if (d.ev === "tick"){
     lkDealState = "reading";
     lkPeekFeed(d.last || null, d.left);   // instant readout (2026-08-25: latch retired)
