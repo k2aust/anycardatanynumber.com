@@ -60,7 +60,8 @@
      empty; only the <video> keeps rendering, which is what stops Android
      stalling frame delivery to a hidden video element. */
   body.embed #pclock, body.embed #pdate, body.embed #peek,
-  body.embed #phint, body.embed #porder, body.embed #premain { display:none !important; }
+  body.embed #phint, body.embed #porder, body.embed #premain,
+  body.embed #ugal { display:none !important; }   /* gallery must never ghost through the covert skin */
   body.perform #pwrap { display:block; position:fixed; inset:0; background:#000;
     font: 16px -apple-system, Roboto, sans-serif; user-select:none; }
   #pclock { position:absolute; top:16vh; width:100%; text-align:center;
@@ -112,6 +113,17 @@
 </style>
 </head>
 <body>
+<script>
+// PRE-PAINT (Kevin 2026-08-27: lockscreen flashed the bench UI for a split
+// second at camera start). The main script sits at the end of the body, so
+// on a slow phone the bench chrome painted before it could add the skin
+// classes. Add them synchronously during parse — #pwrap's black covers
+// everything before anything renders.
+(function(){ var q=location.search;
+  if(/[?&](embed|perform)=1/.test(q)) document.body.classList.add("perform");
+  if(/[?&]embed=1/.test(q)) document.body.classList.add("embed");
+})();
+</script>
 <h1>Deal bench — live CNN read, no order prior</h1>
 
 <div class="panel">
@@ -1208,8 +1220,9 @@ $("start").onclick=async()=>{
         log("⚠ NO CAMERA FRAMES 3s after start (readyState "+v_.readyState+") — retrying play()");
         $("bpeek").textContent="⚠ no camera frames — stop + start again";
         try{ await v_.play(); }catch(e){}
-        setTimeout(()=>{ if(running && v_.readyState>=2){
-          log("frames recovered after retry"); $("bpeek").textContent="…"; } }, 1500);
+        setTimeout(()=>{ if(running){ if(v_.readyState>=2){
+            log("frames recovered after retry"); $("bpeek").textContent="…"; }
+          else embedPost({ev:"error", msg:"no camera frames"}); } }, 1500);
       }
     }, 3000);
     try{ wakeLock=await withTimeout(navigator.wakeLock.request("screen"),1500,"wake lock"); }
