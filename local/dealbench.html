@@ -1196,6 +1196,22 @@ $("start").onclick=async()=>{
     // silently spins with no frames — which looks exactly like "Start did nothing".
     try{ await $("v").play(); log("video playing"); }
     catch(e){ log("video play blocked: "+e.name+" — "+e.message); }
+    // FRAME WATCHDOG (Kevin 2026-08-27: "camera isn't turning on" with a
+    // green Start). Green means getUserMedia SUCCEEDED — the remaining
+    // failure is a stream that never delivers frames (readyState<2): the
+    // scan loop spins with nothing and the whole rig looks dead while the
+    // code thinks it is running. Say so where he is looking, and kick
+    // play() again — the known recovery for a stalled first play.
+    setTimeout(async()=>{
+      const v_=$("v");
+      if(running && !replayMode && v_.readyState<2){
+        log("⚠ NO CAMERA FRAMES 3s after start (readyState "+v_.readyState+") — retrying play()");
+        $("bpeek").textContent="⚠ no camera frames — stop + start again";
+        try{ await v_.play(); }catch(e){}
+        setTimeout(()=>{ if(running && v_.readyState>=2){
+          log("frames recovered after retry"); $("bpeek").textContent="…"; } }, 1500);
+      }
+    }, 3000);
     try{ wakeLock=await withTimeout(navigator.wakeLock.request("screen"),1500,"wake lock"); }
     catch(e){ log("wake lock skipped: "+e.message); }
     const track=stream.getVideoTracks()[0];
@@ -1242,6 +1258,7 @@ $("start").onclick=async()=>{
   }catch(e){
     // A silent async rejection here is why Start looked dead: no error, no log.
     log("START FAILED: "+(e&&e.name)+" — "+(e&&e.message));
+    $("bpeek").textContent="⚠ "+(e&&e.name||"start failed");
     embedPost({ev:"error", msg:(e&&e.name)+": "+(e&&e.message)});
     running=false; $("start").classList.remove("on");
   }
