@@ -1475,7 +1475,10 @@ document.addEventListener("click", async e=>{
       const a=document.createElement("a");
       a.href="data:application/json,"+encodeURIComponent(JSON.stringify(q));
       a.download="livetags.json"; a.click();
-      $("tagstat").textContent=" server unreachable — downloaded instead";
+      // the download IS the export — clear the queue so the next batch
+      // doesn't re-ship these (day one: a quarantined tile resurrected)
+      tagQueueSave([]);
+      $("tagstat").textContent=" server unreachable — downloaded instead ✓";
     }
     return;
   }
