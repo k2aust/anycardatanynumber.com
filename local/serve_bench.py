@@ -21,6 +21,32 @@ class H(http.server.SimpleHTTPRequestHandler):
         nowhere), so the page POSTs it here instead and it is written straight
         beside the clips where replay_harvest.py expects it.
         """
+        if self.path == "/__tags":
+            # Live-miss tags from the phone's gallery (dealbench renderUgal):
+            # [{when, model, t, label, big:dataURL}, ...] -> one timestamped
+            # json in runs/dealglimpse/livetags/ for ingest_livetags.py.
+            import json as _json, time as _time
+            n = int(self.headers.get("Content-Length") or 0)
+            try:
+                tags = _json.loads(self.rfile.read(n) or b"[]")
+                assert isinstance(tags, list)
+            except Exception as e:
+                return self.send_error(400, str(e))
+            dest = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "..", "..", "Magic Pipeline", "magic_pipeline",
+                                "stack_reader", "runs", "dealglimpse", "livetags")
+            dest = os.path.normpath(dest)
+            os.makedirs(dest, exist_ok=True)
+            out = os.path.join(dest, "tags_%d.json" % int(_time.time()))
+            with open(out, "w") as fh:
+                _json.dump(tags, fh)
+            body = out.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path != "/__ev":
             return self.send_error(404)
         import json as _json

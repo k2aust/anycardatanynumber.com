@@ -90,6 +90,14 @@
   #ugal img { height:110px; border-radius:6px; display:block; }
   #ugal figcaption { font:10px ui-monospace,monospace; color:#888; text-align:center; }
   #ugal .ugh { width:100%; font:12px ui-monospace,monospace; color:#aaa; }
+  #ugal img.wide { height:auto; width:100%; max-width:420px; }
+  #ugal .tagin { width:64px; margin-top:3px; background:#1c1f22; border:1px solid #333;
+    color:#ddd; font:500 16px ui-monospace,monospace; text-transform:uppercase;
+    padding:4px 8px; border-radius:6px; display:block; }
+  #ugal .tagin.bad { border-color:#a05050; }
+  #tagsend { margin-left:10px; background:#caa04a; color:#111; border:0;
+    border-radius:6px; font:600 12px ui-monospace,monospace; padding:5px 10px; }
+  #tagstat { color:#8a8; }
   body.perform #ugal { position:absolute; left:4vw; right:4vw; top:38vh;
     max-height:50vh; overflow-y:auto; }
   #phint { position:absolute; bottom:4vh; width:100%; text-align:center;
@@ -211,6 +219,7 @@ let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChun
 let base=null, inEvent=false, event_=[], eventScans=0, eventT0=0, commits=[], lastClassifyT=0;
 let unknownThumbs=[];
 const thumbCanvas=document.createElement("canvas");
+const crop192=document.createElement("canvas"); crop192.width=crop192.height=192;
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
 let frameReads=[];   // {t, cls, conf} per classified frame — for order refinement at Stop
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
@@ -611,8 +620,14 @@ async function processPending(){
       try{
         const r=picks[0].region;   // {px,rw,rh,offs} — raw RGBA at net scale
         thumbCanvas.width=r.rw; thumbCanvas.height=r.rh;
-        thumbCanvas.getContext("2d").putImageData(new ImageData(r.px,r.rw,r.rh),0,0);
-        unknownThumbs.push({t:picks[0].t, url:thumbCanvas.toDataURL("image/jpeg",0.72)});
+        const tc=thumbCanvas.getContext("2d");
+        tc.putImageData(new ImageData(r.px,r.rw,r.rh),0,0);
+        const big=thumbCanvas.toDataURL("image/jpeg",0.8);
+        // thumb = the CENTER box (offs[0]) — the model's actual view, and the
+        // most readable zoom for human tagging (Kevin 2026-08-27)
+        const [cx0,cy0]=r.offs[0];
+        crop192.getContext("2d").drawImage(thumbCanvas,cx0,cy0,NET_IN,NET_IN,0,0,NET_IN,NET_IN);
+        unknownThumbs.push({t:picks[0].t, url:crop192.toDataURL("image/jpeg",0.8), big});
       }catch(e){}
     }
     // every event moves the countdown, and a card-bearing one moves the peek
@@ -1038,7 +1053,7 @@ $("start").onclick=async()=>{
     const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
-    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
     eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
     // Calibrate over the clip's first 2s exactly as a live run would — replay
@@ -1158,7 +1173,7 @@ $("start").onclick=async()=>{
     // territory warns to pin. Never silently either way.
     setTimeout(()=>expoGuard(track), 1500);
   }
-  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   if(SCAN_ON) calStart(performance.now());
@@ -1412,12 +1427,54 @@ function renderUgal(){
   const g=$("ugal");
   if(PERFORM && g.parentElement.id!=="pwrap") $("pwrap").appendChild(g);
   if(!unknownThumbs.length){ g.classList.remove("on"); g.innerHTML=""; return; }
-  g.innerHTML=`<div class="ugh">${unknownThumbs.length} events read nothing — `+
-    `can YOU see a card in any of these?</div>`+
-    unknownThumbs.map(u=>`<figure><img src="${u.url}">`+
-      `<figcaption>${(u.t/1000).toFixed(1)}s</figcaption></figure>`).join("");
+  g.innerHTML=`<div class="ugh">${unknownThumbs.length} events read nothing — tag any card you can
+    see (7D / 10S, R B P N partials, X = no card). Tap a picture for the wide view.
+    <button id="tagsend">Send tags</button><span id="tagstat"></span></div>`+
+    unknownThumbs.map((u,i)=>`<figure><img data-i="${i}" src="${u.url}">`+
+      `<figcaption>${(u.t/1000).toFixed(1)}s</figcaption>`+
+      `<input class="tagin" data-i="${i}" maxlength="3" placeholder="?" `+
+      `autocapitalize="characters" autocomplete="off"></figure>`).join("");
   g.classList.add("on");
 }
+// ---- live-miss tagging: Kevin's IDs on gallery thumbs become training data.
+// Tags queue in localStorage and POST to serve_bench /__tags (same-origin,
+// i.e. practicing via the Mac's server); on the public site the button
+// downloads a .json to share instead. ingest_livetags.py does the rest.
+const TAG_OK=/^(A|[2-9]|10|J|Q|K)(S|H|D|C)$|^(RP|RN|BP|BN|R|B|P|N|X)$/;
+function tagQueue(){ try{ return JSON.parse(localStorage.getItem("dbTagQ")||"[]"); }catch(e){ return []; } }
+function tagQueueSave(q){ try{ localStorage.setItem("dbTagQ", JSON.stringify(q.slice(-60))); }catch(e){} }
+document.addEventListener("input", e=>{
+  const el=e.target; if(!el.classList||!el.classList.contains("tagin")) return;
+  const v=el.value.trim().toUpperCase();
+  el.classList.toggle("bad", !!v && !TAG_OK.test(v));
+  if(!v||!TAG_OK.test(v)) return;
+  const u=unknownThumbs[+el.dataset.i];
+  const q=tagQueue().filter(x=>!(x.t===u.t && x.when===runStamp));
+  q.push({when:runStamp, model:MV, t:u.t, label:v, big:u.big});
+  tagQueueSave(q);
+  $("tagstat").textContent=" "+q.length+" queued";
+});
+document.addEventListener("click", async e=>{
+  if(e.target.id==="tagsend"){
+    const q=tagQueue(); if(!q.length){ $("tagstat").textContent=" nothing tagged"; return; }
+    try{
+      const r=await fetch("/__tags",{method:"POST",body:JSON.stringify(q)});
+      if(!r.ok) throw 0;
+      $("tagstat").textContent=" sent "+q.length+" ✓"; tagQueueSave([]);
+    }catch(err){
+      const a=document.createElement("a");
+      a.href="data:application/json,"+encodeURIComponent(JSON.stringify(q));
+      a.download="livetags.json"; a.click();
+      $("tagstat").textContent=" server unreachable — downloaded instead";
+    }
+    return;
+  }
+  const im=e.target.closest("#ugal img"); if(!im) return;
+  const u=unknownThumbs[+im.dataset.i]; if(!u) return;
+  im.src = im.src===u.big ? u.url : u.big;
+  im.classList.toggle("wide", im.src===u.big);
+});
+let runStamp=0;
 $("fill").onclick=()=>document.body.classList.toggle("fill");
 $("mode").onclick=()=>{
   SCAN_ON=!SCAN_ON;
