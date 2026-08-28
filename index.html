@@ -315,6 +315,28 @@
   #lkCrib .ac-tbl { flex: 0 0 auto; width: 100%; }                 /* JS sets row heights so it fills the screen */
   #lkCrib .ac-tbl td, #lkCrib .ac-tbl th { font-size: inherit; }   /* JS sets the font + per-cell height */
   #lkCrib .ac-legend { flex: 0 0 auto; margin-top: 3px; }
+  /* ---- crib numpad (2026-08-27): enter/change the number without leaving the
+     crib. Drives lkTap(), so the 2-digit rollover, value phase and clear are
+     the same code the hidden lockscreen zones use. ---- */
+  #lkCribPad { flex: 0 0 auto; display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 5px; margin-top: 6px; }
+  #lkCribPad button { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
+    border-radius: 10px; font: 600 22px ui-monospace, monospace; padding: 12px 0;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  #lkCribPad button:active { background: #262a33; }
+  #lkCribPad button.wide { grid-column: span 2; }
+  #lkCribPad button.act { color: var(--gold); font-size: 18px; }
+  /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
+     stays one screen with no scrolling on a turned phone. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #lkCrib.show { flex-direction: row; gap: 8px; align-items: stretch; }
+    #lkCrib #lkCribBody { flex: 1 1 auto; min-width: 0; }
+    #lkCribPad { width: 34vw; max-width: 300px; margin-top: 0; align-content: center;
+      grid-template-columns: repeat(3, 1fr); }
+    #lkCribPad button { padding: 8px 0; font-size: 20px; }
+    #lkCrib .lkc-h { font-size: 30px; }
+    #lkCribBack { padding: 5px 12px; font-size: 13px; }
+  }
   #lkDbg { display: none; position: absolute; top: 3%; left: 0; right: 0; text-align: center; font: 700 15px monospace; line-height: 1.5; color: #5f6; z-index: 80; pointer-events: none; text-shadow: 0 0 6px #000; }
 
   /* ---- Camera ACAAN (#camScreen) ---- */
@@ -452,7 +474,7 @@
   <div id="lkSetup"></div>
   <div id="lkExit"></div>
   <div id="lkCam" style="display:none"></div>
-  <div id="lkCrib"><div id="lkCribBody"></div></div>
+  <div id="lkCrib"><div id="lkCribBody"></div><div id="lkCribPad"></div></div>
   <div id="lkToggle"></div>
   <div id="lkRemain"></div>
   <div id="lkCribBack">&#8249;&nbsp; Lock screen</div>
@@ -3707,10 +3729,38 @@ function lkCribPeekShow() {
   const N = parseInt(lkNum, 10);
   const valid = N >= 1 && N <= 52;
   $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>` + acGridHTML(valid ? N : 0);
+  lkCribPadBuild();
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
 function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
+// The crib's own numpad. Every key goes through lkTap(), the same entry point
+// the hidden lockscreen zones use, so number entry, the 2-digit rollover into
+// the value phase, and clear behave identically here. ⌫ trims the number in
+// place (the zones have no backspace: a mistyped digit meant clearing both).
+const LK_PAD = ["1","2","3","4","5","6","7","8","9","0"];
+function lkCribPadBuild(){
+  const p = $("lkCribPad"); if (!p || p.dataset.built) return;
+  p.innerHTML = LK_PAD.map(k => `<button data-k="${k}">${k}</button>`).join("")
+    + `<button class="act" data-k="bk">⌫</button>`
+    + `<button class="act wide" data-k="clr">clear</button>`
+    + `<button class="act wide" data-k="back">done</button>`;
+  p.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const k = b.dataset.k;
+    if (k === "back") { lkCribPeekHide(); return; }
+    if (k === "bk") {
+      if (lkNum.length) { lkNum = lkNum.slice(0, -1); lkCribPhase = "num"; lkCribVal = null; }
+      lkRenderDate(); lkCribRefresh(); return;
+    }
+    if (k === "clr") { lkNum = ""; lkCribVal = null; lkCribPhase = "num"; lkRenderDate(); lkCribRefresh(); return; }
+    // a 3rd digit replaces the number rather than being swallowed: typing
+    // over a wrong entry is the common case in performance.
+    if (lkNum.length >= 2) { lkNum = ""; lkCribVal = null; lkCribPhase = "num"; }
+    lkTap(k);
+  });
+  p.dataset.built = "1";
+}
 function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
 // set the font to the largest that fits that row height and the (fixed) column width.
