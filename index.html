@@ -351,7 +351,10 @@
   #lkCribCamRead { display: flex; align-items: baseline; justify-content: center; gap: 14px; }
   #lkCribCamRead .cc { font: 800 34px ui-monospace, monospace; color: var(--gold); }
   #lkCribCamRead .cl { font: 600 15px ui-monospace, monospace; color: #7d8590; }
-  #lkCribCamBadge { text-align: center; font: 600 12px ui-monospace, monospace; color: #7d8590; min-height: 14px; }
+  #lkCribCamBadge { text-align: center; font: 600 12px/1.45 ui-monospace, monospace;
+    color: #7d8590; min-height: 14px; }
+  #lkCribCamBadge.ok { color: #7fa66a; }
+  #lkCribCamBadge.bad { color: #e05d5d; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
@@ -3848,9 +3851,15 @@ function lkCribCamUpdate(){
   const left = (typeof lkDealLeft === "number") ? lkDealLeft + " left" : (live ? "starting…" : "—");
   read.innerHTML = `<span class="cc">${card}</span><span class="cl">${left}</span>`;
   const b = $("lkCribCamBtn");
-  b.textContent = live ? "■ Stop" : (lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
+  // The button IS the save: nothing is written until the capture stops, so
+  // while reading it says so outright (Kevin 2026-08-28).
+  b.textContent = live ? "■ Stop + save" : (lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
   b.classList.toggle("live", live);
-  $("lkCribCamBadge").textContent = lkDealBadge ? "last capture: " + lkDealBadge : "";
+  const badge = $("lkCribCamBadge");
+  badge.classList.remove("ok", "bad");
+  if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
+  else if (lkDealLast){ badge.innerHTML = lkDealLast.msg; badge.classList.add(lkDealLast.ok ? "ok" : "bad"); }
+  else { badge.textContent = "no capture yet"; }
 }
 function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
@@ -4013,6 +4022,7 @@ function lkCamToggle(){
 // Corner taps: 1st = start, 2nd = stop/abort, 3rd = clear + re-arm.
 // Cut-glimpse (lkCamToggle above) is intact but unwired.
 let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
+let lkDealLast = null;    // plain-language verdict for the crib camera panel
 let lkDealBadge = null;   // capture verdict, PERSISTENT (Kevin's call 2026-08-20): "✓" full,
                           // "✓-N" partial (N unread, flagged), "✗N" not saved. Shown on the
                           // idle weather line until the NEXT capture starts.
@@ -4078,6 +4088,7 @@ function lkDealToggle(){
   $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
   lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
   lkDealBadge = null;   // a new capture is the only thing that clears the verdict
+  lkDealLast = null;
   lkCamDotSet("read");
   lkRemainRender([]);   // full grid up from the first frame; ticks strike cards as they commit
 }
@@ -4161,15 +4172,36 @@ window.addEventListener("message", e => {
              if (sv) rdUseCustomStack(sv.stack, sv.flags, sv.stack52, sv.half); }catch(err){}
       }
       lkDealBadge = d.saved ? (d.partial ? "✓-" + d.partial : "✓") : "✗" + d.missing.length;
+      // Plain-language verdict for the crib panel (the weather badge stays
+      // covert). Kevin 2026-08-28: "I don't know how to save that stack or
+      // confirm that it saved" — say it outright, and when it did NOT save,
+      // say which cards were never read, because that is the whole reason.
+      lkDealLast = d.saved
+        ? { ok: true, msg: d.partial
+              ? "SAVED with " + d.partial + " unread — slide those to the top"
+              : "SAVED &amp; LOADED — full deck (" + d.read + " cards)" }
+        : { ok: false, msg: "NOT SAVED — " + d.missing.length + " never read: "
+              + d.missing.slice(0, 6).map(prettyHTML).join(" ")
+              + (d.missing.length > 6 ? " …" : "") + " — deal again" };
+    } else if (!seg.length){
+      // An empty capture (mis-tap, stopped before dealing) must NOT park as
+      // part 1 — that leaves the app silently waiting for a second deal.
+      lkDealBadge = "✗0";
+      lkDealLast = { ok: false, msg: "NOTHING CAPTURED — no cards were read" };
     } else {
       rtnSegs.push(seg);
       if (rtnSegs.length < 2){
         lkDealBadge = String(seg.length);      // segment 1 parked: how many cards it pinned
+        lkDealLast = { ok: true, msg: "PART 1 saved (" + seg.length
+          + " cards) — now deal the shuffled packet" };
       } else {
         const r = rtnCompose();
         // ✓ = the two segments account for all 48 exactly once and the composed
         // deck is loaded, cut where the routine actually left it.
         lkDealBadge = r.ok ? "✓" : "✗" + r.holes;
+        lkDealLast = r.ok
+          ? { ok: true, msg: "SAVED &amp; LOADED — both parts, full deck" }
+          : { ok: false, msg: "NOT SAVED — " + r.holes + " cards unaccounted for — deal again" };
         rtnReset();
       }
     }
