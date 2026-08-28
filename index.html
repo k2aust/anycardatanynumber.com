@@ -330,14 +330,43 @@
   #lkCribPad { grid-template-columns: repeat(3, 1fr); }
   #lkCribPad button { padding: 15px 0; font-size: 24px; }
   #lkCribPad .act { font-size: 17px; }
+  /* ---- three sections (2026-08-28): crib grid / numpad / camera. The grid
+     hides itself until a number is entered; the other two toggle. ---- */
+  #lkCribSide { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  /* the bar clears the "Lock screen" pill (top-left, z-76) — without the
+     reserved left margin the two overlap when the grid is hidden */
+  #lkCribBar { display: flex; gap: 6px; margin-left: 150px; }
+  #lkCrib.nonum #lkCribSide { margin-top: 4px; }
+  #lkCribBar button { flex: 1 1 0; background: #14161c; color: #7d8590;
+    border: 1px solid #2b2f3b; border-radius: 999px; padding: 7px 0;
+    font: 600 13px ui-monospace, monospace; letter-spacing: 1px;
+    -webkit-tap-highlight-color: transparent; }
+  #lkCribBar button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
+  #lkCrib.nopad #lkCribPad, #lkCrib.nocam #lkCribCam { display: none; }
+  #lkCrib.nonum #lkCribBody { display: none; }        /* no number yet: no grid */
+  #lkCribCam { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
+    border: 1px solid #2b2f3b; border-radius: 12px; padding: 8px; }
+  #lkCribCamBtn { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
+    border-radius: 10px; padding: 13px 0; font: 600 17px ui-monospace, monospace;
+    -webkit-tap-highlight-color: transparent; }
+  #lkCribCamBtn.live { color: #e05d5d; border-color: #5a2f2f; }
+  #lkCribCamRead { display: flex; align-items: baseline; justify-content: center; gap: 14px; }
+  #lkCribCamRead .cc { font: 800 34px ui-monospace, monospace; color: var(--gold); }
+  #lkCribCamRead .cl { font: 600 15px ui-monospace, monospace; color: #7d8590; }
+  #lkCribCamBadge { text-align: center; font: 600 12px ui-monospace, monospace; color: #7d8590; min-height: 14px; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
     #lkCrib.show { flex-direction: row; gap: 8px; align-items: stretch; }
     #lkCrib #lkCribBody { flex: 1 1 auto; min-width: 0; }
     /* 3x3 digit block with clear + done stacked in a side column (Kevin) */
-    #lkCribPad { width: 38vw; max-width: 330px; margin-top: 0; align-content: center;
+    #lkCribSide { width: 38vw; max-width: 330px; justify-content: center; }
+    #lkCribBar { margin-left: 0; }        /* landscape: side column, no pill clash */
+    #lkCribPad { width: 100%; max-width: none; margin-top: 0; align-content: center;
       grid-template-columns: repeat(3, 1fr) 1.15fr; }
+    #lkCribCam { padding: 6px; gap: 4px; }
+    #lkCribCamBtn { padding: 9px 0; font-size: 15px; }
+    #lkCribCamRead .cc { font-size: 26px; }
     #lkCribPad button { padding: 9px 0; font-size: 20px; }
     #lkCribPad .act { font-size: 15px; }
     #lkCribPad .k-clr  { grid-column: 4; grid-row: 1 / span 2; }
@@ -483,7 +512,21 @@
   <div id="lkSetup"></div>
   <div id="lkExit"></div>
   <div id="lkCam" style="display:none"></div>
-  <div id="lkCrib"><div id="lkCribBody"></div><div id="lkCribPad"></div></div>
+  <div id="lkCrib">
+    <div id="lkCribBody"></div>
+    <div id="lkCribSide">
+      <div id="lkCribBar">
+        <button id="lkCribTogPad" class="on">numpad</button>
+        <button id="lkCribTogCam">camera</button>
+      </div>
+      <div id="lkCribCam">
+        <button id="lkCribCamBtn">● Start deal</button>
+        <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
+        <div id="lkCribCamBadge"></div>
+      </div>
+      <div id="lkCribPad"></div>
+    </div>
+  </div>
   <div id="lkToggle"></div>
   <div id="lkRemain"></div>
   <div id="lkCribBack">&#8249;&nbsp; Lock screen</div>
@@ -3737,9 +3780,12 @@ function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
   const valid = N >= 1 && N <= 52;
-  $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>`
-    + acGridHTML(valid ? N : 0, lkCribLand());
+  $("lkCribBody").innerHTML = valid
+    ? `<div class="lkc-h">${N}</div>` + acGridHTML(N, lkCribLand()) : "";
+  $("lkCrib").classList.toggle("nonum", !valid);   // no number -> no grid
   lkCribPadBuild();
+  lkCribSectionsBuild();
+  lkCribCamUpdate();
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
@@ -3767,6 +3813,45 @@ function lkCribPadBuild(){
     lkTap(k);
   });
   p.dataset.built = "1";
+}
+/* ---- crib sections (2026-08-28): grid / numpad / camera ------------------
+   The grid needs a number to mean anything, so it hides until one is entered.
+   Numpad and camera toggle from the bar and the choice sticks. The camera
+   section drives the SAME capture the corner tap does (lkDealToggle) and
+   shows its readout plainly — this is Kevin's own screen, so no covert
+   encoding here: card code and cards-left in the open. */
+function lkCribSectionsBuild(){
+  const bar = $("lkCribBar"); if (!bar || bar.dataset.built) return;
+  const set = (which, on) => {
+    $("lkCrib").classList.toggle(which === "pad" ? "nopad" : "nocam", !on);
+    $(which === "pad" ? "lkCribTogPad" : "lkCribTogCam").classList.toggle("on", on);
+    try{ localStorage.setItem("lkCrib_" + which, on ? "1" : "0"); }catch(e){}
+    if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
+  };
+  $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
+  $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
+  $("lkCribCamBtn").onclick = () => {
+    // done/error: clear the old capture AND start the new one in one press —
+    // the corner tap needs two, but here the button says "New deal".
+    if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
+    lkDealToggle();
+    lkCribCamUpdate();
+  };
+  let pad = "1", cam = "0";
+  try{ pad = localStorage.getItem("lkCrib_pad") ?? "1"; cam = localStorage.getItem("lkCrib_cam") ?? "0"; }catch(e){}
+  set("pad", pad === "1"); set("cam", cam === "1");
+  bar.dataset.built = "1";
+}
+function lkCribCamUpdate(){
+  const read = $("lkCribCamRead"); if (!read) return;
+  const live = lkDealState === "starting" || lkDealState === "reading";
+  const card = lkCamCard ? lkCardCode(lkCamCard) : "—";
+  const left = (typeof lkDealLeft === "number") ? lkDealLeft + " left" : (live ? "starting…" : "—");
+  read.innerHTML = `<span class="cc">${card}</span><span class="cl">${left}</span>`;
+  const b = $("lkCribCamBtn");
+  b.textContent = live ? "■ Stop" : (lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
+  b.classList.toggle("live", live);
+  $("lkCribCamBadge").textContent = lkDealBadge ? "last capture: " + lkDealBadge : "";
 }
 function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
@@ -3947,6 +4032,7 @@ function lkPeekFeed(card, left){        // a read tick: show it NOW
   if (typeof left === "number") lkDealLeft = left;
   if (card) lkCamCard = card;
   if (lkCamCard || typeof lkDealLeft === "number"){ lkPeekOn = true; lkRenderDate(); }
+  lkCribCamUpdate();          // the crib's camera panel mirrors every read
 }
 function lkPeekClear(){ lkPeekOn = false; }
 // The remaining-cards panel: all 52 in four suit rows, cards already read this
@@ -3968,7 +4054,7 @@ function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
   lkPeekClear(); lkRemainHide();
   lkDealState = "idle"; lkDealLeft = null; lkCamCard = null;
-  lkCamDotSet("off"); lkRenderDate();
+  lkCamDotSet("off"); lkRenderDate(); lkCribCamUpdate();
 }
 function lkDealToggle(){
   if (lkDealState === "starting" || lkDealState === "reading"){
@@ -4091,11 +4177,12 @@ window.addEventListener("message", e => {
     lkPeekClear();
     lkDealLeft = null; lkCamCard = null;
     lkRenderDate();   // badge is persistent — rendered on the idle weather line until the next capture
+    lkCribCamUpdate();
     lkCamDotSet("off");
     if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }  // camera off the moment we're done
     lkDealState = "done";
   }
-  else if (d.ev === "error"){ lkDealState = "error"; lkCamDotSet("err"); }
+  else if (d.ev === "error"){ lkDealState = "error"; lkCamDotSet("err"); lkCribCamUpdate(); }
 });
 $("lkCam").addEventListener("click", lkDealToggle);
 
