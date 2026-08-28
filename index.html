@@ -357,6 +357,14 @@
   #lkCribCamBadge.bad { color: #e05d5d; }
   /* the button must answer the tap instantly — analysis takes seconds */
   #lkCribCamBtn.busy { opacity: .65; animation: lkPulse 1s ease-in-out infinite; }
+  #lkCribCamRow { display: flex; gap: 6px; }
+  #lkCribCamRow #lkCribCamBtn { flex: 1 1 0; }
+  /* abort is only meaningful mid-capture: start over without spending the
+     seconds it takes to drain and analyse the deal being thrown away */
+  #lkCribCamAbort { display: none; flex: 0 0 auto; background: #14161c; color: #7d8590;
+    border: 1px solid #2b2f3b; border-radius: 10px; padding: 13px 14px;
+    font: 600 15px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribCam.live #lkCribCamAbort { display: block; }
   #lkCribAces { display: flex; gap: 4px; }
   #lkCribAces button { flex: 1 1 0; background: #14161c; color: #6b727c;
     border: 1px solid #2b2f3b; border-radius: 8px; padding: 6px 0;
@@ -547,7 +555,10 @@
           <button data-aces="0" class="on">aces out &middot; 48</button>
           <button data-aces="1">with aces &middot; 52</button>
         </div>
-        <button id="lkCribCamBtn">● Start deal</button>
+        <div id="lkCribCamRow">
+          <button id="lkCribCamBtn">● Start deal</button>
+          <button id="lkCribCamAbort">↻ New deal</button>
+        </div>
         <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
         <div id="lkCribCamBadge"></div>
         <div id="lkCribCamMiss"></div>
@@ -3888,6 +3899,18 @@ function lkCribSectionsBuild(){
     b.textContent = live ? "saving…" : "starting…";
     b.classList.add("busy");
   };
+  $("lkCribCamAbort").onclick = () => {
+    // Kevin 2026-08-28: starting over must not cost the drain. lkDealCleanup
+    // removes the capture frame outright — the bench never gets db-stop, so
+    // nothing is analysed or saved — then a fresh capture starts immediately.
+    lkDealCleanup();
+    lkDealToggle();
+    const b = $("lkCribCamBtn");
+    b.textContent = "starting…"; b.classList.add("busy");
+    $("lkCribCamBadge").textContent = "restarted — previous deal discarded";
+    $("lkCribCamBadge").classList.remove("ok", "bad");
+    $("lkCribCamMiss").innerHTML = "";
+  };
   let pad = "1", cam = "0", stk = "0";
   try{ pad = localStorage.getItem("lkCrib_pad") ?? "1";
        cam = localStorage.getItem("lkCrib_cam") ?? "0";
@@ -3917,6 +3940,7 @@ function lkCribCamUpdate(){
   // while reading it says so outright (Kevin 2026-08-28).
   b.textContent = live ? "■ Stop + save" : (lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
   b.classList.toggle("live", live);
+  $("lkCribCam").classList.toggle("live", live);
   const badge = $("lkCribCamBadge");
   badge.classList.remove("ok", "bad");
   if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
