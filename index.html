@@ -324,16 +324,18 @@
     border-radius: 10px; font: 600 22px ui-monospace, monospace; padding: 12px 0;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   #lkCribPad button:active { background: #262a33; }
-  #lkCribPad button.wide { grid-column: span 2; }
   #lkCribPad button.act { color: var(--gold); font-size: 18px; }
+  #lkCribPad .k-clr { grid-column: span 2; }
+  #lkCribPad .k-done { grid-column: span 3; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
     #lkCrib.show { flex-direction: row; gap: 8px; align-items: stretch; }
     #lkCrib #lkCribBody { flex: 1 1 auto; min-width: 0; }
-    #lkCribPad { width: 34vw; max-width: 300px; margin-top: 0; align-content: center;
+    #lkCribPad { width: 30vw; max-width: 260px; margin-top: 0; align-content: center;
       grid-template-columns: repeat(3, 1fr); }
-    #lkCribPad button { padding: 8px 0; font-size: 20px; }
+    #lkCribPad button { padding: 10px 0; font-size: 21px; }
+    #lkCribPad .k-clr, #lkCribPad .k-done { grid-column: span 3; }
     #lkCrib .lkc-h { font-size: 30px; }
     #lkCribBack { padding: 5px 12px; font-size: 13px; }
   }
@@ -3728,7 +3730,8 @@ function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
   const valid = N >= 1 && N <= 52;
-  $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>` + acGridHTML(valid ? N : 0);
+  $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>`
+    + acGridHTML(valid ? N : 0, lkCribLand());
   lkCribPadBuild();
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
@@ -3741,18 +3744,15 @@ function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
 const LK_PAD = ["1","2","3","4","5","6","7","8","9","0"];
 function lkCribPadBuild(){
   const p = $("lkCribPad"); if (!p || p.dataset.built) return;
+  // No backspace (Kevin 2026-08-27: redundant with clear) — a 3rd digit
+  // retypes the number anyway, so clear + done get the room instead.
   p.innerHTML = LK_PAD.map(k => `<button data-k="${k}">${k}</button>`).join("")
-    + `<button class="act" data-k="bk">⌫</button>`
-    + `<button class="act wide" data-k="clr">clear</button>`
-    + `<button class="act wide" data-k="back">done</button>`;
+    + `<button class="act k-clr" data-k="clr">clear</button>`
+    + `<button class="act k-done" data-k="back">done</button>`;
   p.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     const k = b.dataset.k;
     if (k === "back") { lkCribPeekHide(); return; }
-    if (k === "bk") {
-      if (lkNum.length) { lkNum = lkNum.slice(0, -1); lkCribPhase = "num"; lkCribVal = null; }
-      lkRenderDate(); lkCribRefresh(); return;
-    }
     if (k === "clr") { lkNum = ""; lkCribVal = null; lkCribPhase = "num"; lkRenderDate(); lkCribRefresh(); return; }
     // a 3rd digit replaces the number rather than being swallowed: typing
     // over a wrong entry is the common case in performance.
@@ -3775,7 +3775,16 @@ function lkCribFit() {
   const fs = Math.min(rowH * 0.72, (colW - 4) / (3 * 0.6));       // 3-char codes are the widest
   tbl.style.fontSize = Math.max(10, Math.floor(fs)) + "px";
 }
-window.addEventListener("resize", () => { if ($("lkCrib").classList.contains("show")) lkCribFit(); });
+// The landscape crib transposes the grid, so a rotation has to RE-RENDER, not
+// just refit — must match the CSS breakpoint below exactly.
+function lkCribLand(){ return matchMedia("(orientation: landscape) and (max-height: 560px)").matches; }
+let lkCribWasLand = null;
+window.addEventListener("resize", () => {
+  if (!$("lkCrib").classList.contains("show")) return;
+  const land = lkCribLand();
+  if (land !== lkCribWasLand){ lkCribWasLand = land; lkCribPeekShow(); return; }
+  lkCribFit();
+});
 /* ---- Bottom-left front-camera glimpse toggle (replaces the deadman switch; the crib
    is still reachable via lkToggle and the BT-remote crib button) ----
    Tap: front camera on, NO preview (2px near-invisible video element — display:none
@@ -4841,8 +4850,12 @@ function acCribFit(){
 window.addEventListener("resize", () => { if ($("acCribPhase").classList.contains("show")) acCribFit(); });
 $("acReset").addEventListener("click", acCribHide);
 // Pure crib grid for a number N: summary + value x suit table (with codes) + legend. Reused by the crib screen and the lockscreen peek.
-function acGridHTML(N){
+function acGridHTML(N, transpose){
   const valid = N >= 1 && N <= 52;
+  // TRANSPOSED (landscape crib, 2026-08-27): values run across, suits down —
+  // 13 short columns suit a wide screen where 13 rows do not. Same cells,
+  // same classes, same counts; only the axes swap.
+  if (transpose) return acGridHTMLT(N);
   const head = AC_SUITS.map(([c,sym,red]) => `<th class="${red?'r':''}">${sym}</th>`).join("");
   let cardCount = 0, valCount = 0;
   const rows = AC_VALS.map(v => {
@@ -4861,6 +4874,34 @@ function acGridHTML(N){
   }).join("");
   return `<div class="ac-summary">${valid ? `At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards` : `Enter a number`}</div>`
     + `<table class="ac-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`
+    + `<div class="ac-legend"><b>1</b>/<b>2</b> hand spectator 1 (cut) / 2 (no cut) &middot; <b>N</b>/<b>J</b>/<b>A</b>/<b>B</b> add nothing/jokers/aces/both &middot; <b>+</b> next card / <b>.</b> direct hit &middot; <span class="sw" style="background:#fff"></span> face&#8209;down <span class="sw" style="background:#111"></span> from face</div>`;
+}
+// Landscape crib grid: values across the top, suits down the side.
+function acGridHTMLT(N){
+  const valid = N >= 1 && N <= 52;
+  let cardCount = 0;
+  const reach = {};                         // reach[v][suit] once, for counts + cells
+  const valAny = {};
+  AC_VALS.forEach(v => {
+    reach[v] = AC_SUITS.map(([s]) => valid ? acReach(v+s, N) : null);
+    valAny[v] = reach[v].some(Boolean);
+  });
+  const valCount = AC_VALS.filter(v => valAny[v]).length;
+  const head = AC_VALS.map(v =>
+    `<th class="${(valid && !valAny[v]) ? 'dead' : ''}">${v}</th>`).join("");
+  const rows = AC_SUITS.map(([s, sym, red], i) => {
+    const cells = AC_VALS.map(v => {
+      const out = reach[v][i];
+      if (out){ cardCount++;
+        const ori = out.end === "face" ? "face" : "top";
+        return `<td class="on ${ori}" data-card="${v+s}">${acCode(out)}</td>`;
+      }
+      return (valAny[v] || !valid) ? `<td></td>` : `<td class="dead">&#10005;</td>`;
+    }).join("");
+    return `<tr><th class="${red?'r':''}">${sym}</th>${cells}</tr>`;
+  }).join("");
+  return `<div class="ac-summary">${valid ? `At number ${N}: ${valCount} value${valCount!==1?'s':''} available &middot; ${cardCount} cards` : `Enter a number`}</div>`
+    + `<table class="ac-tbl ac-tblT"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`
     + `<div class="ac-legend"><b>1</b>/<b>2</b> hand spectator 1 (cut) / 2 (no cut) &middot; <b>N</b>/<b>J</b>/<b>A</b>/<b>B</b> add nothing/jokers/aces/both &middot; <b>+</b> next card / <b>.</b> direct hit &middot; <span class="sw" style="background:#fff"></span> face&#8209;down <span class="sw" style="background:#111"></span> from face</div>`;
 }
 // tapping a cell shows the full handling in an overlay (the crib stays scroll-free underneath)
