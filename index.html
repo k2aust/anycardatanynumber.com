@@ -308,8 +308,8 @@
     border: 1px solid rgba(255,255,255,.28); color: #fff; font: 600 15px -apple-system, system-ui, sans-serif;
     cursor: pointer; -webkit-tap-highlight-color: transparent; }
   #lkCrib.show ~ #lkCribBack { display: block; }
-  #lkCrib.show { display: flex; }
-  #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+  #lkCrib.show { display: flex; overflow-y: auto; }   /* everything on: scroll rather than crush a section */
+  #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 300px; width: 100%; overflow: hidden; }
   #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 46px; line-height: 1; margin: 0 0 2px; }
   #lkCrib .ac-summary { flex: 0 0 auto; margin: 0 0 3px; font-size: 13px; }
   #lkCrib .ac-tbl { flex: 0 0 auto; width: 100%; }                 /* JS sets row heights so it fills the screen */
@@ -355,6 +355,19 @@
     color: #7d8590; min-height: 14px; }
   #lkCribCamBadge.ok { color: #7fa66a; }
   #lkCribCamBadge.bad { color: #e05d5d; }
+  /* the button must answer the tap instantly — analysis takes seconds */
+  #lkCribCamBtn.busy { opacity: .65; animation: lkPulse 1s ease-in-out infinite; }
+  @keyframes lkPulse { 50% { opacity: .35; } }
+  /* current stack, position by position (2026-08-28) */
+  #lkCrib.nostk #lkCribStack { display: none; }
+  #lkCribStack { flex: 0 1 auto; min-height: 0; max-height: 32vh; overflow-y: auto;
+    border: 1px solid #2b2f3b; border-radius: 12px; padding: 7px; }
+  #lkCribStack .stk { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px 5px; }
+  #lkCribStack .stk .it { display: flex; align-items: baseline; gap: 3px;
+    font: 600 14px ui-monospace, monospace; color: #e8e6e1; }
+  #lkCribStack .stk b { font-weight: 500; font-size: 10px; color: #6b727c; min-width: 15px; text-align: right; }
+  #lkCribStack .stkh { font: 600 11px ui-monospace, monospace; color: #7d8590; margin-bottom: 5px; }
+  #lkCribStack .none { font: 600 12px ui-monospace, monospace; color: #7d8590; text-align: center; padding: 8px 0; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
@@ -519,7 +532,9 @@
       <div id="lkCribBar">
         <button id="lkCribTogPad" class="on">numpad</button>
         <button id="lkCribTogCam">camera</button>
+        <button id="lkCribTogStk">stack</button>
       </div>
+      <div id="lkCribStack"></div>
       <div id="lkCribCam">
         <button id="lkCribCamBtn">● Start deal</button>
         <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
@@ -3824,25 +3839,47 @@ function lkCribPadBuild(){
    encoding here: card code and cards-left in the open. */
 function lkCribSectionsBuild(){
   const bar = $("lkCribBar"); if (!bar || bar.dataset.built) return;
+  const SEC = { pad: ["nopad", "lkCribTogPad"], cam: ["nocam", "lkCribTogCam"], stk: ["nostk", "lkCribTogStk"] };
   const set = (which, on) => {
-    $("lkCrib").classList.toggle(which === "pad" ? "nopad" : "nocam", !on);
-    $(which === "pad" ? "lkCribTogPad" : "lkCribTogCam").classList.toggle("on", on);
+    $("lkCrib").classList.toggle(SEC[which][0], !on);
+    $(SEC[which][1]).classList.toggle("on", on);
     try{ localStorage.setItem("lkCrib_" + which, on ? "1" : "0"); }catch(e){}
     if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
   };
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
+  $("lkCribTogStk").onclick = () => { set("stk", $("lkCrib").classList.contains("nostk")); lkCribStackUpdate(); };
   $("lkCribCamBtn").onclick = () => {
+    const live = lkDealState === "starting" || lkDealState === "reading";
+    // ANSWER THE TAP IMMEDIATELY (Kevin 2026-08-28): stopping drains the
+    // classifier queue, which takes seconds — without this the button looks
+    // dead and gets pressed again. The next state event repaints it.
     // done/error: clear the old capture AND start the new one in one press —
     // the corner tap needs two, but here the button says "New deal".
     if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
     lkDealToggle();
-    lkCribCamUpdate();
+    // paint LAST: cleanup/toggle repaint the button, and this must survive
+    // until the next real state event lands.
+    const b = $("lkCribCamBtn");
+    b.textContent = live ? "saving…" : "starting…";
+    b.classList.add("busy");
   };
-  let pad = "1", cam = "0";
-  try{ pad = localStorage.getItem("lkCrib_pad") ?? "1"; cam = localStorage.getItem("lkCrib_cam") ?? "0"; }catch(e){}
-  set("pad", pad === "1"); set("cam", cam === "1");
+  let pad = "1", cam = "0", stk = "0";
+  try{ pad = localStorage.getItem("lkCrib_pad") ?? "1";
+       cam = localStorage.getItem("lkCrib_cam") ?? "0";
+       stk = localStorage.getItem("lkCrib_stk") ?? "0"; }catch(e){}
+  set("pad", pad === "1"); set("cam", cam === "1"); set("stk", stk === "1");
   bar.dataset.built = "1";
+}
+// The stack the engine is actually using right now, position by position.
+function lkCribStackUpdate(){
+  const el = $("lkCribStack"); if (!el || $("lkCrib").classList.contains("nostk")) return;
+  const full = fullStackForSettings, deal = stackForSettings;
+  const st = (full && full.length) ? full : (deal || []);
+  if (!st.length){ el.innerHTML = `<div class="none">no stack loaded — capture a deal</div>`; return; }
+  el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards</div>`
+    + `<div class="stk">` + st.map((c, i) =>
+        `<span class="it"><b>${i + 1}</b>${prettyHTML(c)}</span>`).join("") + `</div>`;
 }
 function lkCribCamUpdate(){
   const read = $("lkCribCamRead"); if (!read) return;
@@ -3851,6 +3888,7 @@ function lkCribCamUpdate(){
   const left = (typeof lkDealLeft === "number") ? lkDealLeft + " left" : (live ? "starting…" : "—");
   read.innerHTML = `<span class="cc">${card}</span><span class="cl">${left}</span>`;
   const b = $("lkCribCamBtn");
+  b.classList.remove("busy");        // a real state event ends the busy paint
   // The button IS the save: nothing is written until the capture stops, so
   // while reading it says so outright (Kevin 2026-08-28).
   b.textContent = live ? "■ Stop + save" : (lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
@@ -3860,6 +3898,7 @@ function lkCribCamUpdate(){
   if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
   else if (lkDealLast){ badge.innerHTML = lkDealLast.msg; badge.classList.add(lkDealLast.ok ? "ok" : "bad"); }
   else { badge.textContent = "no capture yet"; }
+  lkCribStackUpdate();       // a capture replaces the stack — keep the view honest
 }
 function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
@@ -3867,6 +3906,9 @@ function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPee
 function lkCribFit() {
   const crib = $("lkCrib"), tbl = crib.querySelector(".ac-tbl"); if (!tbl || !tbl.rows.length) return;
   const body = $("lkCribBody");
+  // Clear last fit's inline heights BEFORE measuring, or a shrinking crib
+  // (a section toggled on) keeps the old, larger rows and overlaps them.
+  tbl.querySelectorAll("td,th").forEach(c => { c.style.height = ""; });
   const other = [".lkc-h", ".ac-summary", ".ac-legend"].reduce((s,sel) => { const e = crib.querySelector(sel); return s + (e ? e.offsetHeight : 0); }, 0);
   const rows = tbl.rows.length;                                   // 14 (header + 13 values)
   const rowH = Math.max(14, Math.floor((body.clientHeight - other - 8) / rows));
