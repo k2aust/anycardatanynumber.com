@@ -336,14 +336,12 @@
   /* the bar clears the "Lock screen" pill (top-left, z-76) — without the
      reserved left margin the two overlap when the grid is hidden */
   #lkCribBar { display: flex; gap: 6px; margin-left: 150px; }
-  #lkCrib.nonum #lkCribSide { margin-top: 4px; }
   #lkCribBar button { flex: 1 1 0; background: #14161c; color: #7d8590;
     border: 1px solid #2b2f3b; border-radius: 999px; padding: 7px 0;
     font: 600 13px ui-monospace, monospace; letter-spacing: 1px;
     -webkit-tap-highlight-color: transparent; }
   #lkCribBar button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
   #lkCrib.nopad #lkCribPad, #lkCrib.nocam #lkCribCam { display: none; }
-  #lkCrib.nonum #lkCribBody { display: none; }        /* no number yet: no grid */
   #lkCribCam { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
     border: 1px solid #2b2f3b; border-radius: 12px; padding: 8px; }
   #lkCribCamBtn { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
@@ -3780,9 +3778,10 @@ function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
   const valid = N >= 1 && N <= 52;
-  $("lkCribBody").innerHTML = valid
-    ? `<div class="lkc-h">${N}</div>` + acGridHTML(N, lkCribLand()) : "";
-  $("lkCrib").classList.toggle("nonum", !valid);   // no number -> no grid
+  // The grid is ALWAYS up (Kevin 2026-08-28) — with no number it shows its
+  // empty state, which is still the layout he reads from.
+  $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>`
+    + acGridHTML(valid ? N : 0, lkCribLand());
   lkCribPadBuild();
   lkCribSectionsBuild();
   lkCribCamUpdate();
