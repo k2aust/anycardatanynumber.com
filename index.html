@@ -357,6 +357,13 @@
   #lkCribCamBadge.bad { color: #e05d5d; }
   /* the button must answer the tap instantly — analysis takes seconds */
   #lkCribCamBtn.busy { opacity: .65; animation: lkPulse 1s ease-in-out infinite; }
+  #lkCribAces { display: flex; gap: 4px; }
+  #lkCribAces button { flex: 1 1 0; background: #14161c; color: #6b727c;
+    border: 1px solid #2b2f3b; border-radius: 8px; padding: 6px 0;
+    font: 600 11px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribAces button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
+  #lkCribCamMiss { font: 600 13px/1.5 ui-monospace, monospace; color: #e8e6e1;
+    text-align: center; }
   @keyframes lkPulse { 50% { opacity: .35; } }
   /* current stack, position by position (2026-08-28) */
   #lkCrib.nostk #lkCribStack { display: none; }
@@ -536,9 +543,14 @@
       </div>
       <div id="lkCribStack"></div>
       <div id="lkCribCam">
+        <div id="lkCribAces">
+          <button data-aces="0" class="on">aces out &middot; 48</button>
+          <button data-aces="1">with aces &middot; 52</button>
+        </div>
         <button id="lkCribCamBtn">● Start deal</button>
         <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
         <div id="lkCribCamBadge"></div>
+        <div id="lkCribCamMiss"></div>
       </div>
       <div id="lkCribPad"></div>
     </div>
@@ -3849,6 +3861,18 @@ function lkCribSectionsBuild(){
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
   $("lkCribTogStk").onclick = () => { set("stk", $("lkCrib").classList.contains("nostk")); lkCribStackUpdate(); };
+  // Deal WITH or WITHOUT the aces (Kevin 2026-08-28). The ACAAN routine holds
+  // the aces out (48), but a plain full-deck capture — and poker mode, which
+  // needs ace positions — deals all 52. Only the countdown and the missing
+  // list change here; the save itself always needs the 48 non-aces.
+  $("lkCribAces").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    lkDealAces = b.dataset.aces === "1";
+    try{ localStorage.setItem("lkDealAces", lkDealAces ? "1" : "0"); }catch(err){}
+    [...$("lkCribAces").children].forEach(x => x.classList.toggle("on", (x.dataset.aces === "1") === lkDealAces));
+  });
+  try{ lkDealAces = localStorage.getItem("lkDealAces") === "1"; }catch(err){}
+  [...$("lkCribAces").children].forEach(x => x.classList.toggle("on", (x.dataset.aces === "1") === lkDealAces));
   $("lkCribCamBtn").onclick = () => {
     const live = lkDealState === "starting" || lkDealState === "reading";
     // ANSWER THE TAP IMMEDIATELY (Kevin 2026-08-28): stopping drains the
@@ -3898,6 +3922,8 @@ function lkCribCamUpdate(){
   if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
   else if (lkDealLast){ badge.innerHTML = lkDealLast.msg; badge.classList.add(lkDealLast.ok ? "ok" : "bad"); }
   else { badge.textContent = "no capture yet"; }
+  $("lkCribCamMiss").innerHTML = (!live && lkDealLast && lkDealLast.list && lkDealLast.list.length)
+    ? lkDealLast.list.map(prettyHTML).join("&nbsp; ") : "";
   lkCribStackUpdate();       // a capture replaces the stack — keep the view honest
 }
 function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
@@ -4064,6 +4090,7 @@ function lkCamToggle(){
 // Corner taps: 1st = start, 2nd = stop/abort, 3rd = clear + re-arm.
 // Cut-glimpse (lkCamToggle above) is intact but unwired.
 let lkDealFr = null, lkDealState = "idle", lkDealLeft = null;
+let lkDealAces = false;   // deal all 52 (true) or the ACAAN 48 with aces out (false)
 let lkDealLast = null;    // plain-language verdict for the crib camera panel
 let lkDealBadge = null;   // capture verdict, PERSISTENT (Kevin's call 2026-08-20): "✓" full,
                           // "✓-N" partial (N unread, flagged), "✗N" not saved. Shown on the
@@ -4125,7 +4152,8 @@ function lkDealToggle(){
   // packet rather than a deck — counting down from its own size makes the
   // readout hit 0 exactly as the packet runs out, a live check that the number
   // he named aloud was right.
-  const deck = rtnSegs.length === 1 ? 48 - rtnSegs[0].length : 48;
+  const full = lkDealAces ? 52 : 48;
+  const deck = rtnSegs.length === 1 ? full - rtnSegs[0].length : full;
   f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
   $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
   lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
@@ -4218,32 +4246,38 @@ window.addEventListener("message", e => {
       // covert). Kevin 2026-08-28: "I don't know how to save that stack or
       // confirm that it saved" — say it outright, and when it did NOT save,
       // say which cards were never read, because that is the whole reason.
+      // Always name the cards that did not read — that is the actionable part
+      // (Kevin 2026-08-28). Aces only count as missing when he dealt them.
+      const miss = d.missing || [], missA = lkDealAces ? (d.missingAces || []) : [];
       lkDealLast = d.saved
-        ? { ok: true, msg: d.partial
-              ? "SAVED with " + d.partial + " unread — slide those to the top"
-              : "SAVED &amp; LOADED — full deck (" + d.read + " cards)" }
-        : { ok: false, msg: "NOT SAVED — " + d.missing.length + " never read: "
-              + d.missing.slice(0, 6).map(prettyHTML).join(" ")
-              + (d.missing.length > 6 ? " …" : "") + " — deal again" };
+        ? (d.partial
+            ? { ok: true, msg: "SAVED — " + d.partial + " unread, move these to the top:",
+                list: miss }
+            : missA.length
+              ? { ok: true, msg: "SAVED &amp; LOADED — 48 cards &middot; aces never read:",
+                  list: missA }
+              : { ok: true, msg: "SAVED &amp; LOADED — full deck (" + d.read + " cards)", list: [] })
+        : { ok: false, msg: "NOT SAVED — " + (miss.length + missA.length) + " never read:",
+            list: miss.concat(missA) };
     } else if (!seg.length){
       // An empty capture (mis-tap, stopped before dealing) must NOT park as
       // part 1 — that leaves the app silently waiting for a second deal.
       lkDealBadge = "✗0";
-      lkDealLast = { ok: false, msg: "NOTHING CAPTURED — no cards were read" };
+      lkDealLast = { ok: false, msg: "NOTHING CAPTURED — no cards were read", list: [] };
     } else {
       rtnSegs.push(seg);
       if (rtnSegs.length < 2){
         lkDealBadge = String(seg.length);      // segment 1 parked: how many cards it pinned
         lkDealLast = { ok: true, msg: "PART 1 saved (" + seg.length
-          + " cards) — now deal the shuffled packet" };
+          + " cards) — now deal the shuffled packet", list: [] };
       } else {
         const r = rtnCompose();
         // ✓ = the two segments account for all 48 exactly once and the composed
         // deck is loaded, cut where the routine actually left it.
         lkDealBadge = r.ok ? "✓" : "✗" + r.holes;
         lkDealLast = r.ok
-          ? { ok: true, msg: "SAVED &amp; LOADED — both parts, full deck" }
-          : { ok: false, msg: "NOT SAVED — " + r.holes + " cards unaccounted for — deal again" };
+          ? { ok: true, msg: "SAVED &amp; LOADED — both parts, full deck", list: [] }
+          : { ok: false, msg: "NOT SAVED — " + r.holes + " cards unaccounted for — deal again", list: [] };
         rtnReset();
       }
     }
