@@ -318,24 +318,31 @@
   /* ---- crib numpad (2026-08-27): enter/change the number without leaving the
      crib. Drives lkTap(), so the 2-digit rollover, value phase and clear are
      the same code the hidden lockscreen zones use. ---- */
-  #lkCribPad { flex: 0 0 auto; display: grid; grid-template-columns: repeat(5, 1fr);
+  #lkCribPad { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, 1fr);
     gap: 5px; margin-top: 6px; }
   #lkCribPad button { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
     border-radius: 10px; font: 600 22px ui-monospace, monospace; padding: 12px 0;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   #lkCribPad button:active { background: #262a33; }
   #lkCribPad button.act { color: var(--gold); font-size: 18px; }
-  #lkCribPad .k-clr { grid-column: span 2; }
-  #lkCribPad .k-done { grid-column: span 3; }
+  /* PORTRAIT: 3 wide — digits 1-9 as a 3x3 block, then 0 / clear / done on one
+     row. Fewer, fatter keys than the old 5-wide pad (Kevin 2026-08-27). */
+  #lkCribPad { grid-template-columns: repeat(3, 1fr); }
+  #lkCribPad button { padding: 15px 0; font-size: 24px; }
+  #lkCribPad .act { font-size: 17px; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
     #lkCrib.show { flex-direction: row; gap: 8px; align-items: stretch; }
     #lkCrib #lkCribBody { flex: 1 1 auto; min-width: 0; }
-    #lkCribPad { width: 30vw; max-width: 260px; margin-top: 0; align-content: center;
-      grid-template-columns: repeat(3, 1fr); }
-    #lkCribPad button { padding: 10px 0; font-size: 21px; }
-    #lkCribPad .k-clr, #lkCribPad .k-done { grid-column: span 3; }
+    /* 3x3 digit block with clear + done stacked in a side column (Kevin) */
+    #lkCribPad { width: 38vw; max-width: 330px; margin-top: 0; align-content: center;
+      grid-template-columns: repeat(3, 1fr) 1.15fr; }
+    #lkCribPad button { padding: 9px 0; font-size: 20px; }
+    #lkCribPad .act { font-size: 15px; }
+    #lkCribPad .k-clr  { grid-column: 4; grid-row: 1 / span 2; }
+    #lkCribPad .k-done { grid-column: 4; grid-row: 3 / span 2; }
+    #lkCribPad [data-k="0"] { grid-column: 1 / span 3; }
     #lkCrib .lkc-h { font-size: 30px; }
     #lkCribBack { padding: 5px 12px; font-size: 13px; }
   }
