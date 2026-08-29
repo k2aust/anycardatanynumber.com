@@ -365,6 +365,12 @@
     border: 1px solid #2b2f3b; border-radius: 10px; padding: 13px 14px;
     font: 600 15px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
   #lkCribCam.live #lkCribCamAbort { display: block; }
+  /* Continue is only meaningful when there IS a partial stack to extend, so it
+     appears next to the finished capture rather than living permanently. */
+  #lkCribCamCont { display: none; flex: 0 0 auto; background: #1b1a14; color: var(--gold);
+    border: 1px solid #4a412a; border-radius: 10px; padding: 13px 14px;
+    font: 600 15px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribCam.cont #lkCribCamCont { display: block; }
   #lkCribAces { display: flex; gap: 4px; }
   #lkCribAces button { flex: 1 1 0; background: #14161c; color: #6b727c;
     border: 1px solid #2b2f3b; border-radius: 8px; padding: 6px 0;
@@ -573,6 +579,7 @@
         <div id="lkCribCamRow">
           <button id="lkCribCamBtn">● Start deal</button>
           <button id="lkCribCamAbort">↻ New deal</button>
+          <button id="lkCribCamCont">+ Continue</button>
         </div>
         <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
         <div id="lkCribCamBadge"></div>
@@ -3931,6 +3938,13 @@ function lkCribSectionsBuild(){
     b.textContent = live ? "saving…" : "starting…";
     b.classList.add("busy");
   };
+  // Continue: same start path, but the capture extends the partial stack.
+  $("lkCribCamCont").onclick = () => {
+    if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
+    lkDealToggle(true);
+    const b = $("lkCribCamBtn");
+    b.textContent = "starting…"; b.classList.add("busy");
+  };
   $("lkCribCamAbort").onclick = () => {
     // Kevin 2026-08-28: starting over must not cost the drain. lkDealCleanup
     // removes the capture frame outright — the bench never gets db-stop, so
@@ -4021,9 +4035,14 @@ function lkCribCamUpdate(){
   b.classList.remove("busy");        // a real state event ends the busy paint
   // The button IS the save: nothing is written until the capture stops, so
   // while reading it says so outright (Kevin 2026-08-28).
-  b.textContent = live ? "■ Stop + save" : (lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
+  // With a partial stack in hand the primary button is the "throw it away and
+  // start over" half of the pair, so it says so rather than "Start deal".
+  const canCont = !live && !!lkDealPrefix();
+  b.textContent = live ? "■ Stop + save"
+    : (canCont || lkDealState === "done" || lkDealState === "error") ? "↻ New deal" : "● Start deal";
   b.classList.toggle("live", live);
   $("lkCribCam").classList.toggle("live", live);
+  $("lkCribCam").classList.toggle("cont", canCont);
   const badge = $("lkCribCamBadge");
   badge.classList.remove("ok", "bad");
   if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
@@ -4250,10 +4269,56 @@ function lkRemainHide(){ $("lkRemain").style.display = "none"; $("lkRemain").inn
 function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
   lkPeekClear(); lkRemainHide();
-  lkDealState = "idle"; lkDealLeft = null; lkCamCard = null;
+  lkDealState = "idle"; lkDealLeft = null; lkCamCard = null; lkDealCont = null;
   lkCamDotSet("off"); lkRenderDate(); lkCribCamUpdate();
 }
-function lkDealToggle(){
+/* ---- Continue: deal ON TOP of the partial stack (Kevin 2026-08-29) --------
+   A stop is a stop, not a reset. "New deal" throws the partial away and starts
+   over; "Continue" resumes the same deal — the pile stays on the table, the
+   rest stays in hand, and the cards read this time are APPENDED to the cards
+   read last time.
+
+   The prefix is derived from the stack itself rather than remembered, so
+   Continue still works after a reload: a partial stack keeps its known run at
+   the face, and reversing that run gives back the order the cards fell in. */
+let lkDealSeq = null;   // last capture's dealt order INCLUDING aces (see below)
+function lkDealSeqLoad(){
+  if (lkDealSeq) return lkDealSeq;
+  try{ lkDealSeq = JSON.parse(localStorage.getItem("rdDealSeq") || "null"); }catch(e){}
+  return lkDealSeq;
+}
+function lkDealSeqSave(seq){
+  lkDealSeq = seq && seq.length ? seq.slice() : null;
+  try{ lkDealSeq ? localStorage.setItem("rdDealSeq", JSON.stringify(lkDealSeq))
+                 : localStorage.removeItem("rdDealSeq"); }catch(e){}
+}
+function lkDealPrefix(){
+  if (rtnSegs.length === 1 && rtnSegs[0].length) return rtnSegs[0].slice();
+  const st = (fullStackForSettings && fullStackForSettings.length) ? fullStackForSettings : (stackForSettings || []);
+  const F = lkStkPartial(st);
+  if (!F) return null;
+  const run = st.slice(F).reverse();                     // dealt order, non-aces only
+  // Prefer the REMEMBERED dealt order when it matches: a 48-card partial stack
+  // cannot hold ace positions, so deriving the prefix from the stack alone
+  // would drop the aces from a 52-card capture and leave poker mode with no52.
+  const seq = lkDealSeqLoad();
+  if (seq && seq.length >= run.length
+      && JSON.stringify(seq.filter(c => !/^A/.test(c))) === JSON.stringify(run)) return seq.slice();
+  return run;
+}
+// dealt order (old ++ new) -> the same shape the bench writes for a partial:
+// unread cards flagged and assumed on top, read cards reversed below them.
+function lkDealComposeCont(seq){
+  const seen = new Set(), all = [];
+  for (const c of seq) if (!seen.has(c)){ seen.add(c); all.push(c); }   // a card re-read on the overlap keeps its first placement
+  const nonAce = all.filter(c => !/^A/.test(c));
+  const missing = RTN_ALL48.filter(c => !seen.has(c));
+  return { stack48: [...missing, ...nonAce.slice().reverse()], missing,
+           stack52: all.length === 52 ? all.slice().reverse() : null, read: nonAce.length };
+}
+let lkDealCont = null;   // the dealt-order prefix this capture extends (null = fresh deal)
+function lkDealToggle(cont){
+  cont = cont === true;   // the corner tap passes its MouseEvent — never a continue
   if (lkDealState === "starting" || lkDealState === "reading"){
     lkCamDotSet("save");   // red the moment Stop is pressed — the drain takes seconds
     try{ lkDealFr.contentWindow.postMessage("db-stop", location.origin); }catch(e){ lkDealCleanup(); }
@@ -4273,7 +4338,9 @@ function lkDealToggle(){
   // readout hit 0 exactly as the packet runs out, a live check that the number
   // he named aloud was right.
   const full = lkDealAces ? 52 : 48;
-  const deck = rtnSegs.length === 1 ? full - rtnSegs[0].length : full;
+  lkDealCont = cont ? lkDealPrefix() : null;
+  const deck = lkDealCont ? Math.max(0, full - lkDealCont.length)
+             : rtnSegs.length === 1 ? full - rtnSegs[0].length : full;
   f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
   $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
   lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
@@ -4354,9 +4421,21 @@ window.addEventListener("message", e => {
     // full capture that dropped a few cards is still treated as a whole deck
     // and not silently parked as segment 1. Once segment 1 IS parked the next
     // capture is segment 2 whatever its length (the shuffled packet is long).
-    const whole = seg.length >= RTN_SEG_MAX && rtnSegs.length === 0;
-    if (whole || rtnSegs.length >= 2) rtnReset();
-    if (whole){
+    const lkDealContJustRan = !!lkDealCont;
+    const whole = !lkDealCont && seg.length >= RTN_SEG_MAX && rtnSegs.length === 0;
+    if (lkDealCont || whole || rtnSegs.length >= 2) rtnReset();   // choosing Continue is choosing not to do the 2-pile compose
+    if (lkDealCont){
+      const all = lkDealCont.concat(seg);
+      const r = lkDealComposeCont(all);
+      lkDealCont = null;
+      lkDealSeqSave([...new Set(all)]);
+      rdUseCustomStack(r.stack48, r.missing, r.stack52);
+      lkDealBadge = r.missing.length ? "✓-" + r.missing.length : "✓";
+      lkDealLast = r.missing.length
+        ? { ok: true, msg: "CONTINUED &amp; SAVED — " + r.read + " of 48 read &middot; move these to the top:",
+            list: r.missing }
+        : { ok: true, msg: "CONTINUED &amp; SAVED — full deck (" + r.read + " cards)", list: [] };
+    } else if (whole){
       if (d.saved){
         try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
              if (sv) rdUseCustomStack(sv.stack, sv.flags, sv.stack52, sv.half); }catch(err){}
@@ -4401,6 +4480,7 @@ window.addEventListener("message", e => {
         rtnReset();
       }
     }
+    if (!lkDealContJustRan) lkDealSeqSave(seg);   // fresh capture: this deal IS the dealt order
     lkPeekClear();
     lkDealLeft = null; lkCamCard = null;
     lkRenderDate();   // badge is persistent — rendered on the idle weather line until the next capture
