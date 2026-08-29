@@ -374,7 +374,15 @@
     text-align: center; }
   @keyframes lkPulse { 50% { opacity: .35; } }
   /* current stack, position by position (2026-08-28) */
-  #lkCrib.nostk #lkCribStack { display: none; }
+  /* ONE BODY SLOT, TWO VIEWS (Kevin 2026-08-29). The crib grid needs a number
+     to mean anything, so with no number entered the stack owns the slot and
+     the bar's "stack" button flips between them. */
+  #lkCrib:not(.stkview) #lkCribStack { display: none; }
+  #lkCrib.stkview #lkCribBody { display: none; }
+  /* padding-top clears the "‹ Lock screen" button, which sits over this corner
+     — the crib grid's centred number never collided with it, left-aligned
+     stack text does. */
+  #lkCrib.stkview #lkCribStack { flex: 1 1 auto; max-height: none; min-height: 220px; padding-top: 46px; }
   #lkCribStack { flex: 0 1 auto; min-height: 0; max-height: 32vh; overflow-y: auto;
     border: 1px solid #2b2f3b; border-radius: 12px; padding: 7px; }
   #lkCribStack .stk { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px 5px; }
@@ -394,7 +402,7 @@
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
     #lkCrib.show { flex-direction: row; gap: 8px; align-items: stretch; }
-    #lkCrib #lkCribBody { flex: 1 1 auto; min-width: 0; }
+    #lkCrib #lkCribBody, #lkCrib.stkview #lkCribStack { flex: 1 1 auto; min-width: 0; }
     /* 3x3 digit block with clear + done stacked in a side column (Kevin) */
     #lkCribSide { width: 38vw; max-width: 330px; justify-content: center; }
     #lkCribBar { margin-left: 0; }        /* landscape: side column, no pill clash */
@@ -550,13 +558,13 @@
   <div id="lkCam" style="display:none"></div>
   <div id="lkCrib">
     <div id="lkCribBody"></div>
+    <div id="lkCribStack"></div>
     <div id="lkCribSide">
       <div id="lkCribBar">
         <button id="lkCribTogPad" class="on">numpad</button>
         <button id="lkCribTogCam">camera</button>
         <button id="lkCribTogStk">stack</button>
       </div>
-      <div id="lkCribStack"></div>
       <div id="lkCribCam">
         <div id="lkCribAces">
           <button data-aces="0" class="on">aces out &middot; 48</button>
@@ -3822,10 +3830,26 @@ $("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("
 $("lkCribBack").addEventListener("click", lkCribPeekHide);
 
 /* ---- Bottom-left deadman switch: hold to reveal the crib for the entered number, release to hide ---- */
+/* Which of the two body views is up. Default follows the number (Kevin
+   2026-08-29): no number entered -> the grid would be blank, so show the
+   stack; a number entered -> that IS the crib, show it. The bar button
+   overrides by hand, and the override lasts until the entry changes — every
+   keystroke re-renders through here, so typing a number always lands you back
+   on the crib. */
+let lkCribStkManual = null, lkCribViewKey = null;
+function lkCribView(stack, manual){
+  if (manual) lkCribStkManual = !!stack;
+  $("lkCrib").classList.toggle("stkview", !!stack);
+  $("lkCribTogStk").classList.toggle("on", !!stack);
+  if (stack) lkCribStackUpdate();
+  if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
+}
 function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
   const valid = N >= 1 && N <= 52;
+  const key = lkNum + "|" + lkCribPhase + "|" + (lkCribVal || "");
+  if (key !== lkCribViewKey){ lkCribViewKey = key; lkCribStkManual = null; }   // entry changed -> back to the default view
   // The grid is ALWAYS up (Kevin 2026-08-28) — with no number it shows its
   // empty state, which is still the layout he reads from.
   $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>`
@@ -3833,7 +3857,7 @@ function lkCribPeekShow() {
   lkCribPadBuild();
   lkCribSectionsBuild();
   lkCribCamUpdate();
-  lkCribStackUpdate();   // was only refreshed by its own toggle, so an opened crib could show a stale stack
+  lkCribView(lkCribStkManual === null ? !valid : lkCribStkManual);
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
@@ -3870,7 +3894,7 @@ function lkCribPadBuild(){
    encoding here: card code and cards-left in the open. */
 function lkCribSectionsBuild(){
   const bar = $("lkCribBar"); if (!bar || bar.dataset.built) return;
-  const SEC = { pad: ["nopad", "lkCribTogPad"], cam: ["nocam", "lkCribTogCam"], stk: ["nostk", "lkCribTogStk"] };
+  const SEC = { pad: ["nopad", "lkCribTogPad"], cam: ["nocam", "lkCribTogCam"] };
   const set = (which, on) => {
     $("lkCrib").classList.toggle(SEC[which][0], !on);
     $(SEC[which][1]).classList.toggle("on", on);
@@ -3879,7 +3903,7 @@ function lkCribSectionsBuild(){
   };
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
-  $("lkCribTogStk").onclick = () => { set("stk", $("lkCrib").classList.contains("nostk")); lkCribStackUpdate(); };
+  $("lkCribTogStk").onclick = () => lkCribView(!$("lkCrib").classList.contains("stkview"), true);
   // Deal WITH or WITHOUT the aces (Kevin 2026-08-28). The ACAAN routine holds
   // the aces out (48), but a plain full-deck capture — and poker mode, which
   // needs ace positions — deals all 52. Only the countdown and the missing
@@ -3919,11 +3943,10 @@ function lkCribSectionsBuild(){
     $("lkCribCamBadge").classList.remove("ok", "bad");
     $("lkCribCamMiss").innerHTML = "";
   };
-  let pad = "1", cam = "0", stk = "0";
+  let pad = "1", cam = "0";
   try{ pad = localStorage.getItem("lkCrib_pad") ?? "1";
-       cam = localStorage.getItem("lkCrib_cam") ?? "0";
-       stk = localStorage.getItem("lkCrib_stk") ?? "0"; }catch(e){}
-  set("pad", pad === "1"); set("cam", cam === "1"); set("stk", stk === "1");
+       cam = localStorage.getItem("lkCrib_cam") ?? "0"; }catch(e){}
+  set("pad", pad === "1"); set("cam", cam === "1");
   bar.dataset.built = "1";
 }
 /* ---- The stack the engine is actually using right now, position by position.
@@ -3965,7 +3988,7 @@ function lkStkGrid(cards, cls, startPos){
     `<span class="it">${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
 }
 function lkCribStackUpdate(){
-  const el = $("lkCribStack"); if (!el || $("lkCrib").classList.contains("nostk")) return;
+  const el = $("lkCribStack"); if (!el) return;
   const full = fullStackForSettings, deal = stackForSettings;
   const st = (full && full.length) ? full : (deal || []);
   const pk = lkStkParked();
@@ -4014,7 +4037,8 @@ function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPee
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
 // set the font to the largest that fits that row height and the (fixed) column width.
 function lkCribFit() {
-  const crib = $("lkCrib"), tbl = crib.querySelector(".ac-tbl"); if (!tbl || !tbl.rows.length) return;
+  const crib = $("lkCrib"); if (crib.classList.contains("stkview")) return;   // the grid isn't the body view
+  const tbl = crib.querySelector(".ac-tbl"); if (!tbl || !tbl.rows.length) return;
   const body = $("lkCribBody");
   // Clear last fit's inline heights BEFORE measuring, or a shrinking crib
   // (a section toggled on) keeps the old, larger rows and overlaps them.
