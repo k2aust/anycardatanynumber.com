@@ -237,7 +237,7 @@ const log=m=>{const l=$("log"); l.textContent=(m+"\n"+l.textContent).slice(0,800
 
 let sess=null, stream=null, running=false, wakeLock=null, recorder=null, recChunks=[];
 let base=null, inEvent=false, event_=[], eventScans=0, eventT0=0, commits=[], lastClassifyT=0;
-let unknownThumbs=[], armedCue=false;
+let unknownThumbs=[], armedCue=false, preRoll=[];
 const thumbCanvas=document.createElement("canvas");
 const crop192=document.createElement("canvas"); crop192.width=crop192.height=192;
 const frameCanvas=document.createElement("canvas");
@@ -618,6 +618,18 @@ function assignCommits(evs0){            // evs: [{t, vec:Float32Array(52), n}]
 
 const pending=[]; let procBusy=false;
 const KEEP_FRAMES=7;               // classify top-K ink frames per event
+function stratPick(buf, k){        // best-pip frame from each of k time slices
+  if(buf.length<=k) return [...buf].sort((a,b)=>a.t-b.t);
+  const byT=[...buf].sort((a,b)=>a.t-b.t), out=[];
+  for(let s=0;s<k;s++){
+    const lo=Math.floor(s*byT.length/k), hi=Math.max(lo+1,Math.floor((s+1)*byT.length/k));
+    let best=byT[lo];
+    for(let i=lo;i<hi;i++){ const f=byT[i];
+      if(f.pips>best.pips||(f.pips===best.pips&&f.ink>best.ink)) best=f; }
+    out.push(best);
+  }
+  return out;                      // strata are time-ordered already
+}
 async function processPending(){
   if(procBusy) return; procBusy=true;
   while(pending.length){
@@ -629,6 +641,10 @@ async function processPending(){
     // idle anyway). commits/eventVecs are kept time-sorted below, so the
     // final sequence, scoring and export are order-identical.
     const buf=pending.pop();
+    // Picks stay GLOBAL top-pip (temporal-spread picks were tried 2026-08-29
+    // and cost lap5a 2 reads while gaining 2 on new31 — a wash; the stratified
+    // slots wasted classifications on hand-frame strata in long noisy events).
+    // The second-chance pass below covers the brief-card case instead.
     buf.sort((a,b)=>(b.pips-a.pips)||(b.ink-a.ink));
     const picks=buf.slice(0,KEEP_FRAMES).sort((a,b)=>a.t-b.t);
     const results=[];
@@ -643,11 +659,34 @@ async function processPending(){
       }
     }
     // one evidence vector per event, for the assignment run at Stop
-    eventVecs.push({t:picks[0]?.t||0, vec:acc, n:accN});
+    const myVec={t:picks[0]?.t||0, vec:acc, n:accN};
+    eventVecs.push(myVec);
     eventVecs.sort((a,b)=>a.t-b.t);
     event_=results;                 // settle() still drives the LIVE readout —
-    const settled=results.length?settle():
-      [{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}];
+    let settled=results.length?settle().filter(c=>c.card):[];
+    // SECOND CHANCE (2026-08-29 autopsy): 7 of 10 readable losses were events
+    // that fired AT the card and still voted unknown — the good frames were
+    // buffered but not among the picks. Before declaring unknown, classify
+    // the REMAINING buffered frames; a rescue commit needs n>=2 agreeing
+    // frames (no solo commits from this pass — gesture junk rarely agrees
+    // with itself twice, so the phantom risk stays shut).
+    if(!settled.length && buf.length>picks.length){
+      const rest=buf.filter(f=>!picks.includes(f)).sort((a,b)=>a.t-b.t);
+      for(const p of rest){
+        const r=await infer(tensorFromRegion(p.region));
+        if(r.neg-r.conf<NEG_MARGIN){
+          results.push({t:p.t,cls:r.cls,conf:r.conf});
+          if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
+          for(let i=0;i<52;i++) acc[i]+=r.vec[i];
+          accN++;
+        }
+      }
+      results.sort((a,b)=>a.t-b.t);
+      event_=results;
+      settled=results.length?settle().filter(c=>c.card&&c.n>=2):[];
+      myVec.vec=acc; myVec.n=accN;   // second-pass evidence joins the Stop assignment
+    }
+    if(!settled.length) settled=[{t:picks[0]?.t||0,card:null,conf:0,n:0,agree:0}];
     commits.push(...settled);
     commits.sort((a,b)=>a.t-b.t);   // LIFO processing, chronological record
     // MISS GALLERY (Kevin 2026-08-26): an event that commits no card keeps a
@@ -1057,9 +1096,21 @@ async function step(v, tMs){
     const d=frac-base;
     const dc=Math.sign(d)*Math.min(Math.abs(d), 3*sd);
     base+=BASE_ALPHA*dc; varInk=(1-VAR_ALPHA)*varInk+VAR_ALPHA*dc*dc;
+    // ring of the last 2 pre-event scans, ready to seed the next event
+    if(warmN>WARMUP_SCANS-3){
+      preRoll.push({t:tMs, ink:frac, pips, region:extractRegion(v,cx,cy), frame:grabFrame(v)});
+      if(preRoll.length>2) preRoll.shift();
+    }
   }
   if(fire){
-    if(!inEvent){ inEvent=true; eventBuf=[]; eventScans=0; eventT0=tMs; }
+    if(!inEvent){
+      // PRE-ROLL (2026-08-29 autopsy): the first card of a deal — and any
+      // card whose approach the trigger is slow to see — is READABLE before
+      // the event opens (AH died at +0.6s on every clip). Seed the new event
+      // with the last pre-event scans so those frames compete for picks.
+      inEvent=true; eventBuf=[...preRoll]; eventScans=preRoll.length;
+      eventT0=tMs; preRoll=[];
+    }
     eventScans++;
     // frame: a small full-frame jpeg per buffered scan, so the miss gallery
     // can show the WHOLE view (Kevin 2026-08-27: no cropping when tagging).
@@ -1115,7 +1166,7 @@ $("start").onclick=async()=>{
     const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
-    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); armedCue=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
     eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
     // Calibrate over the clip's first 2s exactly as a live run would — replay
@@ -1252,7 +1303,7 @@ $("start").onclick=async()=>{
     // territory warns to pin. Never silently either way.
     setTimeout(()=>expoGuard(track), 1500);
   }
-  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; runStamp=Date.now(); armedCue=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   if(SCAN_ON) calStart(performance.now());
