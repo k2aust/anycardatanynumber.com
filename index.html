@@ -3931,6 +3931,7 @@ function lkCribSectionsBuild(){
     // done/error: clear the old capture AND start the new one in one press —
     // the corner tap needs two, but here the button says "New deal".
     if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
+    if (!live && lkDealPrefix()) lkDealDropStack();   // the button says "New deal" exactly when there is a partial to destroy
     lkDealToggle();
     // paint LAST: cleanup/toggle repaint the button, and this must survive
     // until the next real state event lands.
@@ -3950,6 +3951,7 @@ function lkCribSectionsBuild(){
     // removes the capture frame outright — the bench never gets db-stop, so
     // nothing is analysed or saved — then a fresh capture starts immediately.
     lkDealCleanup();
+    if (lkDealPrefix()) lkDealDropStack();   // one label, one meaning: New deal always starts from nothing
     lkDealToggle();
     const b = $("lkCribCamBtn");
     b.textContent = "starting…"; b.classList.add("busy");
@@ -4315,6 +4317,25 @@ function lkDealComposeCont(seq){
   const missing = RTN_ALL48.filter(c => !seen.has(c));
   return { stack48: [...missing, ...nonAce.slice().reverse()], missing,
            stack52: all.length === 52 ? all.slice().reverse() : null, read: nonAce.length };
+}
+/* "New deal" DESTROYS the partial (Kevin's clarification 2026-08-29): the whole
+   point of the pair is that one of them starts from nothing. Starting a fresh
+   capture was not enough on its own — a fresh capture that ends up short parks
+   as a stop-deal segment and loads no stack, so the app would have quietly gone
+   on performing off the very partial the new deal was meant to replace. */
+function lkDealDropStack(){
+  rtnReset();
+  lkDealSeqSave(null);
+  delete RD_SCHEMES.custom;
+  rdExcluded = new Set();
+  let back = "highlow";
+  try { const v = localStorage.getItem("rdScheme"); if (RD_BUILTIN_SCHEMES.includes(v)) back = v; } catch(e){}
+  try { localStorage.removeItem("rdCustomStack"); } catch(e){}
+  rdSetScheme(back);                                  // same path the settings picker uses
+  lkDealBadge = null; lkDealLast = null; lkCamCard = null;
+  // hide Continue NOW: the panel only repaints on the next state event, and
+  // until then it would still be offering to extend a stack that is gone.
+  $("lkCribCam").classList.remove("cont");
 }
 let lkDealCont = null;   // the dealt-order prefix this capture extends (null = fresh deal)
 function lkDealToggle(cont){
