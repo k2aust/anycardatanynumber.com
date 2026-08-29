@@ -382,6 +382,13 @@
     font: 600 14px ui-monospace, monospace; color: #e8e6e1; }
   #lkCribStack .stk b { font-weight: 500; font-size: 10px; color: #6b727c; min-width: 15px; text-align: right; }
   #lkCribStack .stkh { font: 600 11px ui-monospace, monospace; color: #7d8590; margin-bottom: 5px; }
+  /* Partial capture (2026-08-29): colour carries STACK STATE, not suit —
+     green = the reader placed it, red = never read, position assumed. Suits
+     are letters here for exactly that reason. */
+  #lkCribStack .stkh.un { color: #e05d5d; margin-top: 9px; }
+  #lkCribStack .stkh.kn { color: #7fa66a; margin-top: 9px; }
+  #lkCribStack .stk.un .it { color: #e05d5d; }
+  #lkCribStack .stk.kn .it { color: #7fa66a; }
   #lkCribStack .none { font: 600 12px ui-monospace, monospace; color: #7d8590; text-align: center; padding: 8px 0; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
@@ -3826,6 +3833,7 @@ function lkCribPeekShow() {
   lkCribPadBuild();
   lkCribSectionsBuild();
   lkCribCamUpdate();
+  lkCribStackUpdate();   // was only refreshed by its own toggle, so an opened crib could show a stale stack
   $("lkCrib").classList.add("show");
   requestAnimationFrame(lkCribFit);   // after the overlay lays out
 }
@@ -3918,15 +3926,67 @@ function lkCribSectionsBuild(){
   set("pad", pad === "1"); set("cam", cam === "1"); set("stk", stk === "1");
   bar.dataset.built = "1";
 }
-// The stack the engine is actually using right now, position by position.
+/* ---- The stack the engine is actually using right now, position by position.
+   Suits are LETTERS here (Kevin 2026-08-29), not pips: in this view colour
+   means stack state (green = placed, red = unplaced), so the suit must not be
+   colouring anything red as well.
+
+   PARTIAL STACKS. A short or lossy capture is one stack with two very
+   different halves, and flattening them into one numbered list lies about the
+   second one:
+     - the cards the reader placed — exact relative order, sitting at the FACE;
+     - the cards it never saw — no order at all, ASSUMED on top.
+   So they render as what they are: the known run numbered in green at its real
+   positions, the unknowns as an unordered red set. Which half is short depends
+   on how far the deal got (Kevin's 26-card crossover), and the layout reads
+   correctly either way — a 40-card capture shows 8 red cards to cull, a
+   12-card capture shows 12 green cards in order. */
+function lkStkPartial(st){
+  // Deal-capture convention: unread cards are flagged AND assumed on top, so
+  // they are exactly the leading block. A live read also flags cards, but for
+  // uncertain IDENTITY at a known position — those are scattered through the
+  // chain and must keep rendering normally.
+  if (!rdExcluded.size) return 0;
+  const F = st.findIndex(c => !rdExcluded.has(c));
+  if (F <= 0) return 0;
+  return (rdExcluded.size === F && st.slice(0, F).every(c => rdExcluded.has(c))) ? F : 0;
+}
+// A capture too short to load (parked as stop-deal segment 1) still describes a
+// partial stack — pile picked up as-is with the remainder dropped on top, so
+// the known run is the dealt order REVERSED, at the face.
+function lkStkParked(){
+  if (rtnSegs.length !== 1 || !rtnSegs[0].length) return null;
+  const known = rtnSegs[0].slice().reverse();
+  const seen = new Set(known);
+  return { unknown: RTN_ALL48.filter(c => !seen.has(c)), known, parked: true };
+}
+function lkStkGrid(cards, cls, startPos){
+  return `<div class="stk ${cls}">` + cards.map((c, i) =>
+    `<span class="it">${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
+}
 function lkCribStackUpdate(){
   const el = $("lkCribStack"); if (!el || $("lkCrib").classList.contains("nostk")) return;
   const full = fullStackForSettings, deal = stackForSettings;
   const st = (full && full.length) ? full : (deal || []);
-  if (!st.length){ el.innerHTML = `<div class="none">no stack loaded — capture a deal</div>`; return; }
-  el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards</div>`
-    + `<div class="stk">` + st.map((c, i) =>
-        `<span class="it"><b>${i + 1}</b>${prettyHTML(c)}</span>`).join("") + `</div>`;
+  const pk = lkStkParked();
+  if (!st.length && !pk){ el.innerHTML = `<div class="none">no stack loaded — capture a deal</div>`; return; }
+  const F = pk ? 0 : lkStkPartial(st);
+  if (!pk && !F){                                    // whole stack, every position known
+    el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards</div>`
+      + lkStkGrid(st, "", 1);
+    return;
+  }
+  const unknown = pk ? pk.unknown : st.slice(0, F);
+  const known   = pk ? pk.known   : st.slice(F);
+  const n = unknown.length + known.length;
+  el.innerHTML =
+      `<div class="stkh">partial stack &middot; ${known.length} of ${n} read`
+    + (pk ? ` &middot; not loaded (capture parked)` : ``) + `</div>`
+    + `<div class="stkh un">${unknown.length} never read &mdash; assumed on top, no order`
+    + (known.length >= 26 ? ` &middot; cull these to the top` : ``) + `</div>`
+    + lkStkGrid(unknown, "un", 0)
+    + `<div class="stkh kn">${known.length} read &mdash; on the face, positions ${unknown.length + 1}&ndash;${n}</div>`
+    + lkStkGrid(known, "kn", unknown.length + 1);
 }
 function lkCribCamUpdate(){
   const read = $("lkCribCamRead"); if (!read) return;
