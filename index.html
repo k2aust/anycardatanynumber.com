@@ -3990,15 +3990,22 @@ window.addEventListener("resize", () => {
    Tap again: clear + re-arm (or stop, if still reading). */
 let lkCamStream = null, lkCamTimer = null, lkCamVideoEl = null, lkCamSig = null,
     lkCamVotes = new Map(), lkCamInflight = 0, lkCamCard = null, lkCamDot = null,
-    lkCamCap = null, lkCamGrabbing = false, lkCamNoFrame = 0, lkCamSent = 0;
+    lkCamCap = null, lkCamGrabbing = false, lkCamNoFrame = 0, lkCamSent = 0, lkCamDotT = null;
 const LK_CAM_SUIT = { S: "Sunny", H: "Hazy", D: "Drizzly", C: "Cloudy" };
 function lkCamDayNum(c){ const v = c.slice(0, -1); return v === "A" ? 1 : v === "J" ? 11 : v === "Q" ? 12 : v === "K" ? 13 : parseInt(v, 10); }
 function lkCamDotEl(){ if (!lkCamDot){ lkCamDot = document.createElement("div");
   lkCamDot.style.cssText = "display:none;position:absolute;left:24px;bottom:11px;width:7px;height:7px;border-radius:50%;background:#27c;opacity:.6;z-index:6;pointer-events:none";
   $("lockScreen").appendChild(lkCamDot); } return lkCamDot; }
+/* The dot IS the status light (Kevin 2026-08-29): BLUE = camera coming up /
+   reading, RED = stopping + saving (or an error), dark = nothing running. */
 function lkCamDotSet(state){ const d = lkCamDotEl();
+  if (lkCamDotT){ clearTimeout(lkCamDotT); lkCamDotT = null; }
   if (state === "off"){ d.style.display = "none"; return; }
-  d.style.display = "block"; d.style.background = state === "err" ? "#c33" : "#27c"; }
+  d.style.display = "block";
+  d.style.background = (state === "err" || state === "save") ? "#c33" : "#27c"; }
+// Saving finishes fast; hold the red long enough to actually be seen, then go dark.
+function lkCamDotDone(){ lkCamDotSet("save");
+  lkCamDotT = setTimeout(() => { lkCamDotT = null; if (lkCamDot) lkCamDot.style.display = "none"; }, 1600); }
 function lkCamVideo(){ if (!lkCamVideoEl){ lkCamVideoEl = document.createElement("video");
   lkCamVideoEl.muted = true; lkCamVideoEl.playsInline = true; lkCamVideoEl.setAttribute("playsinline", "");
   lkCamVideoEl.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:1";
@@ -4141,7 +4148,11 @@ function lkPeekClear(){ lkPeekOn = false; }
 // capture struck+dimmed. Fed by the embed's tick (d.seen). In ACAAN captures
 // the aces are held out of the deck, so they simply stay un-struck.
 const LK_REMAIN_RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+// Kevin 2026-08-29: the lockscreen shows NOTHING but the dot while the camera
+// runs — the 52-card grid is a tell. Add ?remain=1 to bring it back for bench work.
+const LK_SHOW_REMAIN = new URLSearchParams(location.search).has("remain");
 function lkRemainRender(seenArr){
+  if (!LK_SHOW_REMAIN) return;                       // off by default (Kevin 2026-08-29)
   const seen = new Set(seenArr || []);
   $("lkRemain").innerHTML = ["H","C","D","S"].map(su =>
     SUIT_SYM[su] + " " + LK_REMAIN_RANKS.map(r => {
@@ -4160,6 +4171,7 @@ function lkDealCleanup(){
 }
 function lkDealToggle(){
   if (lkDealState === "starting" || lkDealState === "reading"){
+    lkCamDotSet("save");   // red the moment Stop is pressed — the drain takes seconds
     try{ lkDealFr.contentWindow.postMessage("db-stop", location.origin); }catch(e){ lkDealCleanup(); }
     return;
   }
@@ -4309,7 +4321,7 @@ window.addEventListener("message", e => {
     lkDealLeft = null; lkCamCard = null;
     lkRenderDate();   // badge is persistent — rendered on the idle weather line until the next capture
     lkCribCamUpdate();
-    lkCamDotSet("off");
+    lkCamDotDone();   // red held for a beat = stopped + saved
     if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }  // camera off the moment we're done
     lkDealState = "done";
   }
