@@ -371,6 +371,10 @@
     border: 1px solid #4a412a; border-radius: 10px; padding: 13px 14px;
     font: 600 15px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
   #lkCribCam.cont #lkCribCamCont { display: block; }
+  #lkCribPeekBtn { width: 100%; background: #14161c; color: #7d8590;
+    border: 1px solid #2b2f3b; border-radius: 10px; padding: 11px 0;
+    font: 600 14px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribPeekBtn.live { color: #7fb3e0; border-color: #2c4a63; background: #121a22; animation: lkPulse 1s ease-in-out infinite; }
   #lkCribAces { display: flex; gap: 4px; }
   #lkCribAces button { flex: 1 1 0; background: #14161c; color: #6b727c;
     border: 1px solid #2b2f3b; border-radius: 8px; padding: 6px 0;
@@ -401,7 +405,7 @@
      are letters here for exactly that reason. */
   #lkCribStack .stkh.un { color: #e05d5d; margin-top: 9px; }
   #lkCribStack .stkh.kn { color: #7fa66a; margin-top: 9px; }
-  #lkCribStack .stk.un .it { color: #e05d5d; }
+  #lkCribStack .stk.un .it, #lkCribStack .stk .it.un { color: #e05d5d; }
   #lkCribStack .stk.kn .it { color: #7fa66a; }
   #lkCribStack .none { font: 600 12px ui-monospace, monospace; color: #7d8590; text-align: center; padding: 8px 0; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
@@ -581,6 +585,7 @@
           <button id="lkCribCamAbort">↻ New deal</button>
           <button id="lkCribCamCont">+ Continue</button>
         </div>
+        <button id="lkCribPeekBtn">&#9673; Bottom peek &mdash; cut to the card shown</button>
         <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
         <div id="lkCribCamBadge"></div>
         <div id="lkCribCamMiss"></div>
@@ -3939,6 +3944,7 @@ function lkCribSectionsBuild(){
     b.textContent = live ? "saving…" : "starting…";
     b.classList.add("busy");
   };
+  $("lkCribPeekBtn").onclick = lkPeekToggle;
   // Continue: same start path, but the capture extends the partial stack.
   $("lkCribCamCont").onclick = () => {
     if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
@@ -4001,7 +4007,7 @@ function lkStkParked(){
 }
 function lkStkGrid(cards, cls, startPos){
   return `<div class="stk ${cls}">` + cards.map((c, i) =>
-    `<span class="it">${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
+    `<span class="it${cls ? "" : (rdExcluded.has(c) ? " un" : "")}">${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
 }
 function lkCribStackUpdate(){
   const el = $("lkCribStack"); if (!el) return;
@@ -4010,9 +4016,16 @@ function lkCribStackUpdate(){
   const pk = lkStkParked();
   if (!st.length && !pk){ el.innerHTML = `<div class="none">no stack loaded — capture a deal</div>`; return; }
   const F = pk ? 0 : lkStkPartial(st);
-  if (!pk && !F){                                    // whole stack, every position known
-    el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards</div>`
-      + lkStkGrid(st, "", 1);
+  if (!pk && !F){
+    // Either every position is known, or the unknowns are no longer the leading
+    // block — which is what a BOTTOM PEEK leaves behind. The cut is still exact
+    // for them: they were contiguous before it and a rotation keeps them
+    // contiguous, so their positions hold and only their order among themselves
+    // is guesswork. Numbered grid, unknowns still red.
+    const n = st.filter(c => rdExcluded.has(c)).length;
+    el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards`
+      + (n ? ` &middot; <span style="color:#e05d5d">${n} never read</span> (block position exact, order inside it is not)` : ``)
+      + `</div>` + lkStkGrid(st, "", 1);
     return;
   }
   const unknown = pk ? pk.unknown : st.slice(0, F);
@@ -4030,9 +4043,25 @@ function lkCribStackUpdate(){
 function lkCribCamUpdate(){
   const read = $("lkCribCamRead"); if (!read) return;
   const live = lkDealState === "starting" || lkDealState === "reading";
+  const peeking = lkPeekMode === "looking";
+  const pb = $("lkCribPeekBtn");
+  if (pb){
+    pb.textContent = peeking ? "■ Stop peek — show the camera a card"
+                             : "◉ Bottom peek — cut to the card shown";
+    pb.classList.toggle("live", peeking);
+    pb.disabled = live;
+    pb.style.opacity = live ? ".4" : "";
+  }
+  // A finished peek owns the readout: bottom card on the left, top card where
+  // the cards-left count normally sits — the two facts the peek exists to give.
+  if (lkPeekMode === "done" && !live){
+    read.innerHTML = `<span class="cc">${lkCardCode(lkPeekBottom)}</span>`
+      + `<span class="cl">top ${lkPeekTop && !rdExcluded.has(lkPeekTop) ? lkCardCode(lkPeekTop) : "?"}</span>`;
+  } else {
   const card = lkCamCard ? lkCardCode(lkCamCard) : "—";
-  const left = (typeof lkDealLeft === "number") ? lkDealLeft + " left" : (live ? "starting…" : "—");
+  const left = (typeof lkDealLeft === "number") ? lkDealLeft + " left" : (live ? "starting…" : peeking ? "looking…" : "—");
   read.innerHTML = `<span class="cc">${card}</span><span class="cl">${left}</span>`;
+  }
   const b = $("lkCribCamBtn");
   b.classList.remove("busy");        // a real state event ends the busy paint
   // The button IS the save: nothing is written until the capture stops, so
@@ -4048,9 +4077,11 @@ function lkCribCamUpdate(){
   const badge = $("lkCribCamBadge");
   badge.classList.remove("ok", "bad");
   if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
+  else if (peeking){ badge.textContent = "hold the bottom card over the camera"; }
+  else if (lkPeekMsg){ badge.innerHTML = lkPeekMsg.msg; badge.classList.add(lkPeekMsg.ok ? "ok" : "bad"); }
   else if (lkDealLast){ badge.innerHTML = lkDealLast.msg; badge.classList.add(lkDealLast.ok ? "ok" : "bad"); }
   else { badge.textContent = "no capture yet"; }
-  $("lkCribCamMiss").innerHTML = (!live && lkDealLast && lkDealLast.list && lkDealLast.list.length)
+  $("lkCribCamMiss").innerHTML = (!live && !lkPeekMsg && lkDealLast && lkDealLast.list && lkDealLast.list.length)
     ? lkDealLast.list.map(prettyHTML).join("&nbsp; ") : "";
   lkCribStackUpdate();       // a capture replaces the stack — keep the view honest
 }
@@ -4272,6 +4303,7 @@ function lkDealCleanup(){
   if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // iframe removal kills the camera + OS dot
   lkPeekClear(); lkRemainHide();
   lkDealState = "idle"; lkDealLeft = null; lkCamCard = null; lkDealCont = null;
+  if (lkPeekMode === "looking") lkPeekMode = "off";
   lkCamDotSet("off"); lkRenderDate(); lkCribCamUpdate();
 }
 /* ---- Continue: deal ON TOP of the partial stack (Kevin 2026-08-29) --------
@@ -4338,14 +4370,10 @@ function lkDealDropStack(){
   $("lkCribCam").classList.remove("cont");
 }
 let lkDealCont = null;   // the dealt-order prefix this capture extends (null = fresh deal)
-function lkDealToggle(cont){
-  cont = cont === true;   // the corner tap passes its MouseEvent — never a continue
-  if (lkDealState === "starting" || lkDealState === "reading"){
-    lkCamDotSet("save");   // red the moment Stop is pressed — the drain takes seconds
-    try{ lkDealFr.contentWindow.postMessage("db-stop", location.origin); }catch(e){ lkDealCleanup(); }
-    return;
-  }
-  if (lkDealState !== "idle"){ lkDealCleanup(); return; }                 // done/error -> clear + re-arm
+// The embedded reader, headless in an invisible same-origin iframe. Both the
+// deal capture and the bottom peek run through here — one camera path, one set
+// of Android frame-delivery workarounds.
+function lkDealMakeFrame(deck){
   const f = document.createElement("iframe");
   f.id = "lkDealFrame"; f.setAttribute("allow", "camera");
   f.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none;";
@@ -4353,6 +4381,98 @@ function lkDealToggle(cont){
   // recorded clip instead of the camera — the full lockscreen flow (ticks,
   // peek latch, done badge, partial save) without a deck in hand.
   const dr = new URLSearchParams(location.search).get("dealreplay");
+  f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
+  $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
+  return f;
+}
+/* ---- BOTTOM PEEK (Kevin 2026-08-29) --------------------------------------
+   Show the camera the bottom card of the deck; the app cuts the stack so that
+   card IS the bottom, and names the card now on top.
+
+   This is the re-sync primitive, not just an effect. A captured stack dies the
+   moment anyone cuts the deck — one glimpse and it is alive again, because a
+   cut is exactly a rotation of a cyclic stack. Everything downstream (ACAAN,
+   poker, lie detector) reads position 1 = top, so the "cut" really is a
+   rotation of the stored array.
+
+   It reuses the deal reader wholesale: the embed already reports every card it
+   commits via its tick event, so a peek is just "start, take the first card,
+   stop". The frame is REMOVED rather than sent db-stop — db-stop would run the
+   bench's analysis and overwrite the very stack we are re-syncing. */
+let lkPeekMode = "off";        // off | looking | done
+let lkPeekBottom = null, lkPeekTop = null, lkPeekMsg = null;
+function lkPeekStackArrays(){
+  const c = RD_SCHEMES[rdScheme];
+  return { s48: (c && c.stack) || [], s52: (c && c.full && c.full.length === 52) ? c.full : null };
+}
+// Cut `card` to the bottom = rotate every view of the stack so it sits last.
+// Both views rotate independently: they are the same deck, but the 48 has the
+// aces removed, so a shared index would not line up.
+function lkPeekCut(card){
+  const { s48, s52 } = lkPeekStackArrays();
+  const rot = (a, i) => a.slice(i + 1).concat(a.slice(0, i + 1));
+  // Rotate the 52 and DERIVE the 48 from it. Rotating the two independently
+  // breaks the moment the glimpsed card is an ace: it has no index in the
+  // 48-card view, so the two views would disagree about where the top is.
+  if (s52){
+    const i = s52.indexOf(card); if (i < 0) return false;
+    const r52 = rot(s52, i);
+    rdUseCustomStack(r52.filter(c => !/^A/.test(c)), [...rdExcluded], r52);
+    return true;
+  }
+  const i = s48.indexOf(card); if (i < 0) return false;
+  rdUseCustomStack(rot(s48, i), [...rdExcluded], null);
+  return true;
+}
+function lkPeekResolve(card){
+  const { s48, s52 } = lkPeekStackArrays();
+  const src = s52 || s48;
+  const i = src.indexOf(card);
+  if (i < 0) return null;                                  // not in this stack — keep looking
+  return { bottom: card, top: src[(i + 1) % src.length] };
+}
+function lkPeekStop(){
+  if (lkDealFr){ try{ lkDealFr.remove(); }catch(e){} lkDealFr = null; }   // remove, never db-stop
+  lkPeekMode = lkPeekMode === "looking" ? "off" : lkPeekMode;
+  lkCamDotSet("off");
+}
+function lkPeekTick(card){
+  if (!card || lkPeekMode !== "looking") return;
+  const r = lkPeekResolve(card);
+  if (!r) return;                                          // a card that is not in the stack proves nothing — keep looking
+  lkPeekBottom = r.bottom; lkPeekTop = r.top;
+  const cut = lkPeekCut(card);
+  // The top card is only nameable when it is a card the reader actually placed:
+  // in a partial stack the unknowns are ASSUMED on top, so a glimpse landing at
+  // that seam can identify the bottom card and still know nothing about the top.
+  const blind = rdExcluded.has(r.top);
+  lkPeekMsg = !cut ? { ok: false, msg: "PEEK FAILED — " + r.bottom + " is not in this stack", list: [] }
+    : blind ? { ok: false, msg: "CUT to " + r.bottom + " — but the card on top was never read", list: [] }
+    : { ok: true, msg: "CUT to " + r.bottom + " &middot; TOP CARD IS " + r.top, list: [] };
+  lkPeekMode = "done";
+  lkPeekStop();
+  lkCamCard = blind ? null : r.top;    // covert readout: day = value, weather = suit, same as the old cut-glimpse
+  lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate();
+}
+function lkPeekToggle(){
+  if (lkPeekMode === "looking"){ lkPeekStop(); lkCribCamUpdate(); return; }
+  if (lkDealState === "starting" || lkDealState === "reading") return;    // a capture owns the camera
+  lkDealCleanup();
+  lkPeekBottom = lkPeekTop = lkPeekMsg = null;
+  lkPeekMode = "looking";
+  lkDealFr = lkDealMakeFrame(lkDealAces ? 52 : 48);
+  lkCamDotSet("read");
+  lkCribCamUpdate();
+}
+function lkDealToggle(cont){
+  cont = cont === true;   // the corner tap passes its MouseEvent — never a continue
+  if (lkDealState === "starting" || lkDealState === "reading"){
+    lkCamDotSet("save");   // red the moment Stop is pressed — the drain takes seconds
+    try{ lkDealFr.contentWindow.postMessage("db-stop", location.origin); }catch(e){ lkDealCleanup(); }
+    return;
+  }
+  if (lkPeekMode === "looking") lkPeekStop();   // one camera: a capture takes it back off the peek
+  if (lkDealState !== "idle"){ lkDealCleanup(); return; }                 // done/error -> clear + re-arm
   // deck: the 4 aces are out before the routine starts (held out as the ACAAN
   // packets), so a fresh capture counts down from 48. Segment 2 is the shuffled
   // packet rather than a deck — counting down from its own size makes the
@@ -4362,11 +4482,11 @@ function lkDealToggle(cont){
   lkDealCont = cont ? lkDealPrefix() : null;
   const deck = lkDealCont ? Math.max(0, full - lkDealCont.length)
              : rtnSegs.length === 1 ? full - rtnSegs[0].length : full;
-  f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
-  $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
+  const f = lkDealMakeFrame(deck);
   lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
   lkDealBadge = null;   // a new capture is the only thing that clears the verdict
   lkDealLast = null;
+  lkPeekMode = "off"; lkPeekMsg = null;
   lkCamDotSet("read");
   lkRemainRender([]);   // full grid up from the first frame; ticks strike cards as they commit
 }
@@ -4422,6 +4542,11 @@ window.addEventListener("message", e => {
   if (e.origin !== location.origin || !e.data || !e.data.dbEmbed || !lkDealFr) return;
   const d = e.data;
   if (d.ev === "ready"){ try{ lkDealFr.contentWindow.postMessage("db-start", location.origin); }catch(err){} }
+  else if (lkPeekMode === "looking"){                      // peek owns the camera: one card and we're out
+    if (d.ev === "tick") lkPeekTick(d.last || null);
+    else if (d.ev === "error"){ lkPeekMsg = { ok: false, msg: "PEEK FAILED — camera error", list: [] };
+                                lkPeekMode = "off"; lkPeekStop(); lkCamDotSet("err"); lkCribCamUpdate(); }
+  }
   else if (d.ev === "armed"){
     // trigger warmup complete — the weather flipping to the deck count IS the
     // covert "deal now" signal; cards dealt before it can never be captured.
@@ -5154,6 +5279,10 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
   // driven without a camera, which is the only way to test the 3s reveal)
   lkFeed: (card, left) => lkPeekFeed(card, left),
   lkPeekState: () => ({ on: lkPeekOn, card: lkCamCard, left: lkDealLeft, code: lkCamCard ? lkCardCode(lkCamCard) : null }),
+  // bottom peek: drive a glimpse without a camera (the only way to test the cut)
+  lkPeekTick, lkPeekToggle, lkPeekArm: () => { lkPeekMode = "looking"; },
+  lkPeekResult: () => ({ mode: lkPeekMode, bottom: lkPeekBottom, top: lkPeekTop, msg: lkPeekMsg,
+                         stack: RD_SCHEMES[rdScheme].stack, full: RD_SCHEMES[rdScheme].full }),
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
   state: () => ({ scheme: rdScheme, half: RD_HALF, n: RD_L0, excluded: [...rdExcluded] }) };   // debug/test bridge
 
