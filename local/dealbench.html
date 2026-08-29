@@ -1550,8 +1550,49 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
     const com=finalCommits.filter(c=>c.card).length;
     log(`assignment: ${eventVecs.length} events -> ${com} committed `+
         `(${(performance.now()-t0).toFixed(0)}ms)`);
+    // STOP-TIME RESCUE (2026-08-29, the road to 52/0): the assignment gives
+    // every unknown event a globally-unique raw card guess; the confidence
+    // gate nulls the weak ones and the save then reports those cards missing.
+    // But at Stop we KNOW which cards are missing — so promote a raw guess to
+    // a commit exactly when (a) that card is missing, (b) the event's own
+    // evidence for it clears RES_TH, and (c) it beats every other missing
+    // card in that event by RES_MG. A wrong placement corrupts the stack
+    // silently, so the gates err toward leaving a gap: tuned on NDO replays
+    // where truth is known (score's `wrong` must stay 0).
+    const nres=rescuePromote(finalCommits);
+    if(nres) log(`rescue: ${nres} missing card(s) recovered from assignment evidence`);
   }
   render(); scoreFinal(); performSummary(); renderUgal(); };
+// Rescue from confident FRAME SIGHTINGS, not assignment guesses: identity
+// alone is not enough — a rescued card placed at the wrong event shifts the
+// order and corrupts the stack (first attempt put the right 2D one beat
+// early). frameReads records every >=0.6 per-frame sighting with its time,
+// so a missing card is rescued only if it was confidently SEEN, and it is
+// placed at the median of its own sightings — where it actually appeared.
+const RES_CONF=0.8;       // min sighting confidence
+const RES_SOLO=0.95;      // a single sighting must be near-certain; 2+ may be 0.8
+function rescuePromote(cs){
+  const confident=new Set(cs.filter(c=>c.card).map(c=>c.card));
+  const expect=DECK_N===48 ? CODES.filter(c=>!/^A/.test(c)) : CODES;
+  const missing=expect.filter(c=>!confident.has(c));
+  if(!missing.length) return 0;
+  let n=0;
+  window.__rescued=[];
+  for(const m of missing){
+    const cls=CODES.indexOf(m);
+    const sight=frameReads.filter(r=>r.cls===cls&&r.conf>=RES_CONF);
+    if(!sight.length) continue;
+    const top=Math.max(...sight.map(r=>r.conf));
+    if(sight.length<2&&top<RES_SOLO) continue;
+    const ts=sight.map(r=>r.t).sort((a,b)=>a-b);
+    const t=ts[ts.length>>1];
+    cs.push({t, card:m, conf:+top.toFixed(2), n:sight.length, rescued:true});
+    n++;
+    window.__rescued.push({t, card:m, p:+top.toFixed(2), sightings:sight.length});
+  }
+  if(n) cs.sort((a,b)=>a.t-b.t);
+  return n;
+}
 // The miss gallery. Bench: shows under the score. Perform summary: the node
 // is moved into #pwrap so it paints over the black skin.
 function renderUgal(){
