@@ -375,6 +375,26 @@
     border: 1px solid #2b2f3b; border-radius: 10px; padding: 11px 0;
     font: 600 14px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
   #lkCribPeekBtn.live { color: #7fb3e0; border-color: #2c4a63; background: #121a22; animation: lkPulse 1s ease-in-out infinite; }
+  #lkCribPokerBtn { width: 100%; background: #14161c; color: #7d8590;
+    border: 1px solid #2b2f3b; border-radius: 10px; padding: 11px 0;
+    font: 600 14px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribPokerBtn.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
+  #lkCribPokerRow { display: none; gap: 5px; }
+  #lkCribCam.poker #lkCribPokerRow { display: flex; }
+  #lkCribPokerRow button { flex: 1 1 0; background: #14161c; color: #e8e6e1;
+    border: 1px solid #2b2f3b; border-radius: 9px; padding: 12px 0;
+    font: 700 17px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribPokerRow button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
+  #lkCribPokerOut { font: 600 13px/1.5 ui-monospace, monospace; color: #7d8590; text-align: center; }
+  #lkCribPokerOut .pkwin { color: var(--gold); font-size: 15px; letter-spacing: .4px; }
+  #lkCribPokerOut .pkcards { color: #e8e6e1; font-size: 17px; letter-spacing: 1px; margin: 1px 0 3px; }
+  #lkCribPokerOut .pkall { display: flex; flex-direction: column; gap: 1px; font-size: 12px; color: #6b727c; }
+  #lkCribPokerOut .pkall .w { color: #7fa66a; }
+  #lkCribPokerOut .pkbad { color: #e05d5d; }
+  #lkCribPokerOut .pkok { color: #7fa66a; }
+  #lkCribPokerOut button { width: 100%; margin-top: 5px; background: #14161c; color: var(--gold);
+    border: 1px solid #4a412a; border-radius: 9px; padding: 9px 0;
+    font: 600 13px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
   #lkCribAces { display: flex; gap: 4px; }
   #lkCribAces button { flex: 1 1 0; background: #14161c; color: #6b727c;
     border: 1px solid #2b2f3b; border-radius: 8px; padding: 6px 0;
@@ -586,6 +606,11 @@
           <button id="lkCribCamCont">+ Continue</button>
         </div>
         <button id="lkCribPeekBtn">&#9673; Bottom peek &mdash; cut to the card shown</button>
+        <button id="lkCribPokerBtn">&#9824; Poker deal</button>
+        <div id="lkCribPokerRow">
+          <button data-h="2">2</button><button data-h="3">3</button><button data-h="4">4</button><button data-h="5">5</button><button data-h="6">6</button>
+        </div>
+        <div id="lkCribPokerOut"></div>
         <div id="lkCribCamRead"><span class="cc">&mdash;</span><span class="cl">&mdash;</span></div>
         <div id="lkCribCamBadge"></div>
         <div id="lkCribCamMiss"></div>
@@ -3945,6 +3970,12 @@ function lkCribSectionsBuild(){
     b.classList.add("busy");
   };
   $("lkCribPeekBtn").onclick = lkPeekToggle;
+  $("lkCribPokerBtn").onclick = lkPokerToggle;
+  $("lkCribPokerRow").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (b) lkPokerPick(+b.dataset.h); });
+  // the commit button is re-rendered on every update, so listen on the container
+  $("lkCribPokerOut").addEventListener("click", e => {
+    if (e.target.closest("[data-pkapply]")) lkPokerCommit(); });
   // Continue: same start path, but the capture extends the partial stack.
   $("lkCribCamCont").onclick = () => {
     if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
@@ -4052,6 +4083,11 @@ function lkCribCamUpdate(){
     pb.disabled = live;
     pb.style.opacity = live ? ".4" : "";
   }
+  const pkOn = lkPokerOn();
+  $("lkCribPokerBtn").classList.toggle("on", pkOn);
+  $("lkCribCam").classList.toggle("poker", pkOn);
+  [...$("lkCribPokerRow").children].forEach(x => x.classList.toggle("on", +x.dataset.h === lkPokerH));
+  $("lkCribPokerOut").innerHTML = lkPokerOutHTML();
   // A finished peek owns the readout: bottom card on the left, top card where
   // the cards-left count normally sits — the two facts the peek exists to give.
   if (lkPeekMode === "done" && !live){
@@ -4384,6 +4420,55 @@ function lkDealMakeFrame(deck){
   f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
   $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
   return f;
+}
+/* ---- Poker deal in the camera panel (Kevin 2026-08-29) --------------------
+   The covert version already exists on the hidden "K" key: day-of-month = the
+   winning hand, "year" = its five value characters, weather word = the suit on
+   a flush. That is the performance surface. This is the SETUP surface — his own
+   screen, so it says everything in the open: which hand wins, what it holds,
+   and what every other hand holds, so he can see the deal before he makes it.
+
+   It drives the SAME state (lkPokerH / lkPokerRes / lkCribPhase), so arming it
+   here also arms the covert readout — set it up in the crib, then perform off
+   the lock screen. */
+const PK_CAT = ["high card","one pair","two pair","three of a kind","straight",
+                "flush","full house","four of a kind","straight flush"];
+// ONE switch, not two: poker mode is lkCribPhase === "poker", which is also
+// what the hidden "K" key and the BT numpad's "*" already toggle. A separate
+// open/closed flag here would let the panel and the lock screen disagree about
+// whether poker is armed.
+function lkPokerOn(){ return lkCribPhase === "poker"; }
+function lkPokerToggle(){
+  const on = !lkPokerOn();
+  lkPokerH = null; lkPokerRes = null;
+  lkCribPhase = on ? "poker" : "num";
+  lkRenderDate(); lkCribCamUpdate();
+}
+function lkPokerPick(H){
+  lkPokerH = H; lkPokerRes = pkCompute(H); lkCribPhase = "poker";
+  lkRenderDate(); lkCribCamUpdate();
+}
+function lkPokerCommit(){
+  if (!lkPokerRes || !lkPokerRes.ok || lkPokerRes.applied) return;
+  if (!pkApply(lkPokerH)) return;
+  lkPokerRes.applied = true;                 // the gather rewrote the stack: never recompute off the new order
+  lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate();
+}
+function lkPokerOutHTML(){
+  if (!lkPokerOn()) return "";
+  const st = pkStack52();
+  if (!st) return `<div class="pkbad">needs a full 52-card capture &mdash; this stack has no ace positions</div>`;
+  if (!lkPokerH) return `<div>how many hands?</div>`;
+  if (lkPokerRes && lkPokerRes.applied)
+    return `<div class="pkok">hand ${lkPokerRes.win} won &middot; gather committed, stack updated</div>`;
+  // Same ranking path the covert readout uses — pkDeal/pkEval/pkCmp, not a copy.
+  const hands = pkDeal(st, lkPokerH), evs = hands.map(pkEval);
+  let w = 0; for (let i = 1; i < evs.length; i++) if (pkCmp(evs[i], evs[w]) > 0) w = i;
+  return `<div class="pkwin">HAND ${w + 1} WINS &middot; ${PK_CAT[evs[w].key[0]]}</div>`
+    + `<div class="pkcards">${hands[w].join(" ")}</div>`
+    + `<div class="pkall">` + hands.map((h, i) =>
+        `<span class="${i === w ? "w" : ""}">${i + 1}&nbsp; ${h.join(" ")}</span>`).join("") + `</div>`
+    + `<button data-pkapply="1">&#10003; Commit gather &mdash; deal, gather, then tap</button>`;
 }
 /* ---- BOTTOM PEEK (Kevin 2026-08-29) --------------------------------------
    Show the camera the bottom card of the deck; the app cuts the stack so that
