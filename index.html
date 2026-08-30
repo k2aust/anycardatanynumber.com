@@ -339,12 +339,14 @@
      shrink, so only the stack view gets it. */
   #lkCrib.stkview #lkCribMain, #lkCrib.stkview #lkCribTop { min-height: 0; }
   #lkCrib.nobody #lkCribTop { display: none; }
-  /* the stack/crib switch belongs to the section it switches, not to the bar */
-  #lkCribViewTog { display: flex; gap: 4px; flex: 0 0 auto; margin-bottom: 5px; }
-  #lkCribViewTog button { flex: 1 1 0; background: #14161c; color: #6b727c;
-    border: 1px solid #2b2f3b; border-radius: 8px; padding: 5px 0;
-    font: 600 11px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
-  #lkCribViewTog button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
+  /* The stack/crib switch belongs to the section it switches, not to the bar.
+     One button, and it is named for what you GET by pressing it — a lone
+     toggle labelled with the view you are already looking at reads as a
+     caption, not a control. */
+  #lkCribViewTog { flex: 0 0 auto; width: 100%; margin-bottom: 5px;
+    background: #14161c; color: #6b727c; border: 1px solid #2b2f3b; border-radius: 8px;
+    padding: 5px 0; font: 600 11px ui-monospace, monospace;
+    -webkit-tap-highlight-color: transparent; }
   /* the bar clears the "Lock screen" pill (top-left, z-76) — without the
      reserved left margin the two overlap when the grid is hidden */
   #lkCribBar { display: flex; gap: 5px; flex: 0 0 auto; margin-bottom: 6px; }
@@ -619,9 +621,7 @@
     </div>
     <div id="lkCribMain">
     <div id="lkCribTop">
-      <div id="lkCribViewTog">
-        <button data-v="stk">stack</button><button data-v="crib">crib</button>
-      </div>
+      <button id="lkCribViewTog">show crib</button>
       <div id="lkCribBody"></div>
       <div id="lkCribStack"></div>
     </div>
@@ -3914,7 +3914,7 @@ function lkCribView(stack, manual){
   if (manual) lkCribStkManual = !!stack;
   $("lkCrib").classList.toggle("stkview", !!stack);
   const tog = $("lkCribViewTog");
-  if (tog) [...tog.children].forEach(b => b.classList.toggle("on", (b.dataset.v === "stk") === !!stack));
+  if (tog) tog.textContent = stack ? "show crib" : "show stack";
   if (stack) lkCribStackUpdate();
   if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
 }
@@ -3988,8 +3988,7 @@ function lkCribSectionsBuild(){
     if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
   };
   $("lkCribTogBody").onclick = () => setBody($("lkCrib").classList.contains("nobody"));
-  $("lkCribViewTog").addEventListener("click", e => {
-    const b = e.target.closest("button"); if (b) lkCribView(b.dataset.v === "stk", true); });
+  $("lkCribViewTog").onclick = () => lkCribView(!$("lkCrib").classList.contains("stkview"), true);
   // Deal WITH or WITHOUT the aces (Kevin 2026-08-28). The ACAAN routine holds
   // the aces out (48), but a plain full-deck capture — and poker mode, which
   // needs ace positions — deals all 52. Only the countdown and the missing
