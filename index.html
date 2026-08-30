@@ -390,6 +390,9 @@
   #lkCribPokerOut .pkcards { color: #e8e6e1; font-size: 17px; letter-spacing: 1px; margin: 1px 0 3px; }
   #lkCribPokerOut .pkall { display: flex; flex-direction: column; gap: 1px; font-size: 12px; color: #6b727c; }
   #lkCribPokerOut .pkall .w { color: #7fa66a; }
+  #lkCribPokerOut .pklive { white-space: pre; font-size: 14px; color: #e8e6e1; letter-spacing: .5px; }
+  #lkCribPokerOut .pklive .nx { color: var(--gold); }
+  #lkCribPokerOut .pklive b { color: var(--gold); font-weight: 700; }
   #lkCribPokerOut .pkbad { color: #e05d5d; }
   #lkCribPokerOut .pkok { color: #7fa66a; }
   #lkCribPokerOut .pkgat { color: #7d8590; font-size: 11px; line-height: 1.4; margin-top: 3px; }
@@ -4096,6 +4099,7 @@ function lkCribCamUpdate(){
   $("lkCribPokerOut").innerHTML = lkPokerOutHTML();
   // A finished peek owns the readout: bottom card on the left, top card where
   // the cards-left count normally sits — the two facts the peek exists to give.
+  read.style.display = lkPokerCap ? "none" : "";   // the hand grid IS the readout during a poker deal
   if (lkPeekMode === "done" && !live){
     read.innerHTML = `<span class="cc">${lkCardCode(lkPeekBottom)}</span>`
       + `<span class="cl">top ${lkPeekTop && !rdExcluded.has(lkPeekTop) ? lkCardCode(lkPeekTop) : "?"}</span>`;
@@ -4118,7 +4122,9 @@ function lkCribCamUpdate(){
   $("lkCribCam").classList.toggle("cont", canCont);
   const badge = $("lkCribCamBadge");
   badge.classList.remove("ok", "bad");
-  if (live){ badge.textContent = "dealing — press Stop + save when the deck is through"; }
+  if (live){ badge.textContent = lkPokerCap
+    ? "dealing — Stop + save once the last hand is down"
+    : "dealing — press Stop + save when the deck is through"; }
   else if (peeking){ badge.textContent = "hold the bottom card over the camera"; }
   else if (lkPeekMsg){ badge.innerHTML = lkPeekMsg.msg; badge.classList.add(lkPeekMsg.ok ? "ok" : "bad"); }
   else if (lkDealLast){ badge.innerHTML = lkDealLast.msg; badge.classList.add(lkDealLast.ok ? "ok" : "bad"); }
@@ -4472,7 +4478,8 @@ function lkPokerPick(H){
   lkPokerH = H; lkPokerRes = null; lkPokerMsg = null; lkCribPhase = "poker";
   if (lkPeekMode === "looking") lkPeekStop();
   lkDealCleanup();
-  lkPokerCap = { H };
+  lkPokerCap = { H }; lkPokerLive = [];
+  lkPokerHands = null; lkPokerWin = -1; lkPokerCat = "";
   lkDealFr = lkDealMakeFrame(5 * H);          // the countdown hits 0 as the last poker card lands
   lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
   lkDealBadge = null; lkDealLast = null;
@@ -4480,6 +4487,7 @@ function lkPokerPick(H){
   lkRenderDate(); lkCribCamUpdate();
 }
 let lkPokerMsg = null, lkPokerHands = null, lkPokerWin = -1, lkPokerCat = "";
+let lkPokerLive = [];   // cards committed so far this poker capture, in dealt order
 function lkPokerCapDone(seg, slots){
   const H = lkPokerCap.H, need = 5 * H;
   lkPokerCap = null;
@@ -4523,8 +4531,22 @@ function lkPokerCapDone(seg, slots){
 function lkPokerRepaint(){ lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate(); }
 function lkPokerOutHTML(){
   if (!lkPokerOn()) return "";
-  if (lkPokerCap) return `<div>dealing ${5 * lkPokerCap.H} cards &mdash; round-robin, `
-    + `${lkPokerCap.H} hands &middot; stop when the last card is down</div>`;
+  if (lkPokerCap){
+    const H = lkPokerCap.H, need = 5 * H, n = lkPokerLive.length;
+    const cell = c => ((c || "·") + "   ").slice(0, 3);
+    const rows = [];
+    for (let i = 0; i < H; i++){
+      const cells = [];
+      for (let r = 0; r < 5; r++){
+        const idx = i + r * H;
+        cells.push(idx === n - 1 ? `<b>${cell(lkPokerLive[idx])}</b>` : cell(lkPokerLive[idx]));
+      }
+      // the row about to receive the next card — a live check that the deal is tracking
+      rows.push(`<span class="${n < need && i === n % H ? "nx" : ""}">${i + 1}&nbsp; ${cells.join(" ")}</span>`);
+    }
+    return `<div class="pkall pklive">${rows.join("")}</div>`
+      + `<div>${n} of ${need} dealt${n < need ? ` &middot; hand ${n % H + 1} next` : ` &middot; stop + save`}</div>`;
+  }
   if (!lkPokerH) return `<div>how many hands? &mdash; picking one starts the deal</div>`;
   if (lkPokerMsg && !lkPokerMsg.ok) return `<div class="pkbad">${lkPokerMsg.msg}</div>`;
   if (!lkPokerHands) return `<div>how many hands? &mdash; picking one starts the deal</div>`;
@@ -4697,6 +4719,15 @@ window.addEventListener("message", e => {
     if (d.ev === "tick") lkPeekTick(d.last || null);
     else if (d.ev === "error"){ lkPeekMsg = { ok: false, msg: "PEEK FAILED — camera error", list: [] };
                                 lkPeekMode = "off"; lkPeekStop(); lkCamDotSet("err"); lkCribCamUpdate(); }
+  }
+  else if (lkPokerCap && (d.ev === "armed" || d.ev === "tick")){
+    // No last-card peek here (Kevin 2026-08-29): in a poker deal the useful
+    // live readout is the HANDS filling up, not the card that just landed.
+    lkDealState = "reading";
+    if (typeof d.left === "number") lkDealLeft = d.left;
+    lkPokerLive = d.seen || [];           // the bench builds this Set in commit order, so it IS the dealt order
+    lkCamCard = null;
+    lkRenderDate(); lkCribCamUpdate();
   }
   else if (d.ev === "armed"){
     // trigger warmup complete — the weather flipping to the deck count IS the
@@ -5453,6 +5484,9 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
   lkPeekTick, lkPeekToggle, lkPeekArm: () => { lkPeekMode = "looking"; },
   // poker capture: drive a finished deal without a camera
   lkPokerArm: H => { lkPokerCap = { H }; lkPokerH = H; lkCribPhase = "poker"; },
+  // arm with a stub frame so real postMessage ticks reach the live-fill branch
+  lkPokerSimArm: H => { lkPokerCap = { H }; lkPokerH = H; lkPokerLive = []; lkCribPhase = "poker";
+                        lkDealFr = document.createElement("iframe"); },
   lkPokerCapDone: seq => lkPokerCapDone(seq, seq.map(c => ({ card: c }))),
   lkPokerState: () => ({ hands: lkPokerHands, win: lkPokerWin, res: lkPokerRes, msg: lkPokerMsg }),
   lkPeekResult: () => ({ mode: lkPeekMode, bottom: lkPeekBottom, top: lkPeekTop, msg: lkPeekMsg,
