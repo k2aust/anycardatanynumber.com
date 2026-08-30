@@ -3015,7 +3015,13 @@ function pkGather(stack52, H){ // the physical cleanup above, as card math: new 
 function pkStack52(){ const f = fullStackForSettings; return f && f.length === 52 ? f : null; }   // custom needs a complete 52-card capture
 function pkCompute(H){
   const s = pkStack52();
-  if (!s) return { ok: false };
+  if (!s) return { ok: false, why: "no52" };
+  // A partial capture now yields a 52-card stack (aces included), and poker
+  // deals off the TOP — which is exactly where the unread block is assumed to
+  // sit. Computing hands from cards the reader never saw would be a confident
+  // guess, so name them instead.
+  const blind = s.slice(0, 5 * H).filter(c => rdExcluded.has(c));
+  if (blind.length) return { ok: false, why: "blind", blind };
   const evs = pkDeal(s, H).map(pkEval);
   let w = 0;
   for (let i=1;i<evs.length;i++) if (pkCmp(evs[i], evs[w]) > 0) w = i;   // an exact tie keeps the earlier hand
@@ -3814,7 +3820,7 @@ function lkRenderDate(t) {
   // stack has no complete 52-card order — poker needs the ace positions).
   const pk = lkCribMode && lkCribPhase === "poker";
   if (pk) dayTxt = lkPokerRes ? (lkPokerRes.ok ? String(lkPokerRes.win) : "!") : "_";
-  const yearTxt = pk ? (lkPokerRes ? (lkPokerRes.ok ? lkPokerRes.year : "no52") : String(t.getFullYear()))
+  const yearTxt = pk ? (lkPokerRes ? (lkPokerRes.ok ? lkPokerRes.year : (lkPokerRes.why === "blind" ? "unrd" : "no52")) : String(t.getFullYear()))
                      : (lkNum ? lkNum.padEnd(2,"_") : String(t.getFullYear()));
   $("lkDate").textContent = `${wd}, ${mo} ${dayTxt}  ${yearTxt}`;
   lkRenderCode(face);
@@ -4378,13 +4384,24 @@ function lkDealPrefix(){
 }
 // dealt order (old ++ new) -> the same shape the bench writes for a partial:
 // unread cards flagged and assumed on top, read cards reversed below them.
-function lkDealComposeCont(seq){
+const LK_ALL52 = (() => { const o = [];
+  for (const su of ["S","H","D","C"]) for (const v of ["A","2","3","4","5","6","7","8","9","10","J","Q","K"]) o.push(v + su);
+  return o; })();
+/* A capture records the deck that was actually dealt (Kevin 2026-08-29): deal
+   52 and the captured stack is 52, aces included. Dropping the aces is the
+   ACAAN VIEW's job — that routine holds them out physically — not the
+   capture's. Getting this wrong cost the read aces their positions on every
+   partial 52-card capture, which is exactly what poker mode needs. */
+function lkDealCompose(seq, aces){
   const seen = new Set(), all = [];
   for (const c of seq) if (!seen.has(c)){ seen.add(c); all.push(c); }   // a card re-read on the overlap keeps its first placement
-  const nonAce = all.filter(c => !/^A/.test(c));
-  const missing = RTN_ALL48.filter(c => !seen.has(c));
-  return { stack48: [...missing, ...nonAce.slice().reverse()], missing,
-           stack52: all.length === 52 ? all.slice().reverse() : null, read: nonAce.length };
+  const universe = aces ? LK_ALL52 : RTN_ALL48;
+  const kept = aces ? all : all.filter(c => !/^A/.test(c));
+  const missing = universe.filter(c => !seen.has(c));
+  const full = [...missing, ...kept.slice().reverse()];   // unread assumed on top, read cards at the face
+  return { full, missing, read: kept.length, n: universe.length,
+           stack48: full.filter(c => !/^A/.test(c)),      // the ACAAN view, derived — never composed separately
+           stack52: aces ? full : null };
 }
 /* "New deal" DESTROYS the partial (Kevin's clarification 2026-08-29): the whole
    point of the pair is that one of them starts from nothing. Starting a fresh
@@ -4459,6 +4476,9 @@ function lkPokerOutHTML(){
   const st = pkStack52();
   if (!st) return `<div class="pkbad">needs a full 52-card capture &mdash; this stack has no ace positions</div>`;
   if (!lkPokerH) return `<div>how many hands?</div>`;
+  if (lkPokerRes && !lkPokerRes.ok && lkPokerRes.why === "blind")
+    return `<div class="pkbad">${lkPokerRes.blind.length} of the ${5 * lkPokerH} cards dealt were never read`
+         + `<div class="pkcards">${lkPokerRes.blind.join(" ")}</div>capture them before dealing</div>`;
   if (lkPokerRes && lkPokerRes.applied)
     return `<div class="pkok">hand ${lkPokerRes.win} won &middot; gather committed, stack updated</div>`;
   // Same ranking path the covert readout uses — pkDeal/pkEval/pkCmp, not a copy.
@@ -4657,15 +4677,26 @@ window.addEventListener("message", e => {
     if (lkDealCont || whole || rtnSegs.length >= 2) rtnReset();   // choosing Continue is choosing not to do the 2-pile compose
     if (lkDealCont){
       const all = lkDealCont.concat(seg);
-      const r = lkDealComposeCont(all);
+      const r = lkDealCompose(all, lkDealAces);
       lkDealCont = null;
       lkDealSeqSave([...new Set(all)]);
       rdUseCustomStack(r.stack48, r.missing, r.stack52);
       lkDealBadge = r.missing.length ? "✓-" + r.missing.length : "✓";
       lkDealLast = r.missing.length
-        ? { ok: true, msg: "CONTINUED &amp; SAVED — " + r.read + " of 48 read &middot; move these to the top:",
+        ? { ok: true, msg: "CONTINUED &amp; SAVED — " + r.read + " of " + r.n + " read &middot; move these to the top:",
             list: r.missing }
         : { ok: true, msg: "CONTINUED &amp; SAVED — full deck (" + r.read + " cards)", list: [] };
+    } else if (whole && lkDealAces){
+      // The bench's partial save is 48-only by construction, so in aces mode the
+      // app composes instead: a 52-card deal that missed a few cards must still
+      // keep the ace positions it DID read.
+      const r = lkDealCompose(seg, true);
+      lkDealSeqSave(seg);
+      rdUseCustomStack(r.stack48, r.missing, r.stack52);
+      lkDealBadge = r.missing.length ? "✓-" + r.missing.length : "✓";
+      lkDealLast = r.missing.length
+        ? { ok: true, msg: "SAVED — " + r.read + " of 52 read &middot; move these to the top:", list: r.missing }
+        : { ok: true, msg: "SAVED &amp; LOADED — full 52-card deck", list: [] };
     } else if (whole){
       if (d.saved){
         try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
