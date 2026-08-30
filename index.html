@@ -435,21 +435,23 @@
      own panel. Sizing it to content instead pushed the camera section off the
      bottom; clipping the container instead cut the crib grid in half. */
   #lkCrib.stkview #lkCribStack { flex: 1 1 0; max-height: none; min-height: 120px; }
-  #lkCribStack { flex: 0 1 auto; min-height: 0; max-height: 32vh; overflow-y: auto;
+  #lkCribStack { flex: 0 1 auto; min-height: 0; max-height: 32vh; overflow-y: auto; font-size: 14px;
     border: 1px solid #2b2f3b; border-radius: 12px; padding: 7px; }
-  #lkCribStack .stk { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px 5px; }
-  #lkCribStack .stk .it { display: flex; align-items: baseline; gap: 3px;
-    font: 600 14px ui-monospace, monospace; color: #e8e6e1; }
-  #lkCribStack .stk b { font-weight: 500; font-size: 10px; color: #6b727c; min-width: 15px; text-align: right; }
-  #lkCribStack .stkh { font: 600 11px ui-monospace, monospace; color: #7d8590; margin-bottom: 5px; }
+  /* em-based throughout so lkStkFit can scale the whole panel with one
+     font-size on the container (Kevin 2026-08-30: fill the screen). */
+  #lkCribStack .stk { display: grid; grid-template-columns: repeat(6, 1fr); gap: .22em .36em; }
+  #lkCribStack .stk .it { display: flex; align-items: baseline; gap: .22em;
+    font: 600 1em ui-monospace, monospace; color: #e8e6e1; }
+  #lkCribStack .stk b { font-weight: 500; font-size: .72em; color: #6b727c; min-width: 1.5em; text-align: right; }
+  #lkCribStack .stkh { font: 600 .8em ui-monospace, monospace; color: #7d8590; margin-bottom: .36em; }
   /* Partial capture (2026-08-29): colour carries STACK STATE, not suit —
      green = the reader placed it, red = never read, position assumed. Suits
      are letters here for exactly that reason. */
-  #lkCribStack .stkh.un { color: #e05d5d; margin-top: 9px; }
-  #lkCribStack .stkh.kn { color: #7fa66a; margin-top: 9px; }
+  #lkCribStack .stkh.un { color: #e05d5d; margin-top: .64em; }
+  #lkCribStack .stkh.kn { color: #7fa66a; margin-top: .64em; }
   #lkCribStack .stk.un .it, #lkCribStack .stk .it.un { color: #e05d5d; }
   #lkCribStack .stk.kn .it { color: #7fa66a; }
-  #lkCribStack .none { font: 600 12px ui-monospace, monospace; color: #7d8590; text-align: center; padding: 8px 0; }
+  #lkCribStack .none { font: 600 .86em ui-monospace, monospace; color: #7d8590; text-align: center; padding: .6em 0; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
@@ -3916,7 +3918,7 @@ function lkCribView(stack, manual){
   const tog = $("lkCribViewTog");
   if (tog) tog.textContent = stack ? "show crib" : "show stack";
   if (stack) lkCribStackUpdate();
-  if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
+  if ($("lkCrib").classList.contains("show")) lkCribRefit();
 }
 function lkCribPeekShow() {
   if (!lkCribMode) return;
@@ -3933,7 +3935,7 @@ function lkCribPeekShow() {
   lkCribCamUpdate();
   lkCribView(lkCribStkManual === null ? !valid : lkCribStkManual);
   $("lkCrib").classList.add("show");
-  requestAnimationFrame(lkCribFit);   // after the overlay lays out
+  lkCribRefit();   // now and again after the overlay lays out
 }
 function lkCribPeekHide() { $("lkCrib").classList.remove("show"); }
 // The crib's own numpad. Every key goes through lkTap(), the same entry point
@@ -3973,7 +3975,7 @@ function lkCribSectionsBuild(){
     $("lkCrib").classList.toggle(SEC[which][0], !on);
     $(SEC[which][1]).classList.toggle("on", on);
     try{ localStorage.setItem("lkCrib_" + which, on ? "1" : "0"); }catch(e){}
-    if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
+    if ($("lkCrib").classList.contains("show")) lkCribRefit();
   };
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
@@ -3985,7 +3987,7 @@ function lkCribSectionsBuild(){
     $("lkCrib").classList.toggle("nobody", !on);
     $("lkCribTogBody").classList.toggle("on", on);
     try{ localStorage.setItem("lkCrib_body", on ? "1" : "0"); }catch(e){}
-    if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
+    if ($("lkCrib").classList.contains("show")) lkCribRefit();
   };
   $("lkCribTogBody").onclick = () => setBody($("lkCrib").classList.contains("nobody"));
   $("lkCribViewTog").onclick = () => lkCribView(!$("lkCrib").classList.contains("stkview"), true);
@@ -4104,6 +4106,7 @@ function lkCribStackUpdate(){
     el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards`
       + (n ? ` &middot; <span style="color:#e05d5d">${n} never read</span> (block position exact, order inside it is not)` : ``)
       + `</div>` + lkStkGrid(st, "", 1);
+    lkStkFit();
     return;
   }
   const unknown = pk ? pk.unknown : st.slice(0, F);
@@ -4117,6 +4120,7 @@ function lkCribStackUpdate(){
     + lkStkGrid(unknown, "un", 0)
     + `<div class="stkh kn">${known.length} read &mdash; on the face, positions ${unknown.length + 1}&ndash;${n}</div>`
     + lkStkGrid(known, "kn", unknown.length + 1);
+  lkStkFit();
 }
 function lkCribCamUpdate(){
   const read = $("lkCribCamRead"); if (!read) return;
@@ -4175,10 +4179,38 @@ function lkCribCamUpdate(){
 function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPeekShow(); }   // re-render the open crib for the current number
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
 // set the font to the largest that fits that row height and the (fixed) column width.
+/* Fill the panel with the stack (Kevin 2026-08-30). Measured, never guessed:
+   binary-search the largest font that still fits, and try several column counts
+   because a tall narrow panel is WIDTH-limited at 6 columns — fewer columns
+   means more rows, which buys a bigger font and uses the height that would
+   otherwise sit empty. Falls back to scrolling when even the floor overflows. */
+function lkStkFit(){
+  const el = $("lkCribStack");
+  if (!el || !$("lkCrib").classList.contains("stkview") || !$("lkCrib").classList.contains("show")) return;
+  const grids = [...el.querySelectorAll(".stk")];
+  if (!grids.length){ el.style.fontSize = ""; return; }
+  const availH = el.clientHeight, availW = el.clientWidth;
+  if (!availH || !availW) return;
+  const setCols = c => grids.forEach(g => g.style.gridTemplateColumns = `repeat(${c}, 1fr)`);
+  let bestF = 0, bestC = 6;
+  for (const cols of [8, 6, 5, 4, 3]){
+    setCols(cols);
+    let lo = 8, hi = 40, fit = 0;
+    for (let i = 0; i < 8; i++){
+      const mid = (lo + hi) / 2;
+      el.style.fontSize = mid + "px";
+      if (el.scrollHeight <= availH && el.scrollWidth <= availW){ fit = mid; lo = mid; } else hi = mid;
+    }
+    if (fit > bestF){ bestF = fit; bestC = cols; }
+  }
+  setCols(bestF ? bestC : 6);
+  el.style.fontSize = (bestF || 10).toFixed(1) + "px";   // nothing fits -> smallest sensible, and it scrolls
+}
+function lkCribRefit(){ lkCribFit(); requestAnimationFrame(lkCribFit); }
 function lkCribFit() {
   const crib = $("lkCrib");
   if (crib.classList.contains("nobody")) return;                             // no body to fit
-  if (crib.classList.contains("stkview")) return;                            // the grid isn't the body view
+  if (crib.classList.contains("stkview")){ lkStkFit(); return; }             // the grid isn't the body view
   const tbl = crib.querySelector(".ac-tbl"); if (!tbl || !tbl.rows.length) return;
   const body = $("lkCribBody");
   // Clear last fit's inline heights BEFORE measuring, or a shrinking crib
@@ -5530,6 +5562,7 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
   lkFeed: (card, left) => lkPeekFeed(card, left),
   lkPeekState: () => ({ on: lkPeekOn, card: lkCamCard, left: lkDealLeft, code: lkCamCard ? lkCardCode(lkCamCard) : null }),
   // bottom peek: drive a glimpse without a camera (the only way to test the cut)
+  lkStkFit, lkCribFit,
   lkPeekTick, lkPeekToggle, lkPeekArm: () => { lkPeekMode = "looking"; },
   // poker capture: drive a finished deal without a camera
   lkPokerArm: H => { lkPokerCap = { H }; lkPokerH = H; lkCribPhase = "poker"; },
