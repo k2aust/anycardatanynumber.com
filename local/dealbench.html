@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v59</title>
+<title>deal bench page-v60</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -496,6 +496,10 @@ async function infer(data){
     const s=ex.reduce((a,b)=>a+b,0); const p=ex.map(x=>x/s);
     let ci=0; for(let i=1;i<52;i++) if(p[i]>p[ci]) ci=i;
     for(let i=0;i<52;i++) if(p[i]>vec[i]) vec[i]=p[i];
+    // vec keeps the absent classes: at Stop they are the sink the Hungarian
+    // hands its phantom events, which is what keeps the real cards on their
+    // own slots. Only the READ (best) refuses to be an absent card.
+    if(ABSENT_I.has(ci)){ vetoNote(CODES[ci]); continue; }
     if(p[ci]>best.conf) best={conf:p[ci],cls:ci,neg:p[52]};
   }
   best.vec=vec;
@@ -605,7 +609,10 @@ function assignCommits(evs0){            // evs: [{t, vec:Float32Array(52), n}]
       let t1=-1,t2=-1;
       for(let i=0;i<52;i++){ const x=v[i]; if(x>t1){ t2=t1; t1=x; } else if(x>t2) t2=x; }
       const ratio = t1>0 ? s/t1 : 0;
-      if(s>=MIN_SCORE && ratio>=MIN_RATIO && (t1-t2)>=MIN_MARGIN){ card=CODES[j]; conf=s; }
+      // an absent card stays a SLOT, never a read: the phantom keeps its
+      // column so every real card below it holds its position.
+      if(s>=MIN_SCORE && ratio>=MIN_RATIO && (t1-t2)>=MIN_MARGIN
+         && !ABSENT_I.has(j)){ card=CODES[j]; conf=s; }
     }
     // `raw` = the assignment's choice BEFORE the confidence gate. The Hungarian
     // pass is one-to-one over the 52 cards, so a card the gate rejects still
@@ -651,7 +658,7 @@ async function processPending(){
     const acc=new Float32Array(52); let accN=0;
     for(const p of picks){
       const r=await infer(tensorFromRegion(p.region));
-      if(r.neg-r.conf<NEG_MARGIN){
+      if(frameOK(r)){
         results.push({t:p.t,cls:r.cls,conf:r.conf});
         if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
         for(let i=0;i<52;i++) acc[i]+=r.vec[i];   // evidence for the final pass
@@ -674,7 +681,7 @@ async function processPending(){
       const rest=buf.filter(f=>!picks.includes(f)).sort((a,b)=>a.t-b.t);
       for(const p of rest){
         const r=await infer(tensorFromRegion(p.region));
-        if(r.neg-r.conf<NEG_MARGIN){
+        if(frameOK(r)){
           results.push({t:p.t,cls:r.cls,conf:r.conf});
           if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
           for(let i=0;i<52;i++) acc[i]+=r.vec[i];
@@ -893,6 +900,55 @@ const PEEK_MS=3000;
 // routine begins, so the app's lockscreen passes &deck=48 — left at 52 every
 // "cards left" readout ran 4 high.
 const DECK_N=+(new URLSearchParams(location.search).get("deck")||52);
+/* ---- PER-CARD FALSE-READ CONTROL (Kevin 2026-08-29) ----------------------
+   Two knobs, both keyed on the CARD, for the "it named a card while I wasn't
+   dealing" failure. attractor_probe.py names the guilty classes per rig; on
+   v35 the cardless frames pile onto 2S / KS / 6H, and on the table rig onto
+   AS+AC (57 of 60 frames) — which is exactly what Kevin sees.
+
+   ABSENT — cards that CANNOT be in this deal. In the ACAAN 48 the four aces
+   are physically out of the deck, so a frame the model calls an ace is a
+   frame it cannot read. Such a crop is DISCARDED (treated like the model's
+   own no-card vote) rather than re-argmaxed to the runner-up, which would
+   only move the phantom onto a real card. rescuePromote() already reasons
+   this way about deck=48; this closes the same hole in the read path.
+   Override with &absent=AS,AH (or &absent= to switch it off entirely).
+
+   FLOOR — a per-card confidence floor for attractors that ARE in the deck
+   (2S, KS, 6H...). Those cannot be vetoed outright without making the card
+   unreadable, so they instead have to clear a higher bar than everyone else.
+   &floor=2S:0.9,KS:0.9,6H:0.85 — empty by default, nothing changes until it
+   is set. A floor gates the LIVE read only; the Stop assignment pass sees the
+   full evidence, so a floored card can still be recovered there. */
+const QP_=new URLSearchParams(location.search);
+const ABSENT=new Set((QP_.has("absent") ? QP_.get("absent")
+                      : (DECK_N===48 ? "AS,AH,AC,AD" : ""))
+  .split(",").map(x=>x.trim().toUpperCase()).filter(Boolean));
+const ABSENT_I=new Set([...ABSENT].map(c=>CODES.indexOf(c)).filter(i=>i>=0));
+const FLOOR=(()=>{ const o={};
+  for(const kv of (QP_.get("floor")||"").split(",")){
+    const [c,v]=kv.split(":"); const f=parseFloat(v);
+    if(c && c.trim() && !isNaN(f)) o[c.trim().toUpperCase()]=f;
+  } return o; })();
+const vetoHits={};   // card -> frames this capture that the two knobs threw away
+function vetoNote(card){ vetoHits[card]=(vetoHits[card]||0)+1; }
+function vetoReport(){
+  const e=Object.entries(vetoHits).sort((a,b)=>b[1]-a[1]);
+  return e.length ? e.map(([c,n])=>c+"x"+n).join(" ") : "";
+}
+/* One gate for every classified frame: the model's own no-card vote, the
+   absent-card veto, and the per-card floor. Both classify passes call it, so
+   the second-chance pass cannot let through what the first pass rejected. */
+function frameOK(r){
+  if(r.conf<0) return false;                       // every crop named an absent card
+  if(r.neg-r.conf>=NEG_MARGIN) return false;       // NEG class outvoted the card
+  const f=FLOOR[CODES[r.cls]];
+  if(f!==undefined && r.conf<f){ vetoNote(CODES[r.cls]); return false; }
+  return true;
+}
+if(ABSENT_I.size||Object.keys(FLOOR).length)
+  log("veto: absent "+([...ABSENT].join(" ")||"none")
+      +" | floors "+(Object.entries(FLOOR).map(([c,v])=>c+">="+v).join(" ")||"none"));
 let stops=[], peekSeenEvents=0;
 function dealtSoFar(){                 // distinct cards committed = physical cards dealt
   const seen=new Set();
@@ -1561,6 +1617,8 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
     // where truth is known (score's `wrong` must stay 0).
     const nres=rescuePromote(finalCommits);
     if(nres) log(`rescue: ${nres} missing card(s) recovered from assignment evidence`);
+    const vr=vetoReport();
+    if(vr) log(`veto: frames refused, per card — ${vr}`);
   }
   render(); scoreFinal(); performSummary(); renderUgal(); };
 // Rescue from confident FRAME SIGHTINGS, not assignment guesses: identity
@@ -1796,7 +1854,7 @@ const MV=(new URLSearchParams(location.search).get("model")||"v35").replace(/[^a
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
     embedPost({ev:"ready"});
-    log("BENCH page-v55 (model "+MV+", embed mode + perform video kept live under the overlay) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v60 (model "+MV+", embed mode + perform video kept live under the overlay) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 </script>

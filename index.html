@@ -335,13 +335,22 @@
   #lkCribSide { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
   /* the bar clears the "Lock screen" pill (top-left, z-76) — without the
      reserved left margin the two overlap when the grid is hidden */
-  #lkCribBar { display: flex; gap: 6px; margin-left: 150px; }
+  #lkCribBar { display: flex; gap: 5px; margin-left: 96px; }   /* 96px clears the clock pill; 4 buttons need the room */
   #lkCribBar button { flex: 1 1 0; background: #14161c; color: #7d8590;
     border: 1px solid #2b2f3b; border-radius: 999px; padding: 7px 0;
-    font: 600 13px ui-monospace, monospace; letter-spacing: 1px;
+    font: 600 12px ui-monospace, monospace; letter-spacing: .5px;
     -webkit-tap-highlight-color: transparent; }
   #lkCribBar button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
   #lkCrib.nopad #lkCribPad, #lkCrib.nocam #lkCribCam { display: none; }
+  /* "full" (Kevin 2026-08-30): drop the whole top half — crib grid and stack
+     both — so the camera panel owns the screen. */
+  #lkCrib.nobody #lkCribBody, #lkCrib.nobody #lkCribStack { display: none; }
+  /* With the top half gone the bar becomes the first thing on screen, where the
+     "‹ Lock screen" button sits — so drop the whole column below it and let the
+     bar run full width. */
+  #lkCrib.nobody #lkCribSide { padding-top: 44px; flex: 1 1 auto; }   /* the column has to stretch before the panel inside it can */
+  #lkCrib.nobody #lkCribBar { margin-left: 0; }
+  #lkCrib.nobody #lkCribCam { flex: 1 1 auto; }   /* full screen should look full */
   #lkCribCam { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
     border: 1px solid #2b2f3b; border-radius: 12px; padding: 8px; }
   #lkCribCamBtn { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
@@ -439,6 +448,8 @@
     #lkCrib #lkCribBody, #lkCrib.stkview #lkCribStack { flex: 1 1 auto; min-width: 0; }
     /* 3x3 digit block with clear + done stacked in a side column (Kevin) */
     #lkCribSide { width: 38vw; max-width: 330px; justify-content: center; }
+    #lkCrib.nobody #lkCribSide { width: 100%; max-width: none; padding-top: 0; }   /* landscape: nothing beside it, and the back button clears the bar */
+    #lkCrib.nobody #lkCribBar { margin-left: 150px; }
     #lkCribBar { margin-left: 0; }        /* landscape: side column, no pill clash */
     #lkCribPad { width: 100%; max-width: none; margin-top: 0; align-content: center;
       grid-template-columns: repeat(3, 1fr) 1.15fr; }
@@ -598,6 +609,7 @@
         <button id="lkCribTogPad" class="on">numpad</button>
         <button id="lkCribTogCam">camera</button>
         <button id="lkCribTogStk">stack</button>
+        <button id="lkCribTogFull">full</button>
       </div>
       <div id="lkCribCam">
         <div id="lkCribAces">
@@ -3950,7 +3962,20 @@ function lkCribSectionsBuild(){
   };
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
-  $("lkCribTogStk").onclick = () => lkCribView(!$("lkCrib").classList.contains("stkview"), true);
+  // "full" hides the top half outright. Tapping "stack" while it is hidden
+  // brings the body back rather than doing nothing — a dead button here reads
+  // as a bug, and wanting the stack is the reason to come back.
+  const setFull = on => {
+    $("lkCrib").classList.toggle("nobody", on);
+    $("lkCribTogFull").classList.toggle("on", on);
+    try{ localStorage.setItem("lkCrib_full", on ? "1" : "0"); }catch(e){}
+    if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
+  };
+  $("lkCribTogFull").onclick = () => setFull(!$("lkCrib").classList.contains("nobody"));
+  $("lkCribTogStk").onclick = () => {
+    if ($("lkCrib").classList.contains("nobody")){ setFull(false); lkCribView(true, true); return; }
+    lkCribView(!$("lkCrib").classList.contains("stkview"), true);
+  };
   // Deal WITH or WITHOUT the aces (Kevin 2026-08-28). The ACAAN routine holds
   // the aces out (48), but a plain full-deck capture — and poker mode, which
   // needs ace positions — deals all 52. Only the countdown and the missing
@@ -4004,10 +4029,11 @@ function lkCribSectionsBuild(){
     $("lkCribCamBadge").classList.remove("ok", "bad");
     $("lkCribCamMiss").innerHTML = "";
   };
-  let pad = "1", cam = "0";
+  let pad = "1", cam = "0", fullv = "0";
   try{ pad = localStorage.getItem("lkCrib_pad") ?? "1";
-       cam = localStorage.getItem("lkCrib_cam") ?? "0"; }catch(e){}
-  set("pad", pad === "1"); set("cam", cam === "1");
+       cam = localStorage.getItem("lkCrib_cam") ?? "0";
+       fullv = localStorage.getItem("lkCrib_full") ?? "0"; }catch(e){}
+  set("pad", pad === "1"); set("cam", cam === "1"); setFull(fullv === "1");
   bar.dataset.built = "1";
 }
 /* ---- The stack the engine is actually using right now, position by position.
@@ -4137,7 +4163,9 @@ function lkCribRefresh() { if ($("lkCrib").classList.contains("show")) lkCribPee
 // Fill the screen with the grid (no scroll): give every row an equal slice of the free height, then
 // set the font to the largest that fits that row height and the (fixed) column width.
 function lkCribFit() {
-  const crib = $("lkCrib"); if (crib.classList.contains("stkview")) return;   // the grid isn't the body view
+  const crib = $("lkCrib");
+  if (crib.classList.contains("nobody")) return;                             // no body to fit
+  if (crib.classList.contains("stkview")) return;                            // the grid isn't the body view
   const tbl = crib.querySelector(".ac-tbl"); if (!tbl || !tbl.rows.length) return;
   const body = $("lkCribBody");
   // Clear last fit's inline heights BEFORE measuring, or a shrinking crib
@@ -4440,8 +4468,16 @@ function lkDealMakeFrame(deck){
   // ?dealreplay=<clip>.mp4 on the app URL drives the embedded capture from a
   // recorded clip instead of the camera — the full lockscreen flow (ticks,
   // peek latch, done badge, partial save) without a deck in hand.
-  const dr = new URLSearchParams(location.search).get("dealreplay");
-  f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "");
+  const qp = new URLSearchParams(location.search);
+  const dr = qp.get("dealreplay");
+  // Per-card false-read knobs ride through to the reader (see dealbench's
+  // PER-CARD FALSE-READ CONTROL). ?floor=2S:0.9,KS:0.9 makes named attractor
+  // cards clear a higher bar; ?absent=<list> overrides the reader's default,
+  // which already refuses to name an ace on a 48-card deal. Neither is needed
+  // for the aces — that one is automatic — they are here for the in-deck
+  // attractors a probe names on the rig he is actually working on.
+  const knobs = ["floor", "absent", "model"].map(k => qp.has(k) ? "&" + k + "=" + encodeURIComponent(qp.get(k)) : "").join("");
+  f.src = "local/dealbench.html?embed=1&deck=" + deck + (dr ? "&replay=" + encodeURIComponent(dr) : "") + knobs;
   $("lockScreen").insertBefore(f, $("lockScreen").firstChild);
   return f;
 }
