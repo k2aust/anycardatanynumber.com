@@ -302,12 +302,6 @@
     background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   #lkToggle.on { display: block; }
   #lkCrib.show ~ #lkToggle { display: none; }   /* while the crib is up, the invisible opener is off */
-  /* visible "back to lock screen" button — a real element, so its tap area matches exactly. shown only over the crib */
-  #lkCribBack { display: none; position: absolute; left: 10px; top: 10px; z-index: 76;
-    padding: 9px 16px 9px 12px; border-radius: 20px; background: rgba(255,255,255,.16);
-    border: 1px solid rgba(255,255,255,.28); color: #fff; font: 600 15px -apple-system, system-ui, sans-serif;
-    cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  #lkCrib.show ~ #lkCribBack { display: block; }
   #lkCrib.show { display: flex; overflow-y: auto; }   /* everything on: scroll rather than crush a section */
   #lkCrib #lkCribBody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 300px; width: 100%; overflow: hidden; }
   #lkCrib .lkc-h { flex: 0 0 auto; text-align: center; color: var(--gold); font-weight: 800; font-size: 46px; line-height: 1; margin: 0 0 2px; }
@@ -333,24 +327,37 @@
   /* ---- three sections (2026-08-28): crib grid / numpad / camera. The grid
      hides itself until a number is entered; the other two toggle. ---- */
   #lkCribSide { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  /* Bar across the top (Kevin 2026-08-30), then everything else. The lock-screen
+     button lives IN the bar now — as a floating pill it sat over whatever the
+     top-left of the crib happened to be. */
+  #lkCribMain { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; }
+  #lkCribTop { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+  /* The two views want opposite things. The CRIB grid has a readable minimum
+     and must push the crib into a scroll rather than shrink (the old "scroll
+     rather than crush a section" rule); the STACK should take the space left
+     over and scroll inside its own panel. min-height:0 is what allows the
+     shrink, so only the stack view gets it. */
+  #lkCrib.stkview #lkCribMain, #lkCrib.stkview #lkCribTop { min-height: 0; }
+  #lkCrib.nobody #lkCribTop { display: none; }
+  /* the stack/crib switch belongs to the section it switches, not to the bar */
+  #lkCribViewTog { display: flex; gap: 4px; flex: 0 0 auto; margin-bottom: 5px; }
+  #lkCribViewTog button { flex: 1 1 0; background: #14161c; color: #6b727c;
+    border: 1px solid #2b2f3b; border-radius: 8px; padding: 5px 0;
+    font: 600 11px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribViewTog button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
   /* the bar clears the "Lock screen" pill (top-left, z-76) — without the
      reserved left margin the two overlap when the grid is hidden */
-  #lkCribBar { display: flex; gap: 5px; margin-left: 96px; }   /* 96px clears the clock pill; 4 buttons need the room */
-  #lkCribBar button { flex: 1 1 0; background: #14161c; color: #7d8590;
-    border: 1px solid #2b2f3b; border-radius: 999px; padding: 7px 0;
-    font: 600 12px ui-monospace, monospace; letter-spacing: .5px;
+  #lkCribBar { display: flex; gap: 5px; flex: 0 0 auto; margin-bottom: 6px; }
+  #lkCribBar button { flex: 1 1 auto; background: #14161c; color: #7d8590;
+    border: 1px solid #2b2f3b; border-radius: 999px; padding: 7px 6px;
+    font: 600 12px ui-monospace, monospace; letter-spacing: .3px; white-space: nowrap;
     -webkit-tap-highlight-color: transparent; }
   #lkCribBar button.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
   #lkCrib.nopad #lkCribPad, #lkCrib.nocam #lkCribCam { display: none; }
-  /* "full" (Kevin 2026-08-30): drop the whole top half — crib grid and stack
-     both — so the camera panel owns the screen. */
-  #lkCrib.nobody #lkCribBody, #lkCrib.nobody #lkCribStack { display: none; }
-  /* With the top half gone the bar becomes the first thing on screen, where the
-     "‹ Lock screen" button sits — so drop the whole column below it and let the
-     bar run full width. */
-  #lkCrib.nobody #lkCribSide { padding-top: 44px; flex: 1 1 auto; }   /* the column has to stretch before the panel inside it can */
-  #lkCrib.nobody #lkCribBar { margin-left: 0; }
-  #lkCrib.nobody #lkCribCam { flex: 1 1 auto; }   /* full screen should look full */
+  /* Hiding the stack/crib section IS the full-screen camera mode. The column
+     has to stretch before the panel inside it can. */
+  #lkCrib.nobody #lkCribSide { flex: 1 1 auto; }
+  #lkCrib.nobody #lkCribCam { flex: 1 1 auto; }
   #lkCribCam { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
     border: 1px solid #2b2f3b; border-radius: 12px; padding: 8px; }
   #lkCribCamBtn { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
@@ -422,10 +429,10 @@
      the bar's "stack" button flips between them. */
   #lkCrib:not(.stkview) #lkCribStack { display: none; }
   #lkCrib.stkview #lkCribBody { display: none; }
-  /* padding-top clears the "‹ Lock screen" button, which sits over this corner
-     — the crib grid's centred number never collided with it, left-aligned
-     stack text does. */
-  #lkCrib.stkview #lkCribStack { flex: 1 1 auto; max-height: none; min-height: 220px; padding-top: 46px; }
+  /* flex-basis 0 so the stack takes the space LEFT OVER and scrolls inside its
+     own panel. Sizing it to content instead pushed the camera section off the
+     bottom; clipping the container instead cut the crib grid in half. */
+  #lkCrib.stkview #lkCribStack { flex: 1 1 0; max-height: none; min-height: 120px; }
   #lkCribStack { flex: 0 1 auto; min-height: 0; max-height: 32vh; overflow-y: auto;
     border: 1px solid #2b2f3b; border-radius: 12px; padding: 7px; }
   #lkCribStack .stk { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px 5px; }
@@ -444,13 +451,16 @@
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
      stays one screen with no scrolling on a turned phone. */
   @media (orientation: landscape) and (max-height: 560px) {
-    #lkCrib.show { flex-direction: row; gap: 8px; align-items: stretch; }
+    #lkCribMain { flex-direction: row; gap: 8px; align-items: stretch; }
     #lkCrib #lkCribBody, #lkCrib.stkview #lkCribStack { flex: 1 1 auto; min-width: 0; }
     /* 3x3 digit block with clear + done stacked in a side column (Kevin) */
-    #lkCribSide { width: 38vw; max-width: 330px; justify-content: center; }
-    #lkCrib.nobody #lkCribSide { width: 100%; max-width: none; padding-top: 0; }   /* landscape: nothing beside it, and the back button clears the bar */
-    #lkCrib.nobody #lkCribBar { margin-left: 150px; }
-    #lkCribBar { margin-left: 0; }        /* landscape: side column, no pill clash */
+    /* justify-content:center overflows BOTH ways once the sections outgrow the
+       row, which put the camera panel on top of the bar. Start at the top and
+       scroll; the pad's auto margin still centres it when there is room. */
+    #lkCribSide { width: 38vw; max-width: 330px; justify-content: flex-start;
+      min-height: 0; overflow-y: auto; }
+    #lkCribPad { margin-top: auto; margin-bottom: auto; }
+    #lkCrib.nobody #lkCribSide { width: 100%; max-width: none; }   /* landscape: nothing beside it any more */
     #lkCribPad { width: 100%; max-width: none; margin-top: 0; align-content: center;
       grid-template-columns: repeat(3, 1fr) 1.15fr; }
     #lkCribCam { padding: 6px; gap: 4px; }
@@ -462,7 +472,6 @@
     #lkCribPad .k-done { grid-column: 4; grid-row: 3 / span 2; }
     #lkCribPad [data-k="0"] { grid-column: 1 / span 3; }
     #lkCrib .lkc-h { font-size: 30px; }
-    #lkCribBack { padding: 5px 12px; font-size: 13px; }
   }
   #lkDbg { display: none; position: absolute; top: 3%; left: 0; right: 0; text-align: center; font: 700 15px monospace; line-height: 1.5; color: #5f6; z-index: 80; pointer-events: none; text-shadow: 0 0 6px #000; }
 
@@ -602,15 +611,21 @@
   <div id="lkExit"></div>
   <div id="lkCam" style="display:none"></div>
   <div id="lkCrib">
-    <div id="lkCribBody"></div>
-    <div id="lkCribStack"></div>
-    <div id="lkCribSide">
-      <div id="lkCribBar">
-        <button id="lkCribTogPad" class="on">numpad</button>
-        <button id="lkCribTogCam">camera</button>
-        <button id="lkCribTogStk">stack</button>
-        <button id="lkCribTogFull">full</button>
+    <div id="lkCribBar">
+      <button id="lkCribTogLock">&#8249; lock</button>
+      <button id="lkCribTogCam">camera</button>
+      <button id="lkCribTogBody">stack/crib</button>
+      <button id="lkCribTogPad" class="on">numpad</button>
+    </div>
+    <div id="lkCribMain">
+    <div id="lkCribTop">
+      <div id="lkCribViewTog">
+        <button data-v="stk">stack</button><button data-v="crib">crib</button>
       </div>
+      <div id="lkCribBody"></div>
+      <div id="lkCribStack"></div>
+    </div>
+    <div id="lkCribSide">
       <div id="lkCribCam">
         <div id="lkCribAces">
           <button data-aces="0" class="on">aces out &middot; 48</button>
@@ -633,10 +648,10 @@
       </div>
       <div id="lkCribPad"></div>
     </div>
+    </div>
   </div>
   <div id="lkToggle"></div>
   <div id="lkRemain"></div>
-  <div id="lkCribBack">&#8249;&nbsp; Lock screen</div>
   <div id="lkDbg"></div>
 </section>
 
@@ -3886,7 +3901,6 @@ function lkCribShow() { lkCribMode = true;  lkShowCommon(); lkbtActive = true; l
 function lkHide() { lkCribPeekHide(); lkCamStop(); try{ lkDealCleanup(); rtnReset(); }catch(e){} lkCamCard = null; $("lkToggle").classList.remove("on"); lkCribMode = false; $("lockScreen").style.display="none"; lkStopClock(); lkbtArm(false); $("app").style.display="block"; }
 // tap the button under the fingerprint to flip between the lockscreen and the crib (stays until tapped again)
 $("lkToggle").addEventListener("click", () => { $("lkCrib").classList.contains("show") ? lkCribPeekHide() : lkCribPeekShow(); });
-$("lkCribBack").addEventListener("click", lkCribPeekHide);
 
 /* ---- Bottom-left deadman switch: hold to reveal the crib for the entered number, release to hide ---- */
 /* Which of the two body views is up. Default follows the number (Kevin
@@ -3899,7 +3913,8 @@ let lkCribStkManual = null, lkCribViewKey = null;
 function lkCribView(stack, manual){
   if (manual) lkCribStkManual = !!stack;
   $("lkCrib").classList.toggle("stkview", !!stack);
-  $("lkCribTogStk").classList.toggle("on", !!stack);
+  const tog = $("lkCribViewTog");
+  if (tog) [...tog.children].forEach(b => b.classList.toggle("on", (b.dataset.v === "stk") === !!stack));
   if (stack) lkCribStackUpdate();
   if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
 }
@@ -3962,20 +3977,19 @@ function lkCribSectionsBuild(){
   };
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
-  // "full" hides the top half outright. Tapping "stack" while it is hidden
-  // brings the body back rather than doing nothing — a dead button here reads
-  // as a bug, and wanting the stack is the reason to come back.
-  const setFull = on => {
-    $("lkCrib").classList.toggle("nobody", on);
-    $("lkCribTogFull").classList.toggle("on", on);
-    try{ localStorage.setItem("lkCrib_full", on ? "1" : "0"); }catch(e){}
+  // The bar is four show/hide switches now (Kevin 2026-08-30) — lock screen,
+  // camera, stack/crib, numpad. Which of stack or crib you get lives INSIDE the
+  // section, next to the thing it switches.
+  $("lkCribTogLock").onclick = lkCribPeekHide;
+  const setBody = on => {
+    $("lkCrib").classList.toggle("nobody", !on);
+    $("lkCribTogBody").classList.toggle("on", on);
+    try{ localStorage.setItem("lkCrib_body", on ? "1" : "0"); }catch(e){}
     if ($("lkCrib").classList.contains("show")) requestAnimationFrame(lkCribFit);
   };
-  $("lkCribTogFull").onclick = () => setFull(!$("lkCrib").classList.contains("nobody"));
-  $("lkCribTogStk").onclick = () => {
-    if ($("lkCrib").classList.contains("nobody")){ setFull(false); lkCribView(true, true); return; }
-    lkCribView(!$("lkCrib").classList.contains("stkview"), true);
-  };
+  $("lkCribTogBody").onclick = () => setBody($("lkCrib").classList.contains("nobody"));
+  $("lkCribViewTog").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (b) lkCribView(b.dataset.v === "stk", true); });
   // Deal WITH or WITHOUT the aces (Kevin 2026-08-28). The ACAAN routine holds
   // the aces out (48), but a plain full-deck capture — and poker mode, which
   // needs ace positions — deals all 52. Only the countdown and the missing
@@ -4029,11 +4043,11 @@ function lkCribSectionsBuild(){
     $("lkCribCamBadge").classList.remove("ok", "bad");
     $("lkCribCamMiss").innerHTML = "";
   };
-  let pad = "1", cam = "0", fullv = "0";
+  let pad = "1", cam = "0", body = "1";
   try{ pad = localStorage.getItem("lkCrib_pad") ?? "1";
        cam = localStorage.getItem("lkCrib_cam") ?? "0";
-       fullv = localStorage.getItem("lkCrib_full") ?? "0"; }catch(e){}
-  set("pad", pad === "1"); set("cam", cam === "1"); setFull(fullv === "1");
+       body = localStorage.getItem("lkCrib_body") ?? "1"; }catch(e){}
+  set("pad", pad === "1"); set("cam", cam === "1"); setBody(body === "1");
   bar.dataset.built = "1";
 }
 /* ---- The stack the engine is actually using right now, position by position.
