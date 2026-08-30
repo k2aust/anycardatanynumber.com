@@ -392,6 +392,7 @@
   #lkCribPokerOut .pkall .w { color: #7fa66a; }
   #lkCribPokerOut .pkbad { color: #e05d5d; }
   #lkCribPokerOut .pkok { color: #7fa66a; }
+  #lkCribPokerOut .pkgat { color: #7d8590; font-size: 11px; line-height: 1.4; margin-top: 3px; }
   #lkCribPokerOut button { width: 100%; margin-top: 5px; background: #14161c; color: var(--gold);
     border: 1px solid #4a412a; border-radius: 9px; padding: 9px 0;
     font: 600 13px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
@@ -3979,9 +3980,7 @@ function lkCribSectionsBuild(){
   $("lkCribPokerBtn").onclick = lkPokerToggle;
   $("lkCribPokerRow").addEventListener("click", e => {
     const b = e.target.closest("button"); if (b) lkPokerPick(+b.dataset.h); });
-  // the commit button is re-rendered on every update, so listen on the container
-  $("lkCribPokerOut").addEventListener("click", e => {
-    if (e.target.closest("[data-pkapply]")) lkPokerCommit(); });
+
   // Continue: same start path, but the capture extends the partial stack.
   $("lkCribCamCont").onclick = () => {
     if (lkDealState === "done" || lkDealState === "error") lkDealCleanup();
@@ -4090,6 +4089,7 @@ function lkCribCamUpdate(){
     pb.style.opacity = live ? ".4" : "";
   }
   const pkOn = lkPokerOn();
+  [...$("lkCribPokerRow").children].forEach(x => x.disabled = live);
   $("lkCribPokerBtn").classList.toggle("on", pkOn);
   $("lkCribCam").classList.toggle("poker", pkOn);
   [...$("lkCribPokerRow").children].forEach(x => x.classList.toggle("on", +x.dataset.h === lkPokerH));
@@ -4346,6 +4346,7 @@ function lkDealCleanup(){
   lkPeekClear(); lkRemainHide();
   lkDealState = "idle"; lkDealLeft = null; lkCamCard = null; lkDealCont = null;
   if (lkPeekMode === "looking") lkPeekMode = "off";
+  lkPokerCap = null;
   lkCamDotSet("off"); lkRenderDate(); lkCribCamUpdate();
 }
 /* ---- Continue: deal ON TOP of the partial stack (Kevin 2026-08-29) --------
@@ -4461,34 +4462,79 @@ function lkPokerToggle(){
   lkCribPhase = on ? "poker" : "num";
   lkRenderDate(); lkCribCamUpdate();
 }
+/* Picking a hand count STARTS A DEAL (Kevin 2026-08-29) — poker handles like
+   New deal, not like a lookup. The camera reads the 5H cards as they fall, the
+   dealt order is cut round-robin into hands, and the gathered packet is saved
+   as the known run of a partial stack. The deck no longer has to be known
+   first: the poker deal is itself the capture. */
+let lkPokerCap = null;          // { H } while a poker capture is running
 function lkPokerPick(H){
-  lkPokerH = H; lkPokerRes = pkCompute(H); lkCribPhase = "poker";
+  lkPokerH = H; lkPokerRes = null; lkPokerMsg = null; lkCribPhase = "poker";
+  if (lkPeekMode === "looking") lkPeekStop();
+  lkDealCleanup();
+  lkPokerCap = { H };
+  lkDealFr = lkDealMakeFrame(5 * H);          // the countdown hits 0 as the last poker card lands
+  lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
+  lkDealBadge = null; lkDealLast = null;
+  lkCamDotSet("read");
   lkRenderDate(); lkCribCamUpdate();
 }
-function lkPokerCommit(){
-  if (!lkPokerRes || !lkPokerRes.ok || lkPokerRes.applied) return;
-  if (!pkApply(lkPokerH)) return;
-  lkPokerRes.applied = true;                 // the gather rewrote the stack: never recompute off the new order
-  lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate();
+let lkPokerMsg = null, lkPokerHands = null, lkPokerWin = -1, lkPokerCat = "";
+function lkPokerCapDone(seg, slots){
+  const H = lkPokerCap.H, need = 5 * H;
+  lkPokerCap = null;
+  const seen = new Set(), dealt = [];
+  for (const c of seg) if (!seen.has(c)){ seen.add(c); dealt.push(c); }
+  // Round-robin makes every card's HAND depend on its index, so one missed card
+  // reshuffles every hand after it. Refuse rather than deal a plausible lie —
+  // the same rule rtnCompose uses for a stack that is quietly one out.
+  if (dealt.length !== need || slots.length !== need){
+    lkPokerMsg = { ok: false, msg: "NOT SAVED — read " + dealt.length + " of " + need
+      + " cards. Round-robin means one miss moves every hand after it; deal again." };
+    lkPokerHands = null; lkPokerWin = -1; lkPokerRepaint(); return;
+  }
+  lkPokerHands = [];
+  for (let i = 0; i < H; i++) lkPokerHands.push([0,1,2,3,4].map(r => dealt[i + r*H]));
+  const evs = lkPokerHands.map(pkEval);
+  let w = 0; for (let i = 1; i < evs.length; i++) if (pkCmp(evs[i], evs[w]) > 0) w = i;
+  lkPokerWin = w;
+  lkPokerRes = { ok: true, win: w + 1, year: evs[w].year, suit: evs[w].flushSuit, applied: true };
+  // The gather, as card math — pkGather with the dealt packet standing in for
+  // the deck, so the convention lives in exactly one place.
+  const packet = pkGather(dealt, H);
+  // Take the deck size from the CARDS, not the toggle: poker is dealt from a
+  // full deck, so a hand containing an ace proves the aces are in play whatever
+  // the aces switch says. Getting this from the toggle alone builds a 49-card
+  // stack out of a 48-card universe plus an ace that was never in it.
+  const aces = lkDealAces || packet.some(c => /^A/.test(c));
+  const universe = aces ? LK_ALL52 : RTN_ALL48;
+  const got = new Set(packet);
+  const missing = universe.filter(c => !got.has(c));
+  const full = [...missing, ...packet];       // undealt remainder goes ON TOP, gathered packet at the face
+  lkDealSeqSave(null);                        // this stack came from a gather, not a straight deal
+  rdUseCustomStack(full.filter(c => !/^A/.test(c)), missing, aces ? full : null);
+  lkPokerCat = PK_CAT[evs[w].key[0]];
+  lkPokerMsg = { ok: true, msg: packet.length + "-card stack saved &middot; "
+    + missing.length + " unread on top" };
+  lkPokerRepaint();
 }
+// every surface the result touches, from one place — the covert date line, the
+// camera panel, and the stack view the capture just rewrote
+function lkPokerRepaint(){ lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate(); }
 function lkPokerOutHTML(){
   if (!lkPokerOn()) return "";
-  const st = pkStack52();
-  if (!st) return `<div class="pkbad">needs a full 52-card capture &mdash; this stack has no ace positions</div>`;
-  if (!lkPokerH) return `<div>how many hands?</div>`;
-  if (lkPokerRes && !lkPokerRes.ok && lkPokerRes.why === "blind")
-    return `<div class="pkbad">${lkPokerRes.blind.length} of the ${5 * lkPokerH} cards dealt were never read`
-         + `<div class="pkcards">${lkPokerRes.blind.join(" ")}</div>capture them before dealing</div>`;
-  if (lkPokerRes && lkPokerRes.applied)
-    return `<div class="pkok">hand ${lkPokerRes.win} won &middot; gather committed, stack updated</div>`;
-  // Same ranking path the covert readout uses — pkDeal/pkEval/pkCmp, not a copy.
-  const hands = pkDeal(st, lkPokerH), evs = hands.map(pkEval);
-  let w = 0; for (let i = 1; i < evs.length; i++) if (pkCmp(evs[i], evs[w]) > 0) w = i;
-  return `<div class="pkwin">HAND ${w + 1} WINS &middot; ${PK_CAT[evs[w].key[0]]}</div>`
-    + `<div class="pkcards">${hands[w].join(" ")}</div>`
-    + `<div class="pkall">` + hands.map((h, i) =>
-        `<span class="${i === w ? "w" : ""}">${i + 1}&nbsp; ${h.join(" ")}</span>`).join("") + `</div>`
-    + `<button data-pkapply="1">&#10003; Commit gather &mdash; deal, gather, then tap</button>`;
+  if (lkPokerCap) return `<div>dealing ${5 * lkPokerCap.H} cards &mdash; round-robin, `
+    + `${lkPokerCap.H} hands &middot; stop when the last card is down</div>`;
+  if (!lkPokerH) return `<div>how many hands? &mdash; picking one starts the deal</div>`;
+  if (lkPokerMsg && !lkPokerMsg.ok) return `<div class="pkbad">${lkPokerMsg.msg}</div>`;
+  if (!lkPokerHands) return `<div>how many hands? &mdash; picking one starts the deal</div>`;
+  return `<div class="pkwin">HAND ${lkPokerWin + 1} WINS &middot; ${lkPokerCat}</div>`
+    + `<div class="pkcards">${lkPokerHands[lkPokerWin].join(" ")}</div>`
+    + `<div class="pkall">` + lkPokerHands.map((h, i) =>
+        `<span class="${i === lkPokerWin ? "w" : ""}">${i + 1}&nbsp; ${h.join(" ")}</span>`).join("") + `</div>`
+    + `<div class="pkok">${lkPokerMsg ? lkPokerMsg.msg : ""}</div>`
+    + `<div class="pkgat">gather: every hand face up, ${lkPokerHands.length} onto ${lkPokerHands.length - 1} `
+    + `&hellip; onto 1, flip the packet, remainder on top &mdash; the saved stack assumes it</div>`;
 }
 /* ---- BOTTOM PEEK (Kevin 2026-08-29) --------------------------------------
    Show the camera the bottom card of the deck; the app cuts the stack so that
@@ -4591,7 +4637,7 @@ function lkDealToggle(cont){
   lkDealFr = f; lkDealState = "starting"; lkDealLeft = null; lkCamCard = null;
   lkDealBadge = null;   // a new capture is the only thing that clears the verdict
   lkDealLast = null;
-  lkPeekMode = "off"; lkPeekMsg = null;
+  lkPeekMode = "off"; lkPeekMsg = null; lkPokerCap = null;
   lkCamDotSet("read");
   lkRemainRender([]);   // full grid up from the first frame; ticks strike cards as they commit
 }
@@ -4672,6 +4718,14 @@ window.addEventListener("message", e => {
     // full capture that dropped a few cards is still treated as a whole deck
     // and not silently parked as segment 1. Once segment 1 IS parked the next
     // capture is segment 2 whatever its length (the shuffled packet is long).
+    if (lkPokerCap){                       // the poker deal is its own capture
+      lkPeekClear(); lkDealLeft = null; lkCamCard = null;
+      lkPokerCapDone(rtnSeg(d.slots), d.slots || []);   // repaints every surface itself
+      lkCamDotDone();
+      if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }
+      lkDealState = "done";
+      return;
+    }
     const lkDealContJustRan = !!lkDealCont;
     const whole = !lkDealCont && seg.length >= RTN_SEG_MAX && rtnSegs.length === 0;
     if (lkDealCont || whole || rtnSegs.length >= 2) rtnReset();   // choosing Continue is choosing not to do the 2-pile compose
@@ -5397,6 +5451,10 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
   lkPeekState: () => ({ on: lkPeekOn, card: lkCamCard, left: lkDealLeft, code: lkCamCard ? lkCardCode(lkCamCard) : null }),
   // bottom peek: drive a glimpse without a camera (the only way to test the cut)
   lkPeekTick, lkPeekToggle, lkPeekArm: () => { lkPeekMode = "looking"; },
+  // poker capture: drive a finished deal without a camera
+  lkPokerArm: H => { lkPokerCap = { H }; lkPokerH = H; lkCribPhase = "poker"; },
+  lkPokerCapDone: seq => lkPokerCapDone(seq, seq.map(c => ({ card: c }))),
+  lkPokerState: () => ({ hands: lkPokerHands, win: lkPokerWin, res: lkPokerRes, msg: lkPokerMsg }),
   lkPeekResult: () => ({ mode: lkPeekMode, bottom: lkPeekBottom, top: lkPeekTop, msg: lkPeekMsg,
                          stack: RD_SCHEMES[rdScheme].stack, full: RD_SCHEMES[rdScheme].full }),
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
