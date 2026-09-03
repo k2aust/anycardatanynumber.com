@@ -417,6 +417,31 @@
   #lkCribPokerOut button { width: 100%; margin-top: 5px; background: #14161c; color: var(--gold);
     border: 1px solid #4a412a; border-radius: 9px; padding: 9px 0;
     font: 600 13px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  /* card entry: two slots, then value, then suit (2026-08-30) */
+  #lkCrib.nocards #lkCribCards { display: none; }
+  #lkCribCards { flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px;
+    border: 1px solid #2b2f3b; border-radius: 12px; padding: 7px; }
+  #lkCribSlots { display: flex; gap: 5px; }
+  #lkCribSlots button { flex: 1 1 0; display: flex; flex-direction: column; gap: 1px;
+    background: #14161c; color: #6b727c; border: 1px solid #2b2f3b; border-radius: 9px;
+    padding: 6px 0; font: 600 11px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
+  #lkCribSlots button span { font-size: 18px; color: #e8e6e1; letter-spacing: .5px; }
+  #lkCribSlots button.on { border-color: #4a412a; background: #1b1a14; color: var(--gold); }
+  #lkCribSlots button.set span { color: #7fa66a; }
+  #lkCribVals { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  #lkCribSuits { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  #lkCribCards button.k { background: #14161c; color: #e8e6e1; border: 1px solid #2b2f3b;
+    border-radius: 8px; padding: 9px 0; font: 700 15px ui-monospace, monospace;
+    -webkit-tap-highlight-color: transparent; }
+  #lkCribCards button.k.on { color: var(--gold); border-color: #4a412a; background: #1b1a14; }
+  #lkCribCards button.k.red { color: #e8767a; }
+  #lkCribCards button.k.clr { color: #7d8590; font-size: 12px; }
+  /* the crib body speaks for a named card instead of the number grid */
+  #lkCrib .lkc-card { text-align: center; color: var(--gold); font: 700 22px ui-monospace, monospace; margin-bottom: 4px; }
+  #lkCrib .lkc-runs { text-align: center; color: #e8e6e1; font: 600 15px/1.7 ui-monospace, monospace; }
+  #lkCrib .lkc-runs b { color: var(--gold); font-size: 19px; }
+  #lkCrib .lkc-sub { text-align: center; color: #7d8590; font: 600 12px/1.5 ui-monospace, monospace; margin-top: 6px; }
+  #lkCrib .lkc-bad { text-align: center; color: #e05d5d; font: 600 14px ui-monospace, monospace; }
   #lkCribAces { display: flex; gap: 4px; }
   #lkCribAces button { flex: 1 1 0; background: #14161c; color: #6b727c;
     border: 1px solid #2b2f3b; border-radius: 8px; padding: 6px 0;
@@ -618,7 +643,8 @@
     <div id="lkCribBar">
       <button id="lkCribTogLock">&#8249; lock</button>
       <button id="lkCribTogCam">camera</button>
-      <button id="lkCribTogBody">stack/crib</button>
+      <button id="lkCribTogBody">stack</button>
+      <button id="lkCribTogCards">cards</button>
       <button id="lkCribTogPad" class="on">numpad</button>
     </div>
     <div id="lkCribMain">
@@ -628,6 +654,14 @@
       <div id="lkCribStack"></div>
     </div>
     <div id="lkCribSide">
+      <div id="lkCribCards">
+        <div id="lkCribSlots">
+          <button data-slot="cut" class="on"><b>cut card</b><span>&mdash;</span></button>
+          <button data-slot="named"><b>their card</b><span>&mdash;</span></button>
+        </div>
+        <div id="lkCribVals"></div>
+        <div id="lkCribSuits"></div>
+      </div>
       <div id="lkCribCam">
         <div id="lkCribAces">
           <button data-aces="0" class="on">aces out &middot; 48</button>
@@ -3924,16 +3958,18 @@ function lkCribPeekShow() {
   if (!lkCribMode) return;
   const N = parseInt(lkNum, 10);
   const valid = N >= 1 && N <= 52;
-  const key = lkNum + "|" + lkCribPhase + "|" + (lkCribVal || "");
+  const key = lkNum + "|" + lkCribPhase + "|" + (lkCribVal || "") + "|" + (lkNamedCard || "");
   if (key !== lkCribViewKey){ lkCribViewKey = key; lkCribStkManual = null; }   // entry changed -> back to the default view
   // The grid is ALWAYS up (Kevin 2026-08-28) — with no number it shows its
   // empty state, which is still the layout he reads from.
-  $("lkCribBody").innerHTML = `<div class="lkc-h">${valid ? N : ""}</div>`
-    + acGridHTML(valid ? N : 0, lkCribLand());
+  $("lkCribBody").innerHTML = lkCribBodyHTML(N, valid);
   lkCribPadBuild();
   lkCribSectionsBuild();
+  lkCardsUpdate();
   lkCribCamUpdate();
-  lkCribView(lkCribStkManual === null ? !valid : lkCribStkManual);
+  // A named card gives the crib something to say even with no number (the
+  // reachable ranges), so it counts as an entry for the default view.
+  lkCribView(lkCribStkManual === null ? !(valid || lkNamedCard) : lkCribStkManual);
   $("lkCrib").classList.add("show");
   lkCribRefit();   // now and again after the overlay lays out
 }
@@ -3970,7 +4006,8 @@ function lkCribPadBuild(){
    encoding here: card code and cards-left in the open. */
 function lkCribSectionsBuild(){
   const bar = $("lkCribBar"); if (!bar || bar.dataset.built) return;
-  const SEC = { pad: ["nopad", "lkCribTogPad"], cam: ["nocam", "lkCribTogCam"] };
+  const SEC = { pad: ["nopad", "lkCribTogPad"], cam: ["nocam", "lkCribTogCam"],
+                cards: ["nocards", "lkCribTogCards"] };
   const set = (which, on) => {
     $("lkCrib").classList.toggle(SEC[which][0], !on);
     $(SEC[which][1]).classList.toggle("on", on);
@@ -3979,6 +4016,14 @@ function lkCribSectionsBuild(){
   };
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
+  $("lkCribTogCards").onclick = () => set("cards", $("lkCrib").classList.contains("nocards"));
+  $("lkCribCards").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.slot) lkCardTap("slot", b.dataset.slot);
+    else if (b.dataset.val) lkCardTap("val", b.dataset.val);
+    else if (b.dataset.suit) lkCardTap("suit", b.dataset.suit);
+    else if (b.dataset.clear) lkCardTap("clear");
+  });
   // The bar is four show/hide switches now (Kevin 2026-08-30) — lock screen,
   // camera, stack/crib, numpad. Which of stack or crib you get lives INSIDE the
   // section, next to the thing it switches.
@@ -4044,11 +4089,12 @@ function lkCribSectionsBuild(){
     $("lkCribCamBadge").classList.remove("ok", "bad");
     $("lkCribCamMiss").innerHTML = "";
   };
-  let pad = "1", cam = "0", body = "1";
+  let pad = "1", cam = "0", body = "1", cards = "0";
   try{ pad = localStorage.getItem("lkCrib_pad") ?? "1";
        cam = localStorage.getItem("lkCrib_cam") ?? "0";
+       cards = localStorage.getItem("lkCrib_cards") ?? "0";
        body = localStorage.getItem("lkCrib_body") ?? "1"; }catch(e){}
-  set("pad", pad === "1"); set("cam", cam === "1"); setBody(body === "1");
+  set("pad", pad === "1"); set("cam", cam === "1"); set("cards", cards === "1"); setBody(body === "1");
   bar.dataset.built = "1";
 }
 /* ---- The stack the engine is actually using right now, position by position.
@@ -4088,6 +4134,90 @@ function lkStkParked(){
 function lkStkGrid(cards, cls, startPos){
   return `<div class="stk ${cls}">` + cards.map((c, i) =>
     `<span class="it${cls ? "" : (rdExcluded.has(c) ? " un" : "")}">${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
+}
+/* ---- Card entry (Kevin 2026-08-30) ---------------------------------------
+   Any stack other than the Combined one has to be told where it was CUT, and
+   the crib has never had a way to say so. Two slots: the cut card (the glimpsed
+   bottom card of the handed-off top half, which is what RD_HALF means) and
+   their named card.
+
+   What the crib then shows depends on what it knows:
+     number + card  -> the procedure, the same three steps the reveal page runs
+     card, no number -> every number that card can reach, as ranges
+   With neither it stays the number grid it has always been. */
+const LK_VALS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+let lkCutCard = null, lkNamedCard = null, lkCardSlot = "cut", lkCardVal = null;
+function lkCardsBuild(){
+  const v = $("lkCribVals"), su = $("lkCribSuits");
+  if (!v || v.dataset.built) return;
+  v.innerHTML = LK_VALS.map(x => `<button class="k" data-val="${x}">${x}</button>`).join("");
+  su.innerHTML = ["S","H","D","C"].map(x =>
+    `<button class="k${x === "H" || x === "D" ? " red" : ""}" data-suit="${x}">${SUIT_SYM[x]}</button>`).join("")
+    + `<button class="k clr" data-clear="1">clear</button>`;
+  v.dataset.built = "1";
+}
+function lkCardsUpdate(){
+  const box = $("lkCribCards"); if (!box) return;
+  lkCardsBuild();
+  [...$("lkCribSlots").children].forEach(b => {
+    const set = b.dataset.slot === "cut" ? lkCutCard : lkNamedCard;
+    b.classList.toggle("on", b.dataset.slot === lkCardSlot);
+    b.classList.toggle("set", !!set);
+    b.lastElementChild.textContent = set || "—";
+  });
+  [...$("lkCribVals").children].forEach(b => b.classList.toggle("on", b.dataset.val === lkCardVal));
+}
+// The cut card IS RD_HALF: the position of the glimpsed card is where the deck
+// was split. Clearing it puts the engine back on the scheme's own midpoint.
+function lkCardApplyCut(){
+  if (lkCutCard && rdSetCutCard(lkCutCard)) return true;
+  RD_HALF = Math.floor(RD_L0 / 2);
+  return !lkCutCard;
+}
+function lkCardTap(kind, v){
+  if (kind === "slot"){ lkCardSlot = v; lkCardVal = null; }
+  else if (kind === "clear"){
+    if (lkCardSlot === "cut"){ lkCutCard = null; lkCardApplyCut(); } else lkNamedCard = null;
+    lkCardVal = null;
+  }
+  else if (kind === "val") lkCardVal = lkCardVal === v ? null : v;
+  else if (kind === "suit" && lkCardVal){
+    const card = lkCardVal + v;
+    if (lkCardSlot === "cut"){ lkCutCard = card; lkCardApplyCut(); }
+    else { lkNamedCard = card; lkCardSlot = "cut"; }   // named card last: hand the slot back to the cut
+    lkCardVal = null;
+  }
+  lkCardsUpdate(); lkCribRefresh();
+}
+// Every number this card can be delivered to cleanly, as ranges.
+function lkCardRuns(card){
+  const ok = [];
+  for (let N = RD_LO; N <= RD_HI; N++){ const o = rdResolve(card, N); if (o && o.method !== "dl") ok.push(N); }
+  const runs = []; let cur = [];
+  for (const n of ok){ if (cur.length && n !== cur[cur.length - 1] + 1){ runs.push(cur); cur = []; } cur.push(n); }
+  if (cur.length) runs.push(cur);
+  return { ok, runs };
+}
+function lkCribBodyHTML(N, valid){
+  if (!lkNamedCard)
+    return `<div class="lkc-h">${valid ? N : ""}</div>` + acGridHTML(valid ? N : 0, lkCribLand());
+  const cutLine = `<div class="lkc-sub">cut card ${lkCutCard || "not entered — using the midpoint"}`
+    + ` &middot; half ${RD_HALF}</div>`;
+  if (valid){
+    const out = rdResolve(lkNamedCard, N);
+    return `<div class="lkc-card">${lkNamedCard} at ${N}</div>`
+      + (out ? rdThreeStep(out, lkNamedCard, N, false)
+             : `<div class="lkc-bad">no clean out for ${lkNamedCard} at ${N}</div>`)
+      + cutLine;
+  }
+  const { ok, runs } = lkCardRuns(lkNamedCard);
+  return `<div class="lkc-card">${lkNamedCard}</div>`
+    + (runs.length
+        ? `<div class="lkc-runs">` + runs.map(r =>
+            `<b>${r[0]}${r.length > 1 ? "&ndash;" + r[r.length - 1] : ""}</b>`).join(" &middot; ") + `</div>`
+          + `<div class="lkc-sub">${ok.length} of ${RD_HI - RD_LO + 1} numbers &middot; enter one for the procedure</div>`
+        : `<div class="lkc-bad">no clean number for this card</div>`)
+    + cutLine;
 }
 function lkCribStackUpdate(){
   const el = $("lkCribStack"); if (!el) return;
