@@ -337,7 +337,10 @@
      rather than crush a section" rule); the STACK should take the space left
      over and scroll inside its own panel. min-height:0 is what allows the
      shrink, so only the stack view gets it. */
-  #lkCrib.stkview #lkCribMain, #lkCrib.stkview #lkCribTop { min-height: 0; }
+  /* Only the TOP may shrink below its content. Letting #lkCribMain shrink too
+     meant a tall side column (cards + camera + numpad) overflowed the crib and
+     drew straight over the stack instead of scrolling it. */
+  #lkCrib.stkview #lkCribTop { min-height: 0; }
   #lkCrib.nobody #lkCribTop { display: none; }
   /* The stack/crib switch belongs to the section it switches, not to the bar.
      One button, and it is named for what you GET by pressing it — a lone
@@ -389,10 +392,11 @@
     border: 1px solid #4a412a; border-radius: 10px; padding: 13px 14px;
     font: 600 15px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
   #lkCribCam.cont #lkCribCamCont { display: block; }
-  #lkCribPeekBtn { width: 100%; background: #14161c; color: #7d8590;
+  #lkCribCards button.glimpse, #lkCribCam button.glimpse { width: 100%; }
+  .glimpse { width: 100%; background: #14161c; color: #7d8590;
     border: 1px solid #2b2f3b; border-radius: 10px; padding: 11px 0;
     font: 600 14px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
-  #lkCribPeekBtn.live { color: #7fb3e0; border-color: #2c4a63; background: #121a22; animation: lkPulse 1s ease-in-out infinite; }
+  .glimpse.live { color: #7fb3e0; border-color: #2c4a63; background: #121a22; animation: lkPulse 1s ease-in-out infinite; }
   #lkCribPokerBtn { width: 100%; background: #14161c; color: #7d8590;
     border: 1px solid #2b2f3b; border-radius: 10px; padding: 11px 0;
     font: 600 14px ui-monospace, monospace; -webkit-tap-highlight-color: transparent; }
@@ -672,7 +676,8 @@
           <button id="lkCribCamAbort">↻ New deal</button>
           <button id="lkCribCamCont">+ Continue</button>
         </div>
-        <button id="lkCribPeekBtn">&#9673; Bottom peek &mdash; cut to the card shown</button>
+        <button id="lkCribPeekBtn" class="glimpse">&#9673; Bottom peek &mdash; cut to the card shown</button>
+        <button id="lkCribCutBtn" class="glimpse">&#9681; Cut card &mdash; read the top half's bottom</button>
         <button id="lkCribPokerBtn">&#9824; Poker deal</button>
         <div id="lkCribPokerRow">
           <button data-h="2">2</button><button data-h="3">3</button><button data-h="4">4</button><button data-h="5">5</button><button data-h="6">6</button>
@@ -4064,7 +4069,8 @@ function lkCribSectionsBuild(){
     b.textContent = live ? "saving…" : "starting…";
     b.classList.add("busy");
   };
-  $("lkCribPeekBtn").onclick = lkPeekToggle;
+  $("lkCribPeekBtn").onclick = () => lkPeekToggle("bottom");
+  $("lkCribCutBtn").onclick  = () => lkPeekToggle("cutcard");
   $("lkCribPokerBtn").onclick = lkPokerToggle;
   $("lkCribPokerRow").addEventListener("click", e => {
     const b = e.target.closest("button"); if (b) lkPokerPick(+b.dataset.h); });
@@ -4256,14 +4262,15 @@ function lkCribCamUpdate(){
   const read = $("lkCribCamRead"); if (!read) return;
   const live = lkDealState === "starting" || lkDealState === "reading";
   const peeking = lkPeekMode === "looking";
-  const pb = $("lkCribPeekBtn");
-  if (pb){
-    pb.textContent = peeking ? "■ Stop peek — show the camera a card"
-                             : "◉ Bottom peek — cut to the card shown";
-    pb.classList.toggle("live", peeking);
-    pb.disabled = live;
-    pb.style.opacity = live ? ".4" : "";
-  }
+  [["lkCribPeekBtn", "bottom", "◉ Bottom peek — cut to the card shown"],
+   ["lkCribCutBtn",  "cutcard", "◑ Cut card — read the top half's bottom"]].forEach(([id, kind, label]) => {
+    const b = $(id); if (!b) return;
+    const on = peeking && lkPeekKind === kind;
+    b.textContent = on ? "■ Stop — show the camera a card" : label;
+    b.classList.toggle("live", on);
+    b.disabled = live;
+    b.style.opacity = live ? ".4" : "";
+  });
   const pkOn = lkPokerOn();
   [...$("lkCribPokerRow").children].forEach(x => x.disabled = live);
   $("lkCribPokerBtn").classList.toggle("on", pkOn);
@@ -4275,7 +4282,8 @@ function lkCribCamUpdate(){
   read.style.display = lkPokerCap ? "none" : "";   // the hand grid IS the readout during a poker deal
   if (lkPeekMode === "done" && !live){
     read.innerHTML = `<span class="cc">${lkCardCode(lkPeekBottom)}</span>`
-      + `<span class="cl">top ${lkPeekTop && !rdExcluded.has(lkPeekTop) ? lkCardCode(lkPeekTop) : "?"}</span>`;
+      + `<span class="cl">${lkPeekKind === "cutcard" ? "half " + RD_HALF
+          : "top " + (lkPeekTop && !rdExcluded.has(lkPeekTop) ? lkCardCode(lkPeekTop) : "?")}</span>`;
   } else {
   const card = lkCamCard ? lkCardCode(lkCamCard) : "—";
   const left = (typeof lkDealLeft === "number") ? lkDealLeft + " left" : (live ? "starting…" : peeking ? "looking…" : "—");
@@ -4298,7 +4306,9 @@ function lkCribCamUpdate(){
   if (live){ badge.textContent = lkPokerCap
     ? "dealing — Stop + save once the last hand is down"
     : "dealing — press Stop + save when the deck is through"; }
-  else if (peeking){ badge.textContent = "hold the bottom card over the camera"; }
+  else if (peeking){ badge.textContent = lkPeekKind === "cutcard"
+    ? "show the camera the bottom card of the half you hand over"
+    : "hold the bottom card over the camera"; }
   else if (lkPeekMsg){ badge.innerHTML = lkPeekMsg.msg; badge.classList.add(lkPeekMsg.ok ? "ok" : "bad"); }
   else if (lkDealLast){ badge.innerHTML = lkDealLast.msg; badge.classList.add(lkDealLast.ok ? "ok" : "bad"); }
   else { badge.textContent = "no capture yet"; }
@@ -4783,6 +4793,14 @@ function lkPokerOutHTML(){
    commits via its tick event, so a peek is just "start, take the first card,
    stop". The frame is REMOVED rather than sent db-stop — db-stop would run the
    bench's analysis and overwrite the very stack we are re-syncing. */
+/* Two things to do with the same single-card read (Kevin 2026-08-30):
+     "bottom"  — cut the stack so that card IS the bottom, and name the top.
+     "cutcard" — that card is the bottom of the handed-off TOP HALF, so it sets
+                 RD_HALF, which is all the cut card has ever meant. This is the
+                 glimpse the two-pile routine was designed around: cut casually,
+                 glimpse the pile you hand over, and the app knows the depth
+                 without anyone counting. */
+let lkPeekKind = "bottom";
 let lkPeekMode = "off";        // off | looking | done
 let lkPeekBottom = null, lkPeekTop = null, lkPeekMsg = null;
 function lkPeekStackArrays(){
@@ -4822,6 +4840,17 @@ function lkPeekStop(){
 }
 function lkPeekTick(card){
   if (!card || lkPeekMode !== "looking") return;
+  if (lkPeekKind === "cutcard"){
+    if (!RD_POS[card]) return;                       // not in the dealing stack — keep looking
+    lkCutCard = card; lkCardApplyCut();
+    lkPeekBottom = card; lkPeekTop = null;
+    lkPeekMsg = { ok: true, msg: "CUT CARD " + card + " &middot; the deck is split at " + RD_HALF, list: [] };
+    lkPeekMode = "done";
+    lkPeekStop();
+    lkCamCard = null;                                // nothing covert to report: this sets state, it doesn't reveal
+    lkRenderDate(); lkCardsUpdate(); lkCribCamUpdate(); lkCribRefresh();
+    return;
+  }
   const r = lkPeekResolve(card);
   if (!r) return;                                          // a card that is not in the stack proves nothing — keep looking
   lkPeekBottom = r.bottom; lkPeekTop = r.top;
@@ -4838,10 +4867,16 @@ function lkPeekTick(card){
   lkCamCard = blind ? null : r.top;    // covert readout: day = value, weather = suit, same as the old cut-glimpse
   lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate();
 }
-function lkPeekToggle(){
-  if (lkPeekMode === "looking"){ lkPeekStop(); lkCribCamUpdate(); return; }
+function lkPeekToggle(kind){
+  const want = kind === "cutcard" ? "cutcard" : "bottom";
+  if (lkPeekMode === "looking"){                     // tapping the other one switches modes rather than stopping
+    const same = lkPeekKind === want;
+    lkPeekStop();
+    if (same){ lkCribCamUpdate(); return; }
+  }
   if (lkDealState === "starting" || lkDealState === "reading") return;    // a capture owns the camera
   lkDealCleanup();
+  lkPeekKind = want;
   lkPeekBottom = lkPeekTop = lkPeekMsg = null;
   lkPeekMode = "looking";
   lkDealFr = lkDealMakeFrame(lkDealAces ? 52 : 48);
@@ -5693,7 +5728,9 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
   lkPeekState: () => ({ on: lkPeekOn, card: lkCamCard, left: lkDealLeft, code: lkCamCard ? lkCardCode(lkCamCard) : null }),
   // bottom peek: drive a glimpse without a camera (the only way to test the cut)
   lkStkFit, lkCribFit,
-  lkPeekTick, lkPeekToggle, lkPeekArm: () => { lkPeekMode = "looking"; },
+  lkPeekTick, lkPeekToggle,
+  lkPeekArm: kind => { lkPeekMode = "looking"; lkPeekKind = kind === "cutcard" ? "cutcard" : "bottom"; },
+  lkCards: () => ({ cut: lkCutCard, named: lkNamedCard, half: RD_HALF }),
   // poker capture: drive a finished deal without a camera
   lkPokerArm: H => { lkPokerCap = { H }; lkPokerH = H; lkCribPhase = "poker"; },
   // arm with a stub frame so real postMessage ticks reach the live-fill branch
