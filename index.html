@@ -479,6 +479,9 @@
   #lkCribStack .stkh.un { color: #e05d5d; margin-top: .64em; }
   #lkCribStack .stkh.kn { color: #7fa66a; margin-top: .64em; }
   #lkCribStack .stk.un .it, #lkCribStack .stk .it.un { color: #e05d5d; }
+  #lkCribStack .stk .it.cut { color: var(--gold); outline: 1px solid #4a412a;
+    border-radius: 4px; outline-offset: 1px; }
+  #lkCribStack .stkh .cutn { color: var(--gold); }
   #lkCribStack .stk.kn .it { color: #7fa66a; }
   #lkCribStack .none { font: 600 .86em ui-monospace, monospace; color: #7d8590; text-align: center; padding: .6em 0; }
   /* LANDSCAPE: numpad to the RIGHT of the grid, both full height, so the crib
@@ -4137,9 +4140,16 @@ function lkStkParked(){
   const seen = new Set(known);
   return { unknown: RTN_ALL48.filter(c => !seen.has(c)), known, parked: true };
 }
+// The cut card is marked by CARD, never by index: the view may be numbering the
+// 52-card order while RD_HALF is a position in the 48-card DEALING stack, and
+// counting to 23 in a 52-card list lands on a different card entirely. That
+// mismatch is what made the split look like it was off by one.
+function lkStkCutCard(){ return (RD_HALF > 0 && RD_HALF <= RD_STACK.length) ? RD_STACK[RD_HALF - 1] : null; }
 function lkStkGrid(cards, cls, startPos){
+  const mark = lkStkCutCard();
   return `<div class="stk ${cls}">` + cards.map((c, i) =>
-    `<span class="it${cls ? "" : (rdExcluded.has(c) ? " un" : "")}">${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
+    `<span class="it${cls ? "" : (rdExcluded.has(c) ? " un" : "")}${c === mark ? " cut" : ""}">`
+    + `${startPos ? `<b>${startPos + i}</b>` : ""}${c}</span>`).join("") + `</div>`;
 }
 /* ---- Card entry (Kevin 2026-08-30) ---------------------------------------
    Any stack other than the Combined one has to be told where it was CUT, and
@@ -4207,8 +4217,10 @@ function lkCardRuns(card){
 function lkCribBodyHTML(N, valid){
   if (!lkNamedCard)
     return `<div class="lkc-h">${valid ? N : ""}</div>` + acGridHTML(valid ? N : 0, lkCribLand());
-  const cutLine = `<div class="lkc-sub">cut card ${lkCutCard || "not entered — using the midpoint"}`
-    + ` &middot; half ${RD_HALF}</div>`;
+  const cutLine = `<div class="lkc-sub">`
+    + (lkCutCard ? `cut card ${lkCutCard} &mdash; bottom of the top half`
+                 : `no cut card &mdash; using the midpoint`)
+    + ` &middot; top half ${RD_HALF} of ${RD_STACK.length}</div>`;
   if (valid){
     const out = rdResolve(lkNamedCard, N);
     return `<div class="lkc-card">${lkNamedCard} at ${N}</div>`
@@ -4225,6 +4237,15 @@ function lkCribBodyHTML(N, valid){
         : `<div class="lkc-bad">no clean number for this card</div>`)
     + cutLine;
 }
+/* The boxed card is the bottom of the TOP half. Positions in this view can be
+   52-card positions while the deal runs on the 48 with the aces out, so the
+   note says which number is the one that matters. */
+function lkStkCutNote(shown){
+  const mark = lkStkCutCard(); if (!mark) return "";
+  return ` &middot; <span class="cutn">cut after ${mark}</span>`
+    + ` &middot; top half ${RD_HALF}`
+    + (shown !== RD_STACK.length ? ` of ${RD_STACK.length} dealt` : ``);
+}
 function lkCribStackUpdate(){
   const el = $("lkCribStack"); if (!el) return;
   const full = fullStackForSettings, deal = stackForSettings;
@@ -4240,6 +4261,7 @@ function lkCribStackUpdate(){
     // is guesswork. Numbered grid, unknowns still red.
     const n = st.filter(c => rdExcluded.has(c)).length;
     el.innerHTML = `<div class="stkh">current stack &middot; ${st.length} cards`
+      + lkStkCutNote(st.length)
       + (n ? ` &middot; <span style="color:#e05d5d">${n} never read</span> (block position exact, order inside it is not)` : ``)
       + `</div>` + lkStkGrid(st, "", 1);
     lkStkFit();
