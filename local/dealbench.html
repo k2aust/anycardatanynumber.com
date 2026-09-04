@@ -716,6 +716,7 @@ async function processPending(){
     performLive();
     benchPeek();
     render();
+    autoCheck();
   }
   procBusy=false;
 }
@@ -1084,7 +1085,7 @@ function performSummary(){
   // rejected its identity. Gate-rejected cards keep their slot so the cards
   // below them keep their positions; the app flags them unreachable instead.
   const slots=cs.filter(c=>c.raw).map(c=>({card:c.raw, weak:!c.card}));
-  embedPost({ev:"done", saved:savedOk, partial:partialN, read:got.size, slots,
+  embedPost({ev:"done", auto:autoFired&&AUTO_ON(), saved:savedOk, partial:partialN, read:got.size, slots,
              missing:missingNA, missingAces:CODES.filter(c=>/^A/.test(c)&&!dealt.includes(c))});
   window.__lastSlots=slots;   // test hook (replay/bench measurement)
   $("peek").textContent=lines.join("\n")+"\n\n"+advise().join("\n");
@@ -1222,7 +1223,7 @@ $("start").onclick=async()=>{
     const v=$("v"); v.srcObject=null; v.src=replay; v.muted=true; v.preload="auto";
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
-    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+    base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; autoArmT=0; autoFired=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
     eventVecs=[]; finalCommits=null; frameReads=[];
     running=true; $("start").classList.add("on");
     // Calibrate over the clip's first 2s exactly as a live run would — replay
@@ -1359,7 +1360,7 @@ $("start").onclick=async()=>{
     // territory warns to pin. Never silently either way.
     setTimeout(()=>expoGuard(track), 1500);
   }
-  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
+  base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; autoArmT=0; autoFired=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
   eventVecs=[]; finalCommits=null;
   running=true; $("start").classList.add("on");
   if(SCAN_ON) calStart(performance.now());
@@ -1650,6 +1651,48 @@ function rescuePromote(cs){
   }
   if(n) cs.sort((a,b)=>a.t-b.t);
   return n;
+}
+// AUTO-SAVE (Kevin 2026-08-29: "automatically save the stack after it sees
+// 52/48 cards"). Purely additive — watches coverage, never touches the read
+// path. Coverage = every expected card is either committed or rescuable
+// under the SAME sighting gates the Stop rescue uses, so auto-fire can only
+// happen when Stop would produce a complete save. Fires after AUTO_QUIET ms,
+// deferring while an event is open or the queue is busy, and re-verifies
+// coverage at the moment of firing. Real firing only in perform/embed mode
+// (or ?autosave=1); the plain bench logs "would fire" so replay benchmarks
+// keep their manual timing.
+const AUTO_QUIET=2000;
+const AUTO_ON=()=>PERFORM||new URLSearchParams(location.search).get("autosave")==="1";
+let autoArmT=0, autoFired=false;
+function coverageComplete(){
+  const have=new Set(commits.filter(c=>c.card).map(c=>c.card));
+  const expect=DECK_N===48?CODES.filter(c=>!/^A/.test(c)):CODES;
+  for(const m of expect){
+    if(have.has(m)) continue;
+    const cls=CODES.indexOf(m);
+    const sc=frameReads.filter(r=>r.cls===cls&&r.conf>=RES_CONF);
+    if(!sc.length) return false;
+    if(sc.length<2&&Math.max(...sc.map(r=>r.conf))<RES_SOLO) return false;
+  }
+  return true;
+}
+function autoCheck(){
+  if(autoFired||!running||autoArmT) return;
+  if(!coverageComplete()) return;
+  autoArmT=performance.now();
+  log(`auto-save: full coverage — arming (${AUTO_QUIET}ms quiet)`);
+  setTimeout(autoFire, AUTO_QUIET+50);
+}
+function autoFire(){
+  if(autoFired||!running) return;
+  if(inEvent||pending.length||procBusy){ setTimeout(autoFire,400); return; }
+  const dt=performance.now()-autoArmT;
+  if(dt<AUTO_QUIET){ setTimeout(autoFire,AUTO_QUIET-dt+50); return; }
+  if(!coverageComplete()){ autoArmT=0; return; }   // paranoia; coverage only grows
+  autoFired=true;
+  if(!AUTO_ON()){ log("auto-save: WOULD fire now (bench log-only)"); return; }
+  log("auto-save: firing");
+  $("stop").click();
 }
 // The miss gallery. Bench: shows under the score. Perform summary: the node
 // is moved into #pwrap so it paints over the black skin.

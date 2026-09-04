@@ -5095,6 +5095,7 @@ window.addEventListener("message", e => {
         rtnReset();
       }
     }
+    if (d.auto && lkDealLast && lkDealLast.ok) lkDealLast.msg = "AUTO " + lkDealLast.msg;
     if (!lkDealContJustRan) lkDealSeqSave(seg);   // fresh capture: this deal IS the dealt order
     lkPeekClear();
     lkDealLeft = null; lkCamCard = null;
