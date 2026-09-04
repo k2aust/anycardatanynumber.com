@@ -4022,6 +4022,7 @@ function lkCribSectionsBuild(){
     try{ localStorage.setItem("lkCrib_" + which, on ? "1" : "0"); }catch(e){}
     if ($("lkCrib").classList.contains("show")) lkCribRefit();
   };
+  window.lkCribSet = set;   // the auto cut-card chain sets the post-cut layout
   $("lkCribTogPad").onclick = () => set("pad", $("lkCrib").classList.contains("nopad"));
   $("lkCribTogCam").onclick = () => set("cam", $("lkCrib").classList.contains("nocam"));
   $("lkCribTogCards").onclick = () => set("cards", $("lkCrib").classList.contains("nocards"));
@@ -4822,6 +4823,7 @@ function lkPokerOutHTML(){
                  glimpse the two-pile routine was designed around: cut casually,
                  glimpse the pile you hand over, and the app knows the depth
                  without anyone counting. */
+let lkAutoCut = false, lkAutoCutTm = 0;   // save -> cut-card chain (Kevin 2026-08-30)
 let lkPeekKind = "bottom";
 let lkPeekMode = "off";        // off | looking | done
 let lkPeekBottom = null, lkPeekTop = null, lkPeekMsg = null;
@@ -4887,9 +4889,20 @@ function lkPeekTick(card){
   lkPeekMode = "done";
   lkPeekStop();
   lkCamCard = blind ? null : r.top;    // covert readout: day = value, weather = suit, same as the old cut-glimpse
+  if (lkAutoCut){
+    // chained from a save: the cut is placed, so the working layout is just
+    // the numpad and the stack — camera hidden, stack view (with the gold cut
+    // marker) in place of the crib grid.
+    lkAutoCut = false;
+    if (cut && window.lkCribSet){
+      lkCribSet("cam", false); lkCribSet("pad", true); lkCribSet("cards", true);
+      lkCribView(true, true);
+    }
+  }
   lkRenderDate(); lkCribCamUpdate(); lkCribStackUpdate();
 }
 function lkPeekToggle(kind){
+  lkAutoCut = false;   // manual entry; the chain re-marks itself after calling
   const want = kind === "cutcard" ? "cutcard" : "bottom";
   if (lkPeekMode === "looking"){                     // tapping the other one switches modes rather than stopping
     const same = lkPeekKind === want;
@@ -4906,6 +4919,7 @@ function lkPeekToggle(kind){
   lkCribCamUpdate();
 }
 function lkDealToggle(cont){
+  lkAutoCut = false; clearTimeout(lkAutoCutTm);   // a new capture cancels the cut-card chain
   cont = cont === true;   // the corner tap passes its MouseEvent — never a continue
   if (lkDealState === "starting" || lkDealState === "reading"){
     lkCamDotSet("save");   // red the moment Stop is pressed — the drain takes seconds
@@ -5026,6 +5040,7 @@ window.addEventListener("message", e => {
       return;
     }
     const lkDealContJustRan = !!lkDealCont;
+    let stackLoaded = false;
     const whole = !lkDealCont && seg.length >= RTN_SEG_MAX && rtnSegs.length === 0;
     if (lkDealCont || whole || rtnSegs.length >= 2) rtnReset();   // choosing Continue is choosing not to do the 2-pile compose
     if (lkDealCont){
@@ -5034,6 +5049,7 @@ window.addEventListener("message", e => {
       lkDealCont = null;
       lkDealSeqSave([...new Set(all)]);
       rdUseCustomStack(r.stack48, r.missing, r.stack52);
+      stackLoaded = true;
       lkDealBadge = r.missing.length ? "✓-" + r.missing.length : "✓";
       lkDealLast = r.missing.length
         ? { ok: true, msg: "CONTINUED &amp; SAVED — " + r.read + " of " + r.n + " read &middot; move these to the top:",
@@ -5046,6 +5062,7 @@ window.addEventListener("message", e => {
       const r = lkDealCompose(seg, true);
       lkDealSeqSave(seg);
       rdUseCustomStack(r.stack48, r.missing, r.stack52);
+      stackLoaded = true;
       lkDealBadge = r.missing.length ? "✓-" + r.missing.length : "✓";
       lkDealLast = r.missing.length
         ? { ok: true, msg: "SAVED — " + r.read + " of 52 read &middot; move these to the top:", list: r.missing }
@@ -5054,6 +5071,7 @@ window.addEventListener("message", e => {
       if (d.saved){
         try{ const sv = JSON.parse(localStorage.getItem("rdCustomStack") || "null");
              if (sv) rdUseCustomStack(sv.stack, sv.flags, sv.stack52, sv.half); }catch(err){}
+        stackLoaded = true;
       }
       lkDealBadge = d.saved ? (d.partial ? "✓-" + d.partial : "✓") : "✗" + d.missing.length;
       // Plain-language verdict for the crib panel (the weather badge stays
@@ -5104,6 +5122,20 @@ window.addEventListener("message", e => {
     lkCamDotDone();   // red held for a beat = stopped + saved
     if (lkDealFr){ try{ lkDealFr.remove(); }catch(err){} lkDealFr = null; }  // camera off the moment we're done
     lkDealState = "done";
+    // AUTO CUT-CARD (Kevin 2026-08-30): a saved stack means the spectator cuts
+    // next, so the bottom peek starts itself. The 3.5s hold is load-bearing:
+    // gathering the dealt pile passes card faces over the camera, and every
+    // stack card is a valid peek target after a full save — the hold plus the
+    // fresh camera's own warmup keeps pickup noise out of the read. Any manual
+    // camera action (new deal, a peek button, poker) cancels the chain.
+    if (stackLoaded){
+      clearTimeout(lkAutoCutTm);
+      lkAutoCutTm = setTimeout(() => {
+        if (lkDealState !== "done" || lkPeekMode === "looking" || lkPokerCap) return;
+        lkPeekToggle("bottom");
+        if (lkPeekMode === "looking") lkAutoCut = true;   // toggle can refuse (something else owns the camera)
+      }, 3500);
+    }
   }
   else if (d.ev === "error"){ lkDealState = "error"; lkCamDotSet("err"); lkCribCamUpdate(); }
 });
@@ -5761,6 +5793,10 @@ window.__st = { stIngest, stAssemble, stRead, stStop, stShareLog, rdUseCustomSta
                         lkDealFr = document.createElement("iframe"); },
   lkPokerCapDone: seq => lkPokerCapDone(seq, seq.map(c => ({ card: c }))),
   lkPokerState: () => ({ hands: lkPokerHands, win: lkPokerWin, res: lkPokerRes, msg: lkPokerMsg }),
+  // save->cut chain: drive it without a camera or a real save
+  lkCribShow, lkCribPeekShow, lkDealSimDone: () => { lkDealState = "done"; },
+  lkAutoCutArm: () => { lkAutoCut = true; },
+  lkAutoCutState: () => ({ auto: lkAutoCut }),
   lkPeekResult: () => ({ mode: lkPeekMode, bottom: lkPeekBottom, top: lkPeekTop, msg: lkPeekMsg,
                          stack: RD_SCHEMES[rdScheme].stack, full: RD_SCHEMES[rdScheme].full }),
   rdGroups, rdSuit, rdResolve, acUnavailRange, rdDeceptiveOrder, setScheme: n => rdSetScheme(n),
