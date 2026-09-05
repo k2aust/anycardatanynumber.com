@@ -1900,6 +1900,40 @@ const MV=(new URLSearchParams(location.search).get("model")||"v42").replace(/[^a
     log("BENCH page-v60 (model "+MV+", embed mode + perform video kept live under the overlay) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
+
+// SWEEP MODE (2026-09-04): replay a whole clip library unattended and build
+// the venue leaderboard. Seed localStorage.sweepQueue with an array of clip
+// names, then open dealbench.html?replay=<first>.mp4&sweep=1[&model=vNN].
+// Each page scores its clip into localStorage.sweepResults and navigates to
+// the next; a clip that never starts or never finishes is recorded as
+// TIMEOUT so one bad file cannot stall the night's run.
+(()=>{
+  const q=new URLSearchParams(location.search);
+  if(q.get("sweep")!=="1") return;
+  const clip=(q.get("replay")||"").replace(".mp4","");
+  const load=k=>{ try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } };
+  const res=load("sweepResults")||{};
+  const done=(txt)=>{
+    res[clip]={score:txt, model:MV, at:Date.now()};
+    localStorage.setItem("sweepResults", JSON.stringify(res));
+    const queue=load("sweepQueue")||[];
+    if(!queue.length){ localStorage.removeItem("sweepQueue"); document.title="SWEEP DONE"; return; }
+    const c=queue.shift();
+    localStorage.setItem("sweepQueue", JSON.stringify(queue));
+    location.href=`dealbench.html?replay=${encodeURIComponent(c)}.mp4&model=${MV}&sweep=1`;
+  };
+  const t0=Date.now();
+  const boot=setInterval(()=>{
+    if(typeof sess!=="undefined"&&sess){
+      clearInterval(boot); $("start").click();
+      const watch=setInterval(()=>{
+        const s=$("score").textContent;
+        if(/SCORE/.test(s)){ clearInterval(watch); done(s); }
+        else if(Date.now()-t0>360000){ clearInterval(watch); done("TIMEOUT"); }
+      },2000);
+    } else if(Date.now()-t0>90000){ clearInterval(boot); done("TIMEOUT (no model)"); }
+  },500);
+})();
 </script>
 </body>
 </html>
