@@ -2435,6 +2435,7 @@ function renderSettings() {
     + '<button id="setOpenLkCrib" class="randombtn" style="margin:0 0 12px">&#128274; Lockscreen crib (covert peek)</button>'
     + '<button id="setOpenLie" class="randombtn" style="margin:0 0 12px">&#129317; Lie detector (any stack)</button>'
     + '<button id="setOpenDealBench" class="randombtn" style="margin:0 0 12px">&#9210; Deal bench (record a session, v30)</button>'
+    + '<button id="setOpenStorm" class="randombtn" style="margin:0 0 12px">&#9928;&#65039; Perfect Storm (blank-deck calculator)</button>'
     + (localStorage.getItem("rdMagTrusted") === "1" ? '<button id="setForgetPw" class="randombtn" style="margin:0 0 12px">&#128274; Require password again on this device</button>' : '')
     + '<div class="set-group"><div class="set-label">Card choice</div><div class="seg" id="segSel">'
     +   '<button class="segopt' + (selectMode ? '' : ' active') + '" data-v="0">Removing<small>eliminate to one</small></button>'
@@ -2464,6 +2465,7 @@ function renderSettings() {
   { const ba = $("setOpenAcaan"); if (ba) ba.addEventListener("click", () => { $("settings").style.display = "none"; if (acaanCribOpen) acaanCribOpen(); }); }
   { const bl = $("setOpenLkCrib"); if (bl) bl.addEventListener("click", () => { $("settings").style.display = "none"; if (lkCribOpen) lkCribOpen(); }); }
   { const bd = $("setOpenLie"); if (bd) bd.addEventListener("click", () => { $("settings").style.display = "none"; if (lieOpen) lieOpen(); }); }
+  { const bs = $("setOpenStorm"); if (bs) bs.addEventListener("click", () => { location.href = "perfect-storm.html"; }); }   // separate page; shares the magician password + rdMagTrusted
   // The perform-mode deal reader ("beta") is gone — live reading now happens on
   // the lockscreen, so the only reason left to open the bench is recording.
   // Full bench (no perform skin): the Rec button lives here.

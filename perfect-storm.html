@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0e0f13">
+<meta name="robots" content="noindex, nofollow">
+<title>Perfect Storm</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #181a21; --panel2: #1f222c; --line: #2b2f3b;
+    --text: #e8e6e0; --dim: #8b8fa0; --gold: #e3b341; --red: #e05d5d; --green: #57c98a; --amber: #d98b3a;
+    --radius: 14px; color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { max-width: 480px; margin: 0 auto; padding: 10px 12px 40px; min-height: 100vh; min-height: 100dvh; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 12px; min-height: 40px; }
+  header h1 { margin: 0; font-size: clamp(15px, 5.2vw, 22px); letter-spacing: 1px; color: var(--dim); font-weight: 600; text-transform: uppercase; }
+  header a.back { color: var(--dim); text-decoration: none; font-size: 14px; font-weight: 600; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .sub { text-align: center; color: var(--dim); font-size: 13px; line-height: 1.5; margin: 0 0 12px; }
+  .sub b { color: var(--text); }
+  .panel { background: var(--panel); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+  .panel h2 { margin: 0 0 10px; font-size: 12px; color: var(--dim); letter-spacing: 2px; text-transform: uppercase; }
+  .red { color: var(--red); }
+  .gold { color: var(--gold); }
+  p { margin: 0; line-height: 1.5; }
+  .small { font-size: 13px; color: var(--dim); line-height: 1.55; }
+  .small b { color: var(--text); }
+
+  /* gate */
+  #gate { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; }
+  #gate[hidden] { display: none; }
+  #gate .box { background: var(--panel2); border: 1px solid var(--line); border-radius: 16px; padding: 22px; width: min(86vw, 320px); box-shadow: 0 14px 44px rgba(0,0,0,.6); }
+  #gate .title { font-weight: 700; font-size: 17px; text-align: center; color: var(--gold); margin-bottom: 14px; }
+  #gate input[type=password] { width: 100%; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid var(--line); background: #000; color: #fff; text-align: center; }
+  #gate .err { color: var(--red); font-size: 13px; min-height: 18px; text-align: center; margin-top: 8px; }
+  #gate .remember { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 10px; font-size: 13px; color: var(--dim); cursor: pointer; }
+  #gate .remember input { width: 16px; height: 16px; accent-color: var(--gold); }
+  #gate .row { display: flex; gap: 10px; margin-top: 12px; }
+  #gate .row button, #gate .row a { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: #fff; font-weight: 600; font-size: 15px; text-align: center; text-decoration: none; cursor: pointer; }
+  #gate .row button.ok { background: var(--gold); color: #000; border-color: var(--gold); }
+
+  /* number entry */
+  .numrow { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 2px 0 10px; }
+  .numrow button { width: 54px; height: 54px; background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 12px; font-size: 26px; font-weight: 600; cursor: pointer; }
+  .numrow button:active { background: var(--gold); color: #000; }
+  #num { width: 120px; height: 62px; text-align: center; font-size: 36px; font-weight: 800; letter-spacing: 2px; background: #000; color: var(--gold); border: 1px solid var(--gold); border-radius: 12px; outline: none; -moz-appearance: textfield; }
+  #num::-webkit-outer-spin-button, #num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .status { text-align: center; font-size: 15px; line-height: 1.5; margin-bottom: 8px; }
+  .status b { color: var(--gold); }
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+  .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 4px; text-align: center; }
+  .chip .lbl { font-size: 10px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+  .chip .val { font-size: 13px; font-weight: 700; margin-top: 2px; color: var(--dim); }
+  .chip.on { border-color: var(--gold); } .chip.on .val { color: var(--gold); }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); margin: 0 0 10px; cursor: pointer; }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--gold); }
+
+  /* grid */
+  table.grid { width: 100%; border-collapse: separate; border-spacing: 4px; table-layout: fixed; font-variant-numeric: tabular-nums; }
+  table.grid th { font-size: 20px; font-weight: 600; padding: 2px 0; color: var(--text); }
+  table.grid th.v { width: 13%; font-size: 17px; background: var(--panel2); border-radius: 8px; }
+  table.grid td { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; text-align: center; height: 50px; cursor: pointer; font-size: 16px; line-height: 1.2; user-select: none; -webkit-user-select: none; }
+  table.grid td .pos { font-weight: 700; display: block; }
+  table.grid td .q { font-size: 12px; color: var(--dim); display: block; }
+  table.grid td.alt { border-style: dashed; }
+  table.grid td.off { color: #3c404d; background: #13151b; border-color: #1c1f28; cursor: default; }
+  table.grid td.off .q { color: #3c404d; }
+  table.grid td.sel { background: var(--gold); color: #000 !important; border-color: var(--gold); }
+  table.grid td.sel .q { color: #4a3a0c; }
+  .legend { font-size: 12px; color: var(--dim); line-height: 1.5; margin-top: 8px; }
+  .legend b { color: var(--text); }
+
+  /* instruction hero */
+  .hero { background: var(--panel); border: 1px solid var(--gold); border-radius: var(--radius); padding: 16px; margin: 12px 0 0; }
+  .hero.empty { border-color: var(--line); color: var(--dim); text-align: center; font-size: 14px; }
+  .hero .method { color: var(--gold); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; }
+  .hero .big { font-size: 22px; font-weight: 700; line-height: 1.3; margin: 8px 0 6px; }
+  .hero .big .red { color: var(--red); }
+  .steps { margin: 10px 0 4px; padding: 0; list-style: none; counter-reset: st; }
+  .steps li { counter-increment: st; display: flex; gap: 12px; font-size: 17px; font-weight: 600; line-height: 1.35; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li span { flex: 1; }
+  .steps li::before { content: counter(st); color: var(--gold); font-weight: 800; min-width: 18px; }
+  .hero .ctx { color: var(--dim); font-size: 13px; line-height: 1.45; margin-top: 6px; }
+  .hero .ctx b { color: var(--text); }
+  .hero .alts { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--dim); line-height: 1.6; }
+  .hero .alts b { color: var(--text); }
+
+  /* reference */
+  .rule { font-size: 15px; line-height: 1.6; }
+  .rule b { color: var(--text); }
+  .rule .eq { font-size: 19px; font-weight: 700; display: block; margin: 3px 0; }
+  table.pos { width: 100%; border-collapse: separate; border-spacing: 4px; table-layout: fixed; text-align: center; font-variant-numeric: tabular-nums; }
+  table.pos th { font-size: 15px; font-weight: 600; padding: 4px 0; }
+  table.pos tbody th { background: var(--panel2); border-radius: 8px; font-size: 16px; width: 18%; }
+  table.pos td { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; font-size: 19px; font-weight: 700; padding: 6px 0; }
+  table.ladder { width: 100%; border-collapse: separate; border-spacing: 4px; font-size: 14px; }
+  table.ladder th { width: 28%; text-align: center; background: var(--panel2); border-radius: 8px; font-weight: 700; padding: 8px 4px; }
+  table.ladder td { background: var(--panel2); border-radius: 8px; padding: 8px 10px; }
+  table.ladder tr.full th, table.ladder tr.full td { background: var(--gold); color: #000; }
+  table.ladder tr.redir th, table.ladder tr.redir td { color: var(--dim); }
+  table.ranges { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  table.ranges th, table.ranges td { border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: left; vertical-align: top; }
+  table.ranges th { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  .stack { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; font-variant-numeric: tabular-nums; font-size: 14px; line-height: 1.75; }
+  .stack .col div { display: flex; border-bottom: 1px solid var(--line); }
+  .stack .col .n { color: var(--dim); width: 2.4em; }
+  .stack .col .c { flex: 1; text-align: center; }
+  .stack .col .bl { color: #4a4f5e; flex: 1; text-align: center; }
+  details { background: var(--panel); border-radius: var(--radius); margin-bottom: 12px; }
+  summary { cursor: pointer; padding: 12px; font-size: 12px; color: var(--dim); letter-spacing: 2px; text-transform: uppercase; list-style: none; font-weight: 600; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '+'; float: right; font-size: 15px; line-height: 1; color: var(--gold); }
+  details[open] summary::after { content: '–'; }
+  details .inner { padding: 0 12px 12px; }
+  .dl { display: flex; gap: 8px; margin-bottom: 12px; }
+  .dl a { flex: 1; display: block; text-align: center; background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 12px 6px; font-size: 14px; font-weight: 600; text-decoration: none; }
+  .forget { text-align: center; margin-top: 8px; }
+  .forget a { font-size: 12px; color: var(--dim); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<div id="gate" hidden>
+  <form class="box" id="gateForm" autocomplete="off">
+    <div class="title">Perfect Storm</div>
+    <input type="password" id="pw" placeholder="Password" autocomplete="current-password" aria-label="Password">
+    <div class="err" id="gateErr"></div>
+    <label class="remember"><input type="checkbox" id="remember" checked> Remember on this device</label>
+    <div class="row"><a href="index.html">Back</a><button type="submit" class="ok" id="gateOk">Unlock</button></div>
+  </form>
+</div>
+
+<header>
+  <a class="back" href="index.html">&larr; ACAAN</a>
+  <h1>Perfect Storm</h1>
+  <span style="width:68px"></span>
+</header>
+
+<div id="content" hidden>
+  <p class="sub">J 2 3 4 Q K 7 8 9 10 in every suit · no aces, 5s or 6s<br>Black cards from the <b>TOP</b>, red from the <b>FACE</b> · 48 pairs, 9 blanks each end</p>
+
+  <!-- Calculator -->
+  <div class="panel">
+    <h2>Named number</h2>
+    <div class="numrow">
+      <button type="button" id="dec" aria-label="Lower">−</button>
+      <input id="num" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="52" value="24" aria-label="Named number">
+      <button type="button" id="inc" aria-label="Higher">+</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="chips" id="chips"></div>
+    <label class="toggle"><input type="checkbox" id="disp"> Include the displacement deal (level 3, marked †)</label>
+    <table class="grid" id="grid" aria-label="Every card at this number"></table>
+    <div class="legend"><b>T</b>op or <b>F</b>ace, the card's position, then <b>q</b> = position − number: plus = that many quads, minus = split that many blanks. Dashed border = uses the card's other copy, not the taught rule. Dark = not reachable. Tap a card for the instruction.</div>
+    <div class="hero empty" id="instr">Tap a card.</div>
+  </div>
+
+  <!-- Rules -->
+  <div class="panel">
+    <h2>How to calculate</h2>
+    <div class="rule">
+      <b>Jack = 1 · Queen = 5 · King = 6</b> — number cards are themselves.
+      <span class="eq"><span class="red">♦</span>♣ &nbsp;=&nbsp; value + 20</span>
+      <span class="eq"><span class="red">♥</span>♠ &nbsp;=&nbsp; value + 10 &nbsp;<small style="font-weight:500;color:var(--dim)">(number 20 or under)</small></span>
+      <span class="eq"><span class="red">♥</span>♠ &nbsp;=&nbsp; value + 30 &nbsp;<small style="font-weight:500;color:var(--dim)">(number 21 or over)</small></span>
+      <span class="eq"><span class="gold">q</span> &nbsp;=&nbsp; card position &nbsp;−&nbsp; named number</span>
+      <b>positive</b> → that many quads, rest single pairs · <b>negative</b> → all single, then split that many blanks · <b>zero</b> → straight through
+    </div>
+    <p class="small" style="margin-top:10px"><b>Level 1 — you name the suit: add the tens.</b> Teens +10, twenties +20, thirties +30. +10 and +30 are hearts / spades, +20 is diamonds / clubs. Any colour and any value 11–40, never more than 10 quads.<br><b>Level 2 — they name the suit:</b> the rule above. The whole card is free 16–30.</p>
+  </div>
+
+  <!-- Positions -->
+  <div class="panel">
+    <h2>Card positions</h2>
+    <table class="pos">
+      <thead><tr><th></th><th><span class="red">♥</span>♠ +10</th><th><span class="red">♦</span>♣ +20</th><th><span class="red">♥</span>♠ +30</th></tr></thead>
+      <tbody id="posBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Range -->
+  <div class="panel">
+    <h2>Range</h2>
+    <p class="rule" style="margin-bottom:8px"><b>Any number 11–40.</b> <b>16–30</b> no suit force. <b>11–15</b> and <b>31–40</b> force hearts / spades.</p>
+    <table class="ladder">
+      <tr class="redir"><th>1–10</th><td>redirect</td></tr>
+      <tr><th>11–19</th><td><b>+10</b> · hearts / spades</td></tr>
+      <tr class="full"><th>20–29</th><td><b>+20</b> · diamonds / clubs</td></tr>
+      <tr><th>30–40</th><td><b>+30</b> · hearts / spades</td></tr>
+      <tr class="redir"><th>41+</th><td>redirect</td></tr>
+      <tr><th>free suit</th><td><b>16–30</b> any card · pictures 14–30 · low 13–31 · high 16–36</td></tr>
+    </table>
+    <p class="small" style="margin-top:10px">Ask for the group before the card — picture or number, then high (7 8 9 10) or low (2 3 4) — and you can offer a free suit across that group's wider window. Outside it, name a heart or spade yourself; one is always available 11–40.</p>
+  </div>
+
+  <div class="dl">
+    <a href="perfect-storm/PERFECT-STORM-PRINTOUT.pdf" target="_blank" rel="noopener">&#128196; One-page printout</a>
+    <a href="perfect-storm/PERFECT-STORM-CRIB.pdf" target="_blank" rel="noopener">&#127183; Pocket crib</a>
+  </div>
+
+  <details>
+    <summary>The deck</summary>
+    <div class="inner">
+      <p class="small" style="margin-bottom:10px">Top first. Every printed pair is a <b>red card over a black card</b>, faces inward. 48 pairs, 96 thin, 60 printed faces; only pairs 1–9 and 40–48 are ever split. Black reads J 2 3 4 Q K 7 8 9 10 straight down (spades, clubs, spades); red is the same run reversed on top (hearts, diamonds, hearts). A black card's number is its pair + 1; a red card's is 50 − its pair.</p>
+      <div class="stack" id="stack"></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Level 3 — displacement deal</summary>
+    <div class="inner">
+      <p class="small">Pairs are roughed in twos. A quad turnover, then dealing one stuck pair, exposes the <em>first</em> pair's upper card — so an upper card can be reached from the far end when its pair is the first of its roughed group. On this deck that is every card whose number is odd (slots J, 3, Q, 7, 9):</p>
+      <p class="rule" style="margin:10px 0"><b>Any card with an odd number can also be produced from the other end, at 52 − its number.</b></p>
+      <p class="small">Red cards displace from the top, black from the face. It mostly widens the picture group: free suit 14–30 becomes 14–35. Turn on the toggle in the calculator to include these (marked †).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Every card's range</summary>
+    <div class="inner scroll">
+      <p class="small" style="margin-bottom:8px">Spades equal hearts and clubs equal diamonds. † is the displacement deal. A position reaches down to position − half the pairs above it (quads) and up to position + 9 (blank splits), capped at 46.</p>
+      <table class="ranges" id="ranges"></table>
+    </div>
+  </details>
+
+  <div class="forget"><a href="#" id="forget">Require the password again on this device</a></div>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+
+  /* ── Gate: same password, salt and trusted-device flag as the ACAAN magician mode ── */
+  const MAG_PW_HASH = "c38c5085dde2cc581321396203410b43602214b3ba9502cc2b4e2bf536108236";
+  const TRUST_KEY = "rdMagTrusted";
+  let unlocked = false;
+  function unlock() { unlocked = true; $("gate").hidden = true; $("content").hidden = false; render(); }
+  async function digest(s) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("anycard::" + s));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  async function tryPw() {
+    const err = $("gateErr");
+    if (!(window.crypto && crypto.subtle)) { err.textContent = "Needs a secure (https) connection"; return; }
+    if (await digest($("pw").value) === MAG_PW_HASH) {
+      try { if ($("remember").checked) localStorage.setItem(TRUST_KEY, "1"); else localStorage.removeItem(TRUST_KEY); } catch (e) {}
+      unlock();
+    } else { err.textContent = "Incorrect password"; $("pw").value = ""; $("pw").focus(); }
+  }
+  $("gateForm").addEventListener("submit", e => { e.preventDefault(); tryPw(); });
+  $("pw").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); tryPw(); } });
+  $("forget").addEventListener("click", e => { e.preventDefault(); try { localStorage.removeItem(TRUST_KEY); } catch (x) {} location.reload(); });
+
+  /* ── The deck model (96 thin: 48 pairs, blanks 1–9 and 40–48, printed 10–39 red upper / black lower) ── */
+  const VALS = ["J", "2", "3", "4", "Q", "K", "7", "8", "9", "10"];
+  const SUITS = [["S", "♠", false], ["H", "♥", true], ["C", "♣", false], ["D", "♦", true]];
+  const SYM = { S: "♠", H: "♥", C: "♣", D: "♦" }, RED = { S: false, H: true, C: false, D: true };
+  const BLANKS = 9, CAP = 46;
+  const POS = {}, STACK = [];
+  [[10, "S", "H"], [20, "C", "D"], [30, "S", "H"]].forEach(([start, bs, rs]) => {
+    for (let i = 0; i < 10; i++) {
+      const p = start + i, black = VALS[i] + bs, red = VALS[9 - i] + rs;
+      (POS[black] = POS[black] || []).push({ M: p + 1, end: "top" });   // black lower card: number = pair + 1, dealt from the top
+      (POS[red] = POS[red] || []).push({ M: 50 - p, end: "face" });     // red upper card: number = 50 − pair, dealt from the face
+      STACK[p] = { red, black };
+    }
+  });
+  // a card at position M: down to M − floor((M−2)/2) with quads, up to M + 9 with blank splits, capped at 46
+  const win = M => [M - Math.floor((M - 2) / 2), Math.min(M + BLANKS, CAP)];
+  function options(card, disp) {
+    const out = [];
+    for (const o of POS[card]) {
+      const [lo, hi] = win(o.M);
+      out.push({ M: o.M, end: o.end, lo, hi, disp: false });
+      if (disp && o.M % 2 === 1) {                     // odd slots J 3 Q 7 9 also reachable from the other end at 52 − M
+        const M2 = 52 - o.M, [l2, h2] = win(M2);
+        out.push({ M: M2, end: o.end === "top" ? "face" : "top", lo: l2, hi: h2, disp: true });
+      }
+    }
+    return out;
+  }
+  const value = c => c.slice(0, -1), suit = c => c.slice(-1);
+  const base = c => VALS.indexOf(value(c)) + 1;
+  const taughtM = (c, n) => (suit(c) === "C" || suit(c) === "D") ? base(c) + 20 : (n <= 20 ? base(c) + 10 : base(c) + 30);
+  function plans(card, n, disp) {
+    const tm = taughtM(card, n);
+    return options(card, disp)
+      .filter(o => n >= o.lo && n <= o.hi)
+      .map(o => ({ ...o, d: o.M - n, taught: o.M === tm && !o.disp }))
+      .sort((a, b) => (b.taught - a.taught) || (a.disp - b.disp) || (Math.abs(a.d) - Math.abs(b.d)));
+  }
+  const label = c => `<span class="${RED[suit(c)] ? "red" : ""}">${value(c)}${SYM[suit(c)]}</span>`;
+  const sq = d => (d > 0 ? "+" : d < 0 ? "−" : "") + Math.abs(d);
+
+  /* ── Calculator ── */
+  let n = 24, sel = null, disp = false;
+  const clamp = v => Math.max(1, Math.min(52, v | 0));
+  function setN(v) { n = clamp(v); $("num").value = n; render(); }
+  $("num").addEventListener("input", () => { const v = parseInt($("num").value, 10); if (!isNaN(v)) { n = clamp(v); render(); } });
+  $("num").addEventListener("blur", () => setN(parseInt($("num").value, 10) || n));
+  $("num").addEventListener("focus", () => $("num").select());
+  $("dec").addEventListener("click", () => setN(n - 1));
+  $("inc").addEventListener("click", () => setN(n + 1));
+  $("disp").addEventListener("change", e => { disp = e.target.checked; render(); });
+  const GROUPS = [["Pictures", ["J", "Q", "K"]], ["Low 2 3 4", ["2", "3", "4"]], ["High 7–10", ["7", "8", "9", "10"]]];
+  const groupFree = vals => vals.every(v => SUITS.every(([s]) => plans(v + s, n, disp).length > 0));
+
+  function render() {
+    if (!unlocked) return;
+    let st;
+    if (n < 11) st = `<b>${n}</b> — below 11: <b>redirect</b>`;
+    else if (n > 40) st = `<b>${n}</b> — above 40: <b>redirect</b>`;
+    else {
+      const add = n < 20 ? 10 : n < 30 ? 20 : 30;
+      const who = add === 20 ? '<span class="red">♦</span>♣' : '<span class="red">♥</span>♠';
+      st = `<b>+${add}</b> ${who} &nbsp;·&nbsp; ` + ((n >= 16 && n <= 30) ? `<b>whole card free</b>` : `force <span class="red">♥</span>♠ outside a free group`);
+    }
+    $("status").innerHTML = st;
+    $("chips").innerHTML = GROUPS.map(([name, vals]) => { const f = groupFree(vals); return `<div class="chip${f ? " on" : ""}"><div class="lbl">${name}</div><div class="val">${f ? "free suit" : "force suit"}</div></div>`; }).join("");
+    let h = `<tr><th class="v"></th>${SUITS.map(([s, sym, red]) => `<th class="${red ? "red" : ""}">${sym}</th>`).join("")}</tr>`;
+    for (const v of VALS) {
+      h += `<tr><th class="v">${v}</th>`;
+      for (const [s] of SUITS) {
+        const card = v + s, best = plans(card, n, disp)[0];
+        const cls = [];
+        if (!best) cls.push("off"); else { if (!best.taught) cls.push("alt"); if (RED[s]) cls.push("red"); }
+        if (sel === card) cls.push("sel");
+        h += best
+          ? `<td class="${cls.join(" ")}" data-card="${card}"><span class="pos">${best.end === "top" ? "T" : "F"}${best.M}${best.disp ? "†" : ""}</span><span class="q">q ${sq(best.d)}</span></td>`
+          : `<td class="${cls.join(" ")}" data-card="${card}"><span class="pos">—</span><span class="q">&nbsp;</span></td>`;
+      }
+      h += "</tr>";
+    }
+    $("grid").innerHTML = h;
+    renderInstr();
+  }
+  $("grid").addEventListener("click", e => {
+    const td = e.target.closest("td[data-card]");
+    if (!td) return;
+    sel = td.dataset.card; render();
+    $("instr").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  function steps(p) {
+    const A = p.M - 2, maxQ = Math.floor(A / 2), out = [];
+    out.push(p.end === "top" ? "Deal from the <b>TOP</b>" : "Turn the deck over — deal from the <b>FACE</b>");
+    if (p.disp) out.push("Turn over a <b>quad</b>, deal one stuck pair, then <b>split the next</b> — the card comes from the pair above (†)");
+    if (p.d > 0) out.push(`<b>${p.d} quad${p.d === 1 ? "" : "s"}</b> above the card, all other pairs single — never split a printed pair`);
+    else if (p.d < 0) out.push(`Every pair single, and <b>split ${-p.d} of the first ${BLANKS} blanks</b>`);
+    else out.push("<b>Straight through</b> — every pair single");
+    return { out, ctx: `Position ${p.M}${p.disp ? "†" : ""} · q = ${p.M} − ${n} = <b>${sq(p.d)}</b> · ${A} pairs above, up to ${maxQ} quads` };
+  }
+  function renderInstr() {
+    const box = $("instr");
+    if (!sel) { box.className = "hero empty"; box.textContent = "Tap a card."; return; }
+    const ps = plans(sel, n, disp);
+    box.className = "hero";
+    if (!ps.length) {
+      const all = options(sel, true).map(o => `${o.end} ${o.M}${o.disp ? "†" : ""}: ${o.lo}–${o.hi}`).join(" · ");
+      box.innerHTML = `<div class="method">Not reachable</div><div class="big">${label(sel)} at ${n}</div><div class="ctx">Redirect the number or steer the suit. This card's windows: ${all}.</div>`;
+      return;
+    }
+    const p = ps[0], s = steps(p);
+    const alts = ps.slice(1).map(o => `<div><b>${o.end === "top" ? "Top" : "Face"} ${o.M}${o.disp ? "†" : ""}</b> · q ${sq(o.d)} — ${o.d > 0 ? o.d + " quads" : o.d < 0 ? "split " + (-o.d) : "straight through"}</div>`).join("");
+    box.innerHTML =
+      `<div class="method">${p.taught ? "Taught rule" : "Other copy"}${p.disp ? " · displacement" : ""}</div>` +
+      `<div class="big">${label(sel)} at ${n}</div>` +
+      `<ol class="steps">${s.out.map(x => `<li><span>${x}</span></li>`).join("")}</ol>` +
+      `<div class="ctx">${s.ctx}</div>` +
+      (p.taught ? "" : `<div class="ctx" style="color:var(--amber)">The taught rule (+${taughtM(sel, n) - base(sel)} → ${taughtM(sel, n)}) doesn't reach ${n}; this uses the card's other copy.</div>`) +
+      (alts ? `<div class="alts"><b>Also works:</b>${alts}</div>` : "");
+  }
+
+  /* ── Reference tables, generated from the same model ── */
+  $("posBody").innerHTML = VALS.map((v, i) => `<tr><th>${v}</th><td>${i + 11}</td><td>${i + 21}</td><td>${i + 31}</td></tr>`).join("");
+  let sh = "";
+  for (const [a, b] of [[1, 24], [25, 48]]) {
+    sh += '<div class="col">';
+    for (let p = a; p <= b; p++) {
+      const s = STACK[p];
+      sh += `<div><span class="n">${p}</span>${s ? `<span class="c">${label(s.red)} / ${label(s.black)}</span>` : `<span class="bl">blank</span>`}</div>`;
+    }
+    sh += "</div>";
+  }
+  $("stack").innerHTML = sh;
+  let rh = "<tr><th>card</th><th>positions: reach</th><th>plain</th><th>with †</th></tr>";
+  const span = os => { let lo = Infinity, hi = -Infinity; os.forEach(o => { lo = Math.min(lo, o.lo); hi = Math.max(hi, o.hi); }); return `${lo}–${hi}`; };
+  for (const v of VALS) for (const [bs, rs] of [["S", "H"], ["C", "D"]]) {
+    const opts = options(v + bs, true);
+    rh += `<tr><td>${label(v + bs)} ${label(v + rs)}</td><td>${opts.map(o => `${o.M}${o.disp ? "†" : ""}: ${o.lo}–${o.hi}`).join(" · ")}</td><td>${span(opts.filter(o => !o.disp))}</td><td>${span(opts)}</td></tr>`;
+  }
+  $("ranges").innerHTML = rh;
+
+  // trusted device (same flag the ACAAN magician mode sets) opens straight in; otherwise show the gate.
+  // Runs last so every `let` above is initialised before render() is called.
+  let trusted = false;
+  try { trusted = localStorage.getItem(TRUST_KEY) === "1"; } catch (e) {}
+  if (trusted) unlock(); else { $("gate").hidden = false; setTimeout(() => $("pw").focus(), 60); }
+})();
+</script>
+</body>
+</html>
