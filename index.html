@@ -2450,14 +2450,23 @@ function renderSettings() {
     +   '<button class="segopt' + (cardFirst ? ' active' : '') + '" data-v="1">Card first<small>free card, steer the number</small></button>'
     + '</div></div>'
     + '<div class="set-group"><div class="set-label">Stack</div><div class="seg" id="segStack">'
-    +   [["highlow","Combined","optimized"],["majorminor","Major\u2013Minor","memorable force"],["aronson","Aronson",""],["mnemonica","Mnemonica",""]]
+    +   [["highlow","Combined","optimized"],["majorminor","Major\u2013Minor","memorable force"],["aronson","Aronson",""],["mnemonica","Mnemonica",""],["storm","Perfect Storm","blank deck"]]
         .concat(localStorage.getItem("rdCustomStack") ? [["custom","Last read","live-read shuffle"]] : [])
         .map(([v,l,sm]) => '<button class="segopt' + (rdScheme === v ? ' active' : '') + '" data-v="' + v + '">' + l + (sm ? '<small>' + sm + '</small>' : '') + '</button>').join('')
     + '</div><div class="hint" id="stackThin"></div></div>'
+    + (rdScheme === "storm" ? ('<div class="set-group"><div class="set-label">Perfect Storm &mdash; setup</div><div class="hint">Blank deck, 96 thin / 48 pairs: pairs <b>1&ndash;9</b> and <b>40&ndash;48</b> blank, pairs <b>10&ndash;39</b> printed (red card over black, faces in). The spectator names any number <b>11&ndash;40</b>, then red/black, number/picture, high (7 8 9 10) / low (2 3 4), then the value; the suit is forced unless it is free. <b>Black cards deal from the top, red from the face.</b> The reveal page shows FACE DOWN (top) or FACE UP (face); <b>hold the title</b> for the position and q.</div></div>'
+    + '<div class="set-group"><details class="instr"><summary class="set-label">Perfect Storm &mdash; rules + stack</summary><div class="instr-body">'
+    + '<p><b>J = 1 &middot; Q = 5 &middot; K = 6</b>, number cards are themselves. <b>&diams;&clubs; = value + 20</b>. <b>&hearts;&spades; = value + 10</b> (number 20 or under) <b>or value + 30</b> (21 or over). <b>q = position &minus; number</b>: positive = that many quads (two stuck pairs dealt as one), negative = split that many of the first 9 blanks, zero = straight through.</p>'
+    + '<p><b>Range:</b> any number 11&ndash;40. Whole card free 16&ndash;30; pictures free 14&ndash;30, low 13&ndash;31, high 16&ndash;36; outside those a heart or spade is always available (the app forces it).</p>'
+    + '<p class="instr-h">Stack &mdash; pairs 10&ndash;39, top first (red upper / black lower)</p>'
+    + '<div style="columns:2;column-gap:14px;font-size:13px;line-height:1.7;font-variant-numeric:tabular-nums"><div><span style="color:var(--dim);display:inline-block;width:2.2em">10</span><span style="color:var(--red)">10&#9829;</span> / J&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">11</span><span style="color:var(--red)">9&#9829;</span> / 2&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">12</span><span style="color:var(--red)">8&#9829;</span> / 3&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">13</span><span style="color:var(--red)">7&#9829;</span> / 4&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">14</span><span style="color:var(--red)">K&#9829;</span> / Q&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">15</span><span style="color:var(--red)">Q&#9829;</span> / K&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">16</span><span style="color:var(--red)">4&#9829;</span> / 7&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">17</span><span style="color:var(--red)">3&#9829;</span> / 8&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">18</span><span style="color:var(--red)">2&#9829;</span> / 9&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">19</span><span style="color:var(--red)">J&#9829;</span> / 10&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">20</span><span style="color:var(--red)">10&#9830;</span> / J&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">21</span><span style="color:var(--red)">9&#9830;</span> / 2&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">22</span><span style="color:var(--red)">8&#9830;</span> / 3&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">23</span><span style="color:var(--red)">7&#9830;</span> / 4&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">24</span><span style="color:var(--red)">K&#9830;</span> / Q&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">25</span><span style="color:var(--red)">Q&#9830;</span> / K&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">26</span><span style="color:var(--red)">4&#9830;</span> / 7&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">27</span><span style="color:var(--red)">3&#9830;</span> / 8&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">28</span><span style="color:var(--red)">2&#9830;</span> / 9&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">29</span><span style="color:var(--red)">J&#9830;</span> / 10&#9827;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">30</span><span style="color:var(--red)">10&#9829;</span> / J&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">31</span><span style="color:var(--red)">9&#9829;</span> / 2&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">32</span><span style="color:var(--red)">8&#9829;</span> / 3&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">33</span><span style="color:var(--red)">7&#9829;</span> / 4&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">34</span><span style="color:var(--red)">K&#9829;</span> / Q&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">35</span><span style="color:var(--red)">Q&#9829;</span> / K&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">36</span><span style="color:var(--red)">4&#9829;</span> / 7&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">37</span><span style="color:var(--red)">3&#9829;</span> / 8&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">38</span><span style="color:var(--red)">2&#9829;</span> / 9&#9824;</div><div><span style="color:var(--dim);display:inline-block;width:2.2em">39</span><span style="color:var(--red)">J&#9829;</span> / 10&#9824;</div></div>'
+    + '<p style="margin-top:10px">Full calculator, ranges and PDFs: the <b>Perfect Storm</b> button above.</p>'
+    + '</div></details></div>')
+      : (""
     + `<div class="set-group"><div class="set-label">Setup</div><div class="hint">The full 52-card stack is listed below. Set aside the <b>2 jokers</b> and the <b>4 aces</b> (highlighted) in two face-up piles, leaving the 48-card ACAAN stack &mdash; which is then cut into two even piles: <b>${sg[0]}&ndash;${sg[sgH-1]}</b> and <b>${sg[sgH]}&ndash;${sg[sg.length-1]}</b>.</div></div>`
     + instr
     + `<div class="set-group"><div class="set-label">Full stack &mdash; 52 cards (top &rarr; bottom)</div><div class="stackgrid">${fgrid}</div><div class="hint"><b>Remove the 4 highlighted aces before performing this ACAAN</b> (they're set aside as packets with the jokers).${rdScheme === "highlow" ? " The aces are placed here for an upcoming spelling mode." : ""}</div></div>`
-    + spellSection;
+    + spellSection));
   $("setExitMagician").addEventListener("click", () => setMagician(false));
   $("setOpenCam").addEventListener("click", () => { $("settings").style.display = "none"; if (camOpen) camOpen(); });
   $("setOpenSpell").addEventListener("click", () => { $("settings").style.display = "none"; spellOpen(); });
@@ -2489,7 +2498,8 @@ function renderSettings() {
       } else if (rdSetScheme) rdSetScheme(v);
       renderSettings(); });
     const th = $("stackThin");
-    if (th && window.__st) { try { th.innerHTML = "Thin numbers for this stack (pre-empt them aloud): <b>" +
+    if (th && rdScheme === "storm") th.innerHTML = "Range <b>11&ndash;40</b> &middot; whole card free <b>16&ndash;30</b> &middot; black top / red face";
+    else if (th && window.__st) { try { th.innerHTML = "Thin numbers for this stack (pre-empt them aloud): <b>" +
       window.__st.rdWorstNumbers(3).join(", ") + "</b>"; } catch (err) { th.textContent = ""; } } }
   return;
   const activeStack = stackArr(settings);
@@ -2811,7 +2821,7 @@ let lkCribOpen = null;  // set by the tool's IIFE; shows the number-only crib lo
 let camOpen = null;     // set by the tool's IIFE; shows the camera view
 let acaanCribOpen = null; // set by the tool's IIFE; shows the ACAAN number-lookup crib
 let lieOpen = null;     // set by the tool's IIFE; shows the lie-detector tool
-const RD_BUILTIN_SCHEMES = ["highlow","majorminor","aronson","mnemonica"];
+const RD_BUILTIN_SCHEMES = ["highlow","majorminor","aronson","mnemonica","storm"];
 // The chosen stack sticks across reloads — a mid-gig refresh must not silently
 // put the app on a different stack than the one in your hands. ("custom" is a
 // live read; it is restored from rdCustomStack in Settings, not from here.)
@@ -3012,6 +3022,57 @@ for (const [nm, stk, fl] of [
     low: base.low, lowMid: base.lowMid, high: base.high, highMid: base.highMid,
     mid: base.mid, lowFan: base.lowFan, highFan: base.highFan };
 }
+
+// ---- Perfect Storm (2026-10): blank deck, 96 thin / 48 pairs. Spectator names 11-40,
+// then red/black -> number/picture -> high (7 8 9 10) / low (2 3 4) -> value -> suit.
+// No aces, 5s or 6s exist. Black cards deal from the TOP, red from the FACE; the
+// "out" is a deal plan (position M, q = M - N: +quads / -splits), not a packet/cut.
+// Full reference + calculator: perfect-storm.html. Doc: ~/AI Stuff/PERFECT-STORM-DECK.md
+RD_SCHEMES.storm = {
+  stack: ["JS","2S","3S","4S","QS","KS","7S","8S","9S","10S","JC","2C","3C","4C","QC","KC","7C","8C","9C","10C","JS","2S","3S","4S","QS","KS","7S","8S","9S","10S","JH","2H","3H","4H","QH","KH","7H","8H","9H","10H","JD","2D","3D","4D","QD","KD","7D","8D","9D","10D","JH","2H","3H","4H","QH","KH","7H","8H","9H","10H"], full: ["JS","2S","3S","4S","QS","KS","7S","8S","9S","10S","JC","2C","3C","4C","QC","KC","7C","8C","9C","10C","JS","2S","3S","4S","QS","KS","7S","8S","9S","10S","JH","2H","3H","4H","QH","KH","7H","8H","9H","10H","JD","2D","3D","4D","QD","KD","7D","8D","9D","10D","JH","2H","3H","4H","QH","KH","7H","8H","9H","10H"],
+  lo: 11, hi: 40, kindStep: true,
+  low: ["2","3","4"], lowMid: [], high: ["7","8","9","10"], highMid: [],
+  mid: [],
+  lowFan: ["2","3","4"], highFan: ["7","8","9","10"],
+};
+const rdStorm = () => rdScheme === "storm";
+const STORM_VALS = ["J","2","3","4","Q","K","7","8","9","10"];
+const STORM_POS = {};   // card -> [{M, end}] home numbers: black lower card = pair+1 (top), red upper = 50-pair (face)
+[[10,"S","H"],[20,"C","D"],[30,"S","H"]].forEach(([start, bs, rs]) => {
+  for (let i = 0; i < 10; i++){ const pr = start + i;
+    (STORM_POS[STORM_VALS[i] + bs] = STORM_POS[STORM_VALS[i] + bs] || []).push({ M: pr + 1, end: "top" });
+    (STORM_POS[STORM_VALS[9 - i] + rs] = STORM_POS[STORM_VALS[9 - i] + rs] || []).push({ M: 50 - pr, end: "face" }); }
+});
+const STORM_BLANKS = 9, STORM_CAP = 46;
+const stormWin = M => [M - Math.floor((M - 2) / 2), Math.min(M + STORM_BLANKS, STORM_CAP)];   // quads down, blank splits up
+function stormTaughtM(card, N){ const b = STORM_VALS.indexOf(card.slice(0, -1)) + 1, su = card.slice(-1);
+  return (su === "C" || su === "D") ? b + 20 : (N <= 20 ? b + 10 : b + 30); }                 // the taught rule
+function stormResolve(card, N){
+  const ps = STORM_POS[card]; if (!ps) return null;
+  const tm = stormTaughtM(card, N), c = [];
+  for (const o of ps){ const [lo, hi] = stormWin(o.M);
+    if (N >= lo && N <= hi) c.push({ method: "deal", end: o.end, packet: 0, cut: false, tier: 0, storm: true, M: o.M, q: o.M - N, taught: o.M === tm }); }
+  if (!c.length) return null;
+  c.sort((a, b) => (b.taught - a.taught) || (Math.abs(a.q) - Math.abs(b.q)));   // taught rule first, then the lightest deal
+  return c[0];
+}
+const stormQ = q => (q > 0 ? "+" : q < 0 ? "−" : "") + Math.abs(q);
+function stormSteps(out, card, N, coded){
+  const FN = rdFullName(card), ord = rdOrdinal(N);
+  const endLine = out.end === "face" ? "Turn the deck over — deal from the FACE." : "Deal from the TOP.";
+  const qLine = out.q > 0 ? `Make ${out.q} quad${out.q === 1 ? "" : "s"} above the card — every other pair single.`
+              : out.q < 0 ? `Split ${-out.q} of the first ${STORM_BLANKS} blanks — every pair single.`
+              : "Every pair single — straight through.";
+  if (!coded) return [endLine, `Position ${out.M} · q = ${stormQ(out.q)}.`, qLine, `Deal ${N-1} cards then stop on the ${ord}.`, `The ${ord} card is the ${FN}!`];
+  // coded (spectator-visible): only the END shows (FACE DOWN = top, FACE UP = face); q is on the hold-to-peek view
+  return [`Cards are held FACE ${out.end === "face" ? "UP" : "DOWN"}.`, `Deal ${N-1} cards then stop on the ${ord}.`, `The ${ord} card is the ${FN}!`];
+}
+function stormThreeStep(out, card, N, namesCard){
+  const head = namesCard === false ? "" : `<div class="ts-head">The ${rdFullName(card)} at position ${N}</div>`;
+  const l1 = out.end === "face" ? "TURN OVER — FACE deal" : "TOP deal";
+  const l2 = `POSITION ${out.M} · q ${stormQ(out.q)} — ` + (out.q > 0 ? `${out.q} QUAD${out.q === 1 ? "" : "S"}` : out.q < 0 ? `SPLIT ${-out.q} BLANK${out.q === -1 ? "" : "S"}` : "STRAIGHT THROUGH");
+  return head + `<ol class="steps"><li>${l1}</li><li>${l2}</li><li>DIRECT HIT</li></ol>`;
+}
 // rdScheme is declared in the outer scope (shared with renderSettings); we just read/write it here.
 const RD_PACKETS = [0,2,4,6];
 let RD_STACK, RD_LO, RD_HI, RD_L0, RD_HALF, RD_POS = {};
@@ -3147,6 +3208,7 @@ function rdReach(v, color, N){ const r = rdSuit(String(v), color, N);
 function rdGroups(color, num){
   const reach = v => rdReach(v, color, num);
   const S = RD_SCHEMES[rdScheme];
+  if (rdStorm()) return { low: S.low.filter(reach), high: S.high.filter(reach) };   // 2 3 4 / 7 8 9 10, no middles
   if (rdHL()){
     const low = S.low.filter(reach);
     for (const v of S.lowMid){ if (reach(v)) low.push(v); else break; }     // extend up from 5: 6 then 7
@@ -3175,6 +3237,7 @@ function rdFullName(c){ if (c === "JK") return "Joker"; const v = c.slice(0,-1),
 // fewest added cards; then no-cut; then top end. Packet on top shifts top positions by k
 // (face unchanged); packet on face shifts face positions by k (top unchanged).
 function rdResolve(card, N){
+  if (rdStorm()) return stormResolve(card, N);   // blank deck: deal plan, not packet/cut
   if (rdExcluded.size && rdExcluded.has(card)) return null;   // uncertain live-read cards are unreachable
   const p = RD_POS[card]; if (p === undefined) return null;
   const c = [];
@@ -3199,6 +3262,7 @@ function rdResolve(card, N){
 // within each add-class the face-DOWN (deal from top) direct hit is best, everything else in that class is tied.
 function rdLevel(o){
   if (!o) return 99;
+  if (o.storm) return Math.abs(o.q);                                  // storm: lighter deal = better (free-suit steer)
   const addRank = o.packet === 0 ? 0 : (o.packet === 2 ? 2 : 1);       // 0=add nothing, 1=aces or jokers+aces, 2=jokers only
   const best = (o.end === "top" && o.method === "deal") ? 0 : 1;       // face-down direct hit tops each add-class
   return addRank * 2 + best;                                           // 0..5  →  Levels 1..6
@@ -3229,6 +3293,7 @@ function rdEncode(out){ return out ? { packet: out.packet, end: out.end, cut: !!
 // steps: plain = explicit (magician); coded = one natural sentence hiding packet/cut/dl.
 function rdSteps(out, card, N, coded){
   if (!out) return null;
+  if (out.storm) return stormSteps(out, card, N, coded);
   const F = rdPretty(card), FN = rdFullName(card);
   const endWord = out.end === "face" ? "FACE" : "TOP";
   const grp = { 2: "the JOKERS", 4: "the ACES", 6: "the JOKERS and ACES" }[out.packet];
@@ -3265,6 +3330,7 @@ function rdSteps(out, card, N, coded){
 // false (reveal page) shows just "Position 23" since the reveal already names the card above.
 function rdThreeStep(out, card, N, namesCard){
   if (!out) return `<span class="bad">No out for ${rdPretty(card)} at ${N}.</span>`;
+  if (out.storm) return stormThreeStep(out, card, N, namesCard);
   const cut = out.cut ? "CUT" : "DON’T CUT";
   const orient = out.end === "face" ? "FACE UP" : "FACE DOWN";
   const add = { 0: "add NOTHING", 2: "add JOKERS", 4: "add ACES", 6: "add JOKERS and ACES" }[out.packet];
@@ -3311,8 +3377,8 @@ function rdNumGuide(){
   if (magicianMode) {
     const v = parseInt(numEntry, 10);
     let g = "";
-    if (numEntry && v < RD_LO) g = `<span class="warn">Too low, enter a number from 4-50</span>`;
-    else if (v > RD_HI) g = `<span class="warn">Too high, enter a number from 4-50</span>`;
+    if (numEntry && v < RD_LO) g = `<span class="warn">Too low, enter a number from ${RD_LO}-${RD_HI}</span>`;
+    else if (v > RD_HI) g = `<span class="warn">Too high, enter a number from ${RD_LO}-${RD_HI}</span>`;
     else if (numEntry) g = `<span class="ok">ok</span>`;
     $("numGuide").innerHTML = g;
   } else $("numGuide").innerHTML = "";
@@ -3320,8 +3386,8 @@ function rdNumGuide(){
 function rdCommitNum(){
   const v = parseInt(numEntry, 10);
   if (!(v >= 1)) return;
-  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low, enter a number from 4-50</span>`; return; }
-  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high, enter a number from 4-50</span>`; return; }
+  if (v < RD_LO) { $("numGuide").innerHTML = `<span class="warn">Too low, enter a number from ${RD_LO}-${RD_HI}</span>`; return; }
+  if (v > RD_HI) { $("numGuide").innerHTML = `<span class="warn">Too high, enter a number from ${RD_LO}-${RD_HI}</span>`; return; }
   rd.num = v; rd.step = 1; rdRender();
 }
 
@@ -3549,7 +3615,9 @@ function rdMagStep(){
     html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
   else if (!rd.value) { const vals = rdOfferedValues();
     const otherHL = rd.hl === "high" ? "low" : "high";
-    title = `You want a ${rd.hl} card, so we'll remove the ${otherHL} cards. Would you like ${valList(vals)}?`;
+    title = (rdHasKind() && rd.kind === "pic")
+      ? `You want a picture card, so we'll remove the number cards. Would you like ${valList(vals)}?`
+      : `You want a ${rd.hl} card, so we'll remove the ${otherHL} cards. Would you like ${valList(vals)}?`;
     cols = vals.length;
     html = vals.map(v => `<button data-g="value" data-v="${v}">${"JQK".includes(v) ? RD_VNAME_FULL[v] : v}</button>`).join("");
   } else { const r = rdSuit(rd.value, rd.color, rd.num);
@@ -3644,7 +3712,7 @@ function rdFlowStep(){
       html = `${rdMiniFan(rdRun(rd.color, ["A","2","3","4","5","6","7","8","9","10","J","Q","K"], true))}<div class="optrow">${btns}</div>`;
     }
   } else if (rdNumMode(rd) && !rd.hl) {                        // high/low always shown
-    const NW = rdHL() ? "Cards" : "Numbers";
+    const NW = (rdHL() || rdStorm()) ? "Cards" : "Numbers";
     const S = RD_SCHEMES[rdScheme];
     // highlow: split into two spreads whenever this colour drops at most one middle value — the lone
     // dud (e.g. the 8) rides inside its own group's fan and just isn't offered on the next page.
@@ -3680,7 +3748,7 @@ function rdFlowStep(){
     let hintSuit = null;
     if (freeSuit) {
       const o0 = rdResolve(rd.value+r.suits[0], rd.num), o1 = rdResolve(rd.value+r.suits[1], rd.num);
-      const z0 = o0 && o0.packet === 0, z1 = o1 && o1.packet === 0;   // only mark when exactly ONE suit is a true add-nothing
+      const zz = o => !!o && (o.storm ? o.q === 0 : o.packet === 0), z0 = zz(o0), z1 = zz(o1);   // only mark when exactly ONE suit is a true add-nothing
       if (z0 !== z1) hintSuit = z0 ? r.suits[0] : r.suits[1];
     }
     html = r.suits.map(s => {
@@ -3799,7 +3867,7 @@ function rdRender(){
     if (rd.step === 0) cfCardEntry();
     if (rd.step === 1) cfFlowStep();
   } else {
-    if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; $("ddNumTitle").textContent = coded ? "Enter any number (1–52)" : "Name any number between 1 and 52."; rdNumGuide(); }
+    if (rd.step === 0) { $("ddNumEntry").textContent = numEntry || "–"; { const rng = rdStorm() ? `${RD_LO}–${RD_HI}` : "1–52"; $("ddNumTitle").textContent = coded ? `Enter any number (${rng})` : `Name any number between ${rng.replace("–", " and ")}.`; } rdNumGuide(); }
     if (rd.step === 1) rdFlowStep();
   }
   if (rd.step === 2) rdRenderOut(coded);
@@ -5355,9 +5423,11 @@ function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title 
     title = `You want a ${camRd.color} card, so we'll remove the ${other} cards. Would you like a high card or a low card?`;
     html = `<button data-g="hl" data-v="high">High</button><button data-g="hl" data-v="low">Low</button>`; }
   else if (!camRd.value) {
-    const g = rdGroups(camRd.color, camRd.num), vals = camRd.hl === "high" ? g.high : g.low;
+    const g = rdGroups(camRd.color, camRd.num), isPic = rdHasKind() && camRd.kind === "pic";
+    const vals = isPic ? ["J","Q","K"].filter(v => rdReach(v, camRd.color, camRd.num)) : (camRd.hl === "high" ? g.high : g.low);
     const otherHL = camRd.hl === "high" ? "low" : "high";
-    title = `You want a ${camRd.hl} card, so we'll remove the ${otherHL} cards. Would you like ${valList(vals)}?`;
+    title = isPic ? `You want a picture card, so we'll remove the number cards. Would you like ${valList(vals)}?`
+                  : `You want a ${camRd.hl} card, so we'll remove the ${otherHL} cards. Would you like ${valList(vals)}?`;
     cols = vals.length;
     html = vals.map(v => `<button data-g="value" data-v="${v}">${"JQK".includes(v) ? CAM_VN[v] : v}</button>`).join("");
   } else { const r = rdSuit(camRd.value, camRd.color, camRd.num);
@@ -5367,7 +5437,7 @@ function camFlowStep() { const f = $("camFlow"); let cols = 2, html = "", title 
     let hintSuit = null;
     if (!r.force) {
       const o0 = rdResolve(camRd.value+r.suits[0], camRd.num), o1 = rdResolve(camRd.value+r.suits[1], camRd.num);
-      const z0 = o0 && o0.packet === 0, z1 = o1 && o1.packet === 0;   // only mark when exactly ONE suit is a true add-nothing
+      const zz = o => !!o && (o.storm ? o.q === 0 : o.packet === 0), z0 = zz(o0), z1 = zz(o1);   // only mark when exactly ONE suit is a true add-nothing
       if (z0 !== z1) hintSuit = z0 ? r.suits[0] : r.suits[1];
     }
     const cof = (fullName, suitLetter) => (suitLetter === hintSuit) ? `${vn} Of ${fullName}` : `${vn} of ${fullName}`;   // capital "Of" = steer here
@@ -5395,7 +5465,7 @@ function camRender() {
   $("camNumEntry").style.display = camRd.step === 0 ? "" : "none";
   $("camFlow").style.display = camRd.step === 1 ? "" : "none";
   $("camOut").style.display = camRd.step === 2 ? "" : "none";
-  if (camRd.step === 0) { $("camTitle").textContent = "Name any number between 1 and 52."; $("camNumEntry").textContent = camNumEntry || "–"; camNumGuide(); }
+  if (camRd.step === 0) { $("camTitle").textContent = rdStorm() ? `Name any number between ${RD_LO} and ${RD_HI}.` : "Name any number between 1 and 52."; $("camNumEntry").textContent = camNumEntry || "–"; camNumGuide(); }
   else $("camGuide").innerHTML = "";
   if (camRd.step === 1) camFlowStep();
   if (camRd.step === 2) camRenderOut();
