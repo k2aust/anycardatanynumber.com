@@ -3033,7 +3033,7 @@ RD_SCHEMES.storm = {
   lo: 11, hi: 40, kindStep: true,
   low: ["2","3","4"], lowMid: [], high: ["7","8","9","10"], highMid: [],
   mid: [],
-  lowFan: ["2","3","4"], highFan: ["7","8","9","10"],
+  lowFan: ["2","3","4","5"], highFan: ["6","7","8","9","10"],   // 5 rides with the lows, 6 with the highs; they are "removed" on the value screen
 };
 const rdStorm = () => rdScheme === "storm";
 const STORM_VALS = ["J","2","3","4","Q","K","7","8","9","10"];
@@ -3349,10 +3349,10 @@ $("keypad").innerHTML = ["1","2","3","4","5","6","7","8","9"].map(d => `<button 
 let numEntry = "";
 let camSeq = [];         // covert ✓C✓C✓ gesture buffer (empty-entry presses only)
 let camFromDd = false;   // camera opened from the dd tool — exit returns there
-const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null, valElim: [] };
+const rd = { step: 0, num: null, color: null, kind: null, hl: null, value: null, card: null, suitPicked: null, valElim: [], dudHl: null };
 const RD_VNAME = { "2":"Two","3":"Three","4":"Four","5":"Five","7":"Seven","8":"Eight","9":"Nine","10":"Ten",J:"Jack",Q:"Queen",K:"King" };
 const RD_SNAME = { S:"Spades", C:"Clubs", H:"Hearts", D:"Diamonds" }, RD_SSYM = { S:"♠", C:"♣", H:"♥", D:"♦" };
-function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; rd.suitPicked=null; rd.valElim=[]; rd.nhl=null; rd.npar=null; numEntry=""; }
+function rdResetState(){ rd.step=0; rd.num=null; rd.color=null; rd.kind=null; rd.hl=null; rd.value=null; rd.card=null; rd.suitPicked=null; rd.valElim=[]; rd.nhl=null; rd.npar=null; rd.dudHl=null; numEntry=""; }
 
 // ---- number step ----
 $("keypad").addEventListener("click", e => {
@@ -3442,7 +3442,7 @@ $("ddGaffFlow").addEventListener("click", e => {
   } else if (g === "hl") {                                     // keep only the surviving low/high group; everything else (incl. unavailable 5/6/7) fades
     const { low, high } = rdHiLoSplit();
     const survHl = selectMode ? v : (v === "high" ? "low" : "high");
-    const survVals = survHl === "high" ? high : low;
+    const survVals = rdStorm() ? (survHl === "high" ? RD_SCHEMES.storm.highFan : RD_SCHEMES.storm.lowFan) : (survHl === "high" ? high : low);   // storm: the 5/6 rides along, removed on the value screen
     const deadBtn = [...fl.querySelectorAll('[data-g="hl"]')].find(x => selectMode ? x.dataset.v !== v : x.dataset.v === v);
     gone = [deadBtn, ...all.filter(c => !survVals.includes(valOf(c)))];
   }
@@ -3742,6 +3742,12 @@ function rdFlowStep(){
       const lbl = selectMode ? RD_VNAME_FULL[v] : `Remove<br>${RD_VNAME_FULL[v]}s`;
       return `<div class="optcell" data-g="value" data-v="${v}">${rdPngPair([v+a, v+b])}<div class="optlbl">${lbl}</div></div>`;
     }).join("");
+    // Perfect Storm: the 5 (low) / 6 (high) that rode along in the fan appears here and is visibly removed — it never existed in the deck
+    if (rdStorm() && rd.hl && rd.dudHl !== rd.hl) {
+      const dud = rd.hl === "low" ? "5" : "6";
+      const dudCell = `<div class="optcell dud" data-g="value" data-v="${dud}" style="pointer-events:none">${rdPngPair([dud+a, dud+b])}<div class="optlbl">${selectMode ? RD_VNAME_FULL[dud] : `Remove<br>${RD_VNAME_FULL[dud]}s`}</div></div>`;
+      html = rd.hl === "low" ? html + dudCell : dudCell + html;
+    }
   } else {
     const r = rdSuit(rd.value, rd.color, rd.num); freeSuit = !r.force;
     // free choice: secretly flag the cleaner suit (lower packet) by capitalising the "of" in its name
@@ -3766,6 +3772,8 @@ function rdFlowStep(){
   flow.innerHTML = html;
   flow.querySelectorAll(".mfan").forEach(rdSizeFan);
   if (rd.value != null) rdFitCardNames();
+  const dudEl = flow.querySelector(".optcell.dud");   // storm: the 5/6 fades out right after the value screen appears
+  if (dudEl) setTimeout(() => { dudEl.style.transition = "transform .7s ease, opacity .7s ease"; dudEl.style.transform = "translateY(-46px) scale(.4)"; dudEl.style.opacity = "0"; dudEl.classList.add("off"); rd.dudHl = rd.hl; }, 500);
 }
 // shrink each suit-card name until it fits on a single line (longer names -> smaller font)
 function rdFitCardNames(){
