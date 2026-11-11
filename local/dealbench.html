@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<title>deal bench page-v60</title>
+<title>deal bench page-v61</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
@@ -250,6 +250,7 @@ function grabFrame(v0){
   }catch(e){ return null; }
 }
 let eventVecs=[], finalCommits=null;   // finalCommits set by the Stop assignment pass
+let elimFrames=[];   // {t, neg, vec} for EVERY classified frame — the elimination rescue's evidence (&elim=1)
 let frameReads=[];   // {t, cls, conf} per classified frame — for order refinement at Stop
 let scanN=0, infN=0, infMs=0, lastFrac=0, varInk=0;
 let scanT0=0, scanFps=0, warmN=0;
@@ -658,6 +659,7 @@ async function processPending(){
     const acc=new Float32Array(52); let accN=0;
     for(const p of picks){
       const r=await infer(tensorFromRegion(p.region));
+      elimFrames.push({t:p.t,neg:r.neg,vec:r.vec});
       if(frameOK(r)){
         results.push({t:p.t,cls:r.cls,conf:r.conf});
         if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
@@ -681,6 +683,7 @@ async function processPending(){
       const rest=buf.filter(f=>!picks.includes(f)).sort((a,b)=>a.t-b.t);
       for(const p of rest){
         const r=await infer(tensorFromRegion(p.region));
+        elimFrames.push({t:p.t,neg:r.neg,vec:r.vec});
         if(frameOK(r)){
           results.push({t:p.t,cls:r.cls,conf:r.conf});
           if(r.conf>=0.6) frameReads.push({t:p.t,cls:r.cls,conf:r.conf});
@@ -775,14 +778,14 @@ function advise(){
   const reads=cs.map(c=>c.card);
   const unknown=cs.filter(c=>!c.card).length;
   const got=new Set(cs.filter(c=>c.card).map(c=>c.card));
-  const missing=CODES.filter(c=>!got.has(c));
+  const missing=EXPECT().filter(c=>!got.has(c));
   const L=[];
   // wrong reads only exist when a truth is selected (bench mode)
   let wrong=[];
   const t=$("truth").value;
   if(t!=="none"){
     const lcsKeep=seq=>{  // which reads survive the LCS = which are RIGHT
-      const n=reads.length,m=52,dp=Array.from({length:n+1},()=>new Int16Array(m+1));
+      const n=reads.length,m=seq.length,dp=Array.from({length:n+1},()=>new Int16Array(m+1));
       for(let i=1;i<=n;i++)for(let j=1;j<=m;j++)
         dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]+(reads[i-1]===seq[j-1]?1:0));
       const keep=new Set(); let i=n,j=m;
@@ -792,7 +795,7 @@ function advise(){
       }
       return keep;
     };
-    const fwd=lcsKeep(SEQ), rev=lcsKeep([...SEQ].reverse());
+    const fwd=lcsKeep(TRUTH()), rev=lcsKeep(TRUTH().reverse());
     const keep=fwd.size>=rev.size?fwd:rev;
     wrong=reads.map((r,i)=>r&&!keep.has(i)?r:null).filter(Boolean);
   }
@@ -837,17 +840,17 @@ function scoreFinal(){
   // wrong direction does not look wrong (the rank sequence is a palindrome).
   const reads=cs.map(c=>c.card);
   const lcs=seq=>{
-    const n=reads.length, m=52, dp=Array.from({length:n+1},()=>new Int16Array(m+1));
+    const n=reads.length, m=seq.length, dp=Array.from({length:n+1},()=>new Int16Array(m+1));
     for(let i=1;i<=n;i++) for(let j=1;j<=m;j++)
       dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]+(reads[i-1]===seq[j-1]?1:0));
     return dp[n][m];
   };
-  const fwd=lcs(SEQ), rev=lcs([...SEQ].reverse());
+  const fwd=lcs(TRUTH()), rev=lcs(TRUTH().reverse());
   const correct=Math.max(fwd,rev), dir=fwd>=rev?"NDO":"reversed";
   const com=reads.filter(Boolean).length;
   $("score").textContent=`SCORE: ${correct} correct (${dir}), ${com-correct} wrong, `+
-    `${cs.length-com} flagged-unknown, ${52-correct} missed`;
-  log(`scored: ${correct}/52 correct (${dir}; other direction ${Math.min(fwd,rev)}), ${com-correct} wrong`);
+    `${cs.length-com} flagged-unknown, ${TRUTH().length-correct} missed`;
+  log(`scored: ${correct}/${TRUTH().length} correct (${dir}; other direction ${Math.min(fwd,rev)}), ${com-correct} wrong`);
   advise().forEach(l=>log(l));
 }
 
@@ -901,6 +904,10 @@ const PEEK_MS=3000;
 // routine begins, so the app's lockscreen passes &deck=48 — left at 52 every
 // "cards left" readout ran 4 high.
 const DECK_N=+(new URLSearchParams(location.search).get("deck")||52);
+// The cards this deal can contain / the truth order to score against: the
+// summary and score used to say "/52" and count the held-out aces as missed.
+const inDeck=c=>DECK_N!==48||!/^A/.test(c);
+const EXPECT=()=>CODES.filter(inDeck), TRUTH=()=>SEQ.filter(inDeck);
 /* ---- PER-CARD FALSE-READ CONTROL (Kevin 2026-08-29) ----------------------
    Two knobs, both keyed on the CARD, for the "it named a card while I wasn't
    dealing" failure. attractor_probe.py names the guilty classes per rig; on
@@ -951,6 +958,8 @@ if(ABSENT_I.size||Object.keys(FLOOR).length)
   log("veto: absent "+([...ABSENT].join(" ")||"none")
       +" | floors "+(Object.entries(FLOOR).map(([c,v])=>c+">="+v).join(" ")||"none"));
 let stops=[], peekSeenEvents=0;
+function resetRunStats(){ scanT0=0; scanFps=0; stops=[]; peekSeenEvents=0;
+  for(const k in vetoHits) delete vetoHits[k]; }
 function dealtSoFar(){                 // distinct cards committed = physical cards dealt
   const seen=new Set();
   for(const c of commits) if(c.card) seen.add(c.card);
@@ -1013,10 +1022,10 @@ function performSummary(){
   if(!PERFORM) return;
   const cs=finalCommits||uniq(commits);
   const got=new Set(cs.filter(c=>c.card).map(c=>c.card));
-  const missing=CODES.filter(c=>!got.has(c));
+  const missing=EXPECT().filter(c=>!got.has(c));
   const lines=stops.map((st,i)=>"stop "+(i+1)+": "+pretty(st.card)
       +(st.unkAfter?" +"+st.unkAfter+"?":"")+"  @"+st.pos);
-  lines.push("read "+got.size+"/52"+(missing.length&&missing.length<=6
+  lines.push("read "+(EXPECT().length-missing.length)+"/"+EXPECT().length+(missing.length&&missing.length<=6
       ? "   missing: "+missing.map(pretty).join(" ")
       : missing.length ? "   ("+missing.length+" unread)" : ""));
   // FULL READ ORDER — what the model thinks it saw, in dealt order, 13 per
@@ -1224,7 +1233,7 @@ $("start").onclick=async()=>{
     await new Promise(res=>{ v.onloadedmetadata=res; });
     log("replay: "+replay+" "+v.videoWidth+"x"+v.videoHeight+" "+v.duration.toFixed(0)+"s");
     base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; autoArmT=0; autoFired=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
-    eventVecs=[]; finalCommits=null; frameReads=[];
+    eventVecs=[]; finalCommits=null; frameReads=[]; elimFrames=[]; resetRunStats();
     running=true; $("start").classList.add("on");
     // Calibrate over the clip's first 2s exactly as a live run would — replay
     // used to skip this, which left the face unmasked AND (before SD_FLOOR)
@@ -1361,7 +1370,10 @@ $("start").onclick=async()=>{
     setTimeout(()=>expoGuard(track), 1500);
   }
   base=null; varInk=0; inEvent=false; commits=[]; unknownThumbs=[]; preRoll=[]; runStamp=Date.now(); armedCue=false; autoArmT=0; autoFired=false; $("bpeek").textContent="…"; $("ugal").classList.remove("on"); $("ugal").innerHTML=""; scanN=0; infN=0; infMs=0;
-  eventVecs=[]; finalCommits=null;
+  // A second Start without a reload used to keep the previous run's sightings
+  // (they could be "rescued" into the new run), its scan clock (the scans/s
+  // figure was diluted on every repeat run), its stops and its veto counts.
+  eventVecs=[]; finalCommits=null; elimFrames=[]; frameReads=[]; resetRunStats();
   running=true; $("start").classList.add("on");
   if(SCAN_ON) calStart(performance.now());
   log(SCAN_ON ? "calibrating room (2s) — keep the dealing area clear…"
@@ -1593,35 +1605,45 @@ $("stop").onclick=async()=>{ running=false; $("start").classList.remove("on");
   if(inEvent && eventScans>=MIN_EVENT && eventBuf.length){ pending.push(eventBuf); eventBuf=[]; processPending(); }
   inEvent=false; await drain();
   if(eventVecs.length){
-    const t0=performance.now();
-    finalCommits=assignCommits(eventVecs);
-    const committed=finalCommits.filter(c=>c.card);
-    for(const c of committed){
-      const near=frameReads.filter(r=>CODES[r.cls]===c.card && Math.abs(r.t-c.t)<=3000);
-      if(near.length){
-        const ts=near.map(r=>r.t).sort((x,y)=>x-y);
-        c.t=ts[Math.floor(ts.length/2)];    // windowed median sighting time
-      }
-    }
-    finalCommits.sort((a,b)=>(a.t)-(b.t));
-    const com=finalCommits.filter(c=>c.card).length;
-    log(`assignment: ${eventVecs.length} events -> ${com} committed `+
-        `(${(performance.now()-t0).toFixed(0)}ms)`);
-    // STOP-TIME RESCUE (2026-08-29, the road to 52/0): the assignment gives
-    // every unknown event a globally-unique raw card guess; the confidence
-    // gate nulls the weak ones and the save then reports those cards missing.
-    // But at Stop we KNOW which cards are missing — so promote a raw guess to
-    // a commit exactly when (a) that card is missing, (b) the event's own
-    // evidence for it clears RES_TH, and (c) it beats every other missing
-    // card in that event by RES_MG. A wrong placement corrupts the stack
-    // silently, so the gates err toward leaving a gap: tuned on NDO replays
-    // where truth is known (score's `wrong` must stay 0).
-    const nres=rescuePromote(finalCommits);
-    if(nres) log(`rescue: ${nres} missing card(s) recovered from assignment evidence`);
+    finalCommits=stopPipeline(log);
     const vr=vetoReport();
     if(vr) log(`veto: frames refused, per card — ${vr}`);
   }
   render(); scoreFinal(); performSummary(); renderUgal(); };
+// THE Stop pipeline: assignment -> re-time to median sighting -> sighting
+// rescue -> (flagged) elimination rescue. One function, because auto-save
+// has to ask the SAME question Stop answers: it used to judge coverage from
+// the live commits, and on lap5c that armed a save the assignment pass then
+// called 51/52. say=log for the real Stop, omitted for auto-save's dry run.
+function stopPipeline(say){
+  say=say||(()=>{});
+  const t0=performance.now();
+  const fc=assignCommits(eventVecs);
+  for(const c of fc.filter(c=>c.card)){
+    const near=frameReads.filter(r=>CODES[r.cls]===c.card && Math.abs(r.t-c.t)<=3000);
+    if(near.length){
+      const ts=near.map(r=>r.t).sort((x,y)=>x-y);
+      c.t=ts[Math.floor(ts.length/2)];    // windowed median sighting time
+    }
+  }
+  fc.sort((a,b)=>(a.t)-(b.t));
+  say(`assignment: ${eventVecs.length} events -> ${fc.filter(c=>c.card).length} committed `+
+      `(${(performance.now()-t0).toFixed(0)}ms)`);
+  // STOP-TIME RESCUE (2026-08-29, the road to 52/0): at Stop we KNOW which
+  // cards are missing, so a missing card that was confidently SEEN is placed
+  // at its own sighting time. A wrong placement corrupts the stack silently,
+  // so the gates err toward leaving a gap: tuned on NDO replays where truth
+  // is known (score's `wrong` must stay 0).
+  const nres=rescuePromote(fc);
+  if(nres) say(`rescue: ${nres} missing card(s) recovered from frame sightings`);
+  if(ELIM_ON){
+    const el=elimRescue(fc);
+    if(el.added.length) say(`elimination: ${el.added.length} of ${el.missing} missing card(s) placed — `+
+      el.added.map(a=>`${a.card}@${(a.t/1000).toFixed(1)}s (${a.n} frames, peak ${a.p})`).join(", "));
+    else if(el.missing) say(`elimination: ${el.missing} missing, none placed`+(el.capped?` (over the ${ELIM_MAX}-card cap — not attempted)`:""));
+  }
+  return fc;
+}
 // Rescue from confident FRAME SIGHTINGS, not assignment guesses: identity
 // alone is not enough — a rescued card placed at the wrong event shifts the
 // order and corrupts the stack (first attempt put the right 2D one beat
@@ -1652,6 +1674,70 @@ function rescuePromote(cs){
   if(n) cs.sort((a,b)=>a.t-b.t);
   return n;
 }
+// ELIMINATION RESCUE (2026-11-10, behind &elim=1 — OFF by default).
+// rescuePromote() above needs a frame that named the missing card outright
+// (>=0.8 against all 52). But at Stop the question is far narrower: of the
+// few cards STILL MISSING, which one is this frame? So each frame's
+// probabilities are re-read over the missing cards only. A 4H the model
+// called "5H 0.92 / 4H 0.44" is the 4H when the 5H is already placed
+// elsewhere. Guards, each one from a measured failure on the replay library:
+//  - a frame is ignored when a card committed NEAR THAT MOMENT (ELIM_WIN) is
+//    at least as strong in it — that frame is just the neighbour's own pass
+//    (new11: put 7C inside 6C's pass before this guard);
+//  - a sighting needs real absolute probability and a quiet no-card vote
+//    (lap6f: junk frames after the last card invented a 2S);
+//  - sightings are clustered in time; the best cluster must be >=2 frames
+//    with a decent peak, or one near-certain frame, and must dominate any
+//    other cluster of the same card;
+//  - not attempted at all with more than ELIM_MAX cards missing: with many
+//    cards missing "which missing card is this?" stops being an easy
+//    question (and a gesture-only capture is missing everything).
+//  - a placement must fall inside the deal itself (first..last committed
+//    card, +-ELIM_SPAN). Gluing the whole gesture clip (new27) before or
+//    after each library capture made 6 of 56 runs place a phantom AS/7C
+//    from the hand-waving; with this guard, 0 — at no cost on the library.
+// Placed at the median sighting time, like the sighting rescue.
+const ELIM_ON=QP_.get("elim")==="1";
+const ELIM_MAX=+(QP_.get("elimmax")||8);
+const ELIM_PM=0.8, ELIM_ABS=0.25, ELIM_NEG=0.1, ELIM_WIN=1200, ELIM_GAP=1500,
+      ELIM_PEAK=0.5, ELIM_SOLO=0.8, ELIM_DOM=2.0, ELIM_SPAN=3000;
+function elimRescue(cs){
+  const have=new Map(cs.filter(c=>c.card).map(c=>[CODES.indexOf(c.card),c.t]));
+  const expect=DECK_N===48 ? CODES.filter(c=>!/^A/.test(c)) : CODES;
+  const M=expect.map(c=>CODES.indexOf(c)).filter(i=>!have.has(i));
+  const out={missing:M.length, added:[], capped:M.length>ELIM_MAX};
+  window.__elim=out;
+  if(!M.length||out.capped) return out;
+  const ts0=[...have.values()], tLo=Math.min(...ts0)-ELIM_SPAN, tHi=Math.max(...ts0)+ELIM_SPAN;
+  const sight=new Map(M.map(i=>[i,[]]));
+  for(const fr of elimFrames){
+    if(fr.neg>ELIM_NEG) continue;
+    const v=fr.vec; let mass=0, home=0;
+    for(const i of M) mass+=v[i];
+    if(mass<=0) continue;
+    for(const [i,t] of have) if(Math.abs(fr.t-t)<=ELIM_WIN && v[i]>home) home=v[i];
+    for(const i of M){ const p=v[i];
+      if(p>=ELIM_ABS && p/mass>=ELIM_PM && p>home) sight.get(i).push({t:fr.t,p}); }
+  }
+  for(const i of M){
+    const s=sight.get(i).sort((a,b)=>a.t-b.t);
+    if(!s.length) continue;
+    const cl=[[s[0]]];
+    for(const x of s.slice(1)){ const last=cl[cl.length-1];
+      if(x.t-last[last.length-1].t<=ELIM_GAP) last.push(x); else cl.push([x]); }
+    const w=c=>c.reduce((a,x)=>a+x.p,0);
+    cl.sort((a,b)=>w(b)-w(a));
+    const best=cl[0], pk=Math.max(...best.map(x=>x.p));
+    if(best.length>=2 ? pk<ELIM_PEAK : pk<ELIM_SOLO) continue;
+    if(cl.length>1 && w(cl[1])*ELIM_DOM>w(best)) continue;
+    const t=best[best.length>>1].t;
+    if(t<tLo||t>tHi) continue;
+    cs.push({t, card:CODES[i], conf:+pk.toFixed(2), n:best.length, rescued:true, elim:true});
+    out.added.push({card:CODES[i], t, n:best.length, p:+pk.toFixed(2)});
+  }
+  if(out.added.length) cs.sort((a,b)=>a.t-b.t);
+  return out;
+}
 // AUTO-SAVE (Kevin 2026-08-29: "automatically save the stack after it sees
 // 52/48 cards"). Purely additive — watches coverage, never touches the read
 // path. Coverage = every expected card is either committed or rescuable
@@ -1674,7 +1760,12 @@ function coverageComplete(){
     if(!sc.length) return false;
     if(sc.length<2&&Math.max(...sc.map(r=>r.conf))<RES_SOLO) return false;
   }
-  return true;
+  // The cheap test above only says a full save is PLAUSIBLE. Confirm with a
+  // dry run of the real Stop pipeline (a few ms) so auto-save fires only when
+  // Stop will actually name every expected card.
+  if(!eventVecs.length) return false;
+  const named=new Set(stopPipeline().filter(c=>c.card).map(c=>c.card));
+  return expect.every(m=>named.has(m));
 }
 function autoCheck(){
   if(autoFired||!running||autoArmT) return;
@@ -1897,7 +1988,7 @@ const MV=(new URLSearchParams(location.search).get("model")||"v43").replace(/[^a
     const t0=performance.now(); await sess.run({input:dummy});
     const ms=(performance.now()-t0).toFixed(0);
     embedPost({ev:"ready"});
-    log("BENCH page-v60 (model "+MV+", embed mode + perform video kept live under the overlay) | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
+    log("BENCH page-v61 (model "+MV+", elimination rescue "+(ELIM_ON?"ON":"off — add &elim=1")+") | "+(SCAN_ON?"live-read":"CAPTURE-ONLY")+" | CROPS="+NCROPS+" gates "+G.join("/")+" | model loaded ✓ ("+EP+", warm single-crop "+ms+"ms)");
   }catch(e){ log("MODEL LOAD FAILED: "+e); }
 })();
 
